@@ -1,0 +1,26 @@
+.git
+.gitignore
+.dockerignore
+
+# Local runtime data
+data
+recordings
+
+# Python local env/cache
+backend/.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Frontend local deps/build output
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/*.tsbuildinfo
+
+# Logs
+*.log

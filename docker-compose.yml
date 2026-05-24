@@ -1,0 +1,18 @@
+services:
+  clipline:
+    build: .
+    container_name: clipline
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./recordings:/recordings:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - CLIPLINE_DB=/app/data/clipline.db
+      - CLIPLINE_DATA=/app/data
+      - CLIPLINE_RECORDINGS_ROOT=/recordings
+      - CLIPLINE_LOG_LEVEL=INFO
+      - CLIPLINE_LOG_FORMAT=text
+    restart: unless-stopped
+
