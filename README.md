@@ -1,55 +1,93 @@
-# Clipline
+<p align="center">
+  <img src="docs/assets/clipline-logo.svg" width="112" alt="Clipline logo" />
+</p>
 
-Clipline 是一个本地录像片段回放和导出工具，面向行车记录仪、监控录像、执法记录仪等按片段保存的视频目录。它会扫描录像源目录，建立片段索引，生成缩略图，并提供视频回放、时间线定位、片段墙浏览和区间导出。
+<h1 align="center">Clipline</h1>
+
+<p align="center">
+  <strong>本地录像片段的扫描、回放、时间线定位和区间导出工作台。</strong>
+</p>
+
+<p align="center">
+  <a href="#快速启动">快速启动</a>
+  ·
+  <a href="#界面预览">界面预览</a>
+  ·
+  <a href="#导出模式">导出模式</a>
+  ·
+  <a href="#本地开发">本地开发</a>
+  ·
+  <a href="docs/API_AND_DB.md">API 文档</a>
+</p>
+
+<p align="center">
+  <img alt="Docker ready" src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-backend-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img alt="React" src="https://img.shields.io/badge/React-frontend-61DAFB?style=flat-square&logo=react&logoColor=0F172A" />
+  <img alt="FFmpeg" src="https://img.shields.io/badge/FFmpeg-media-22C55E?style=flat-square&logo=ffmpeg&logoColor=white" />
+</p>
+
+---
+
+Clipline 面向行车记录仪、监控录像、执法记录仪等按片段保存的视频目录。它会扫描录像源目录，建立片段索引，生成缩略图，并在一个统一界面里完成回放、时间线定位、片段墙浏览和后台导出。
 
 ## 界面预览
 
-### 录像回放
-
-视频和时间线位于同一工作区内，选择片段后会自动定位到对应时间段。
-
-![录像回放](docs/screenshots/playback.png)
-
-### 时间线导出区间
-
-点击“导出”后才显示导出滑块，拖动左右把手选择时间区间，再点击“确认导出”创建后台任务。
-
-![时间线导出区间](docs/screenshots/export-range.png)
-
-### 片段墙
-
-按录像时间倒序展示片段缩略图，适合快速浏览和切换片段。
-
-![片段墙](docs/screenshots/clips.png)
-
-### 录像源管理
-
-管理视频目录、启停扫描、配置定时扫描间隔，并查看扫描进度。
-
-![录像源管理](docs/screenshots/sources.png)
+<table>
+  <tr>
+    <td width="50%">
+      <strong>录像回放</strong><br />
+      视频和时间线在同一工作区，选择片段后自动定位到对应时间段。
+    </td>
+    <td width="50%">
+      <strong>时间线导出</strong><br />
+      点击导出后显示滑块，拖动左右把手选择区间，再确认创建任务。
+    </td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/playback.png" alt="录像回放界面" /></td>
+    <td><img src="docs/screenshots/export-range.png" alt="时间线导出区间" /></td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>片段墙</strong><br />
+      按录像时间倒序展示缩略图，适合快速筛选和切换片段。
+    </td>
+    <td width="50%">
+      <strong>录像源管理</strong><br />
+      管理目录、扫描状态、定时扫描策略和扫描进度。
+    </td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/clips.png" alt="片段墙" /></td>
+    <td><img src="docs/screenshots/sources.png" alt="录像源管理" /></td>
+  </tr>
+</table>
 
 ## 核心能力
 
-- 录像源管理：添加本地或 Docker 挂载目录，启用或停用扫描。
-- 自动扫描：使用 FFmpeg/ffprobe 读取视频元数据，保存片段索引。
-- 缩略图：为片段生成缩略图，片段墙可快速识别内容。
-- 回放时间线：视频播放时间和时间线光标同步，选择片段后自动缩放定位。
-- 区间导出：在时间线上通过滑块选择导出范围，支持快速和精准两种模式。
-- 后台任务：确认导出后创建任务，完成后提示下载，不打断当前回放页面。
-- 状态与日志：提供系统状态、扫描任务、导出任务和错误信息。
-- Docker 优先：生产验证以 Docker 容器为主，前后端打包到同一个镜像。
+| 能力 | 说明 |
+| --- | --- |
+| 录像源管理 | 添加本地或 Docker 挂载目录，启用、停用或配置定时扫描。 |
+| 自动扫描 | 使用 FFmpeg / ffprobe 读取视频元数据，保存片段索引。 |
+| 缩略图索引 | 为片段生成缩略图，片段墙可快速识别内容。 |
+| 同步时间线 | 视频播放时间和时间线光标同步，选择片段后自动缩放定位。 |
+| 区间导出 | 在时间线上通过滑块选择范围，支持快速和精准两种模式。 |
+| 后台任务 | 确认导出后创建任务，完成后提示下载，不打断当前回放页面。 |
+| 状态与日志 | 查看系统状态、扫描任务、导出任务和错误信息。 |
+| Docker 优先 | 前后端打包到同一个镜像，方便本地验证和部署。 |
 
 ## 快速启动
 
 ### 1. 准备视频目录
 
-将录像文件放在一个固定目录下，例如：
+把录像文件放在一个固定目录下，例如：
 
 ```powershell
 C:\Users\EvanQ\Desktop\200video
 ```
 
-如果使用自己的目录，请同步修改 `docker-compose.yml` 中的挂载路径：
+如果使用自己的目录，请修改 `docker-compose.yml` 里的挂载路径：
 
 ```yaml
 volumes:
@@ -57,9 +95,9 @@ volumes:
   - C:/your/video/folder:/recordings/video1:ro
 ```
 
-容器内路径 `/recordings/video1` 会在 Clipline 中作为录像源路径使用。
+容器内路径 `/recordings/video1` 就是 Clipline 里要添加的录像源路径。
 
-### 2. Docker Compose 启动
+### 2. 启动容器
 
 ```powershell
 docker compose up -d --build
@@ -71,7 +109,7 @@ docker compose up -d --build
 http://127.0.0.1:8080
 ```
 
-当前本机调试也可以使用手动映射到 `28080`：
+本机调试也可以手动映射到 `28080`：
 
 ```powershell
 docker build -t clipline-clipline:latest .
@@ -99,13 +137,17 @@ http://127.0.0.1:28080
 路径：/recordings/200video
 ```
 
-添加后可以手动点击扫描，也可以启用定时扫描。
+添加后可以手动扫描，也可以启用定时扫描。
 
 ## 使用流程
 
+```text
+启动服务 -> 添加录像源 -> 扫描入库 -> 选择片段 -> 时间线定位 -> 选择导出区间 -> 创建导出任务 -> 下载结果
+```
+
 1. 启动 Docker 服务。
 2. 在“录像源”中添加容器内的视频目录。
-3. 等待扫描完成，片段会进入索引。
+3. 等待扫描完成，片段进入索引。
 4. 在“录像回放”中选择源和片段。
 5. 使用时间线定位当前播放点，或切换上一个、下一个事件。
 6. 点击“导出”显示导出区间滑块。
@@ -118,8 +160,8 @@ http://127.0.0.1:28080
 
 | 模式 | 说明 | 适用场景 |
 | --- | --- | --- |
-| 快速 | 尽量不重新编码，导出速度更快，边界可能贴近关键帧 | 临时取证、快速分享、长片段导出 |
-| 精准 | 重新编码，起止时间更准确，但速度更慢 | 对起止点要求更高的短片段 |
+| 快速 | 尽量不重新编码，导出速度更快，边界可能贴近关键帧。 | 临时取证、快速分享、长片段导出 |
+| 精准 | 重新编码，起止时间更准确，但速度更慢。 | 对起止点要求更高的短片段 |
 
 ## 配置项
 
@@ -187,22 +229,12 @@ npm run dev
 
 ## 构建验证
 
-前端构建：
-
 ```powershell
 cd frontend
 npm run build
-```
 
-Docker 构建：
-
-```powershell
+cd ..
 docker build -t clipline-clipline:latest .
-```
-
-服务健康检查：
-
-```powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/system/status
 ```
 
@@ -228,13 +260,14 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/system/status
 
 更完整的接口和数据结构说明见 [docs/API_AND_DB.md](docs/API_AND_DB.md)。
 
-## 目录结构
+## 项目结构
 
 ```text
 clipline/
 ├─ backend/                 # FastAPI 后端、扫描、导出、调度、数据库模型
 ├─ frontend/                # React + Vite 前端
 ├─ docs/                    # 产品、技术、接口和截图文档
+│  ├─ assets/               # README 和品牌素材
 │  └─ screenshots/          # README 截图
 ├─ data/                    # 本地数据库、缩略图、导出文件和日志
 ├─ Dockerfile               # 前端构建 + 后端运行的一体化镜像
@@ -243,10 +276,12 @@ clipline/
 
 ## 技术栈
 
-- 前端：React 19、Vite、TypeScript、TanStack Query、Radix UI、Lucide Icons。
-- 后端：FastAPI、SQLAlchemy、SQLite、Pydantic Settings。
-- 媒体处理：FFmpeg / ffprobe。
-- 部署：Docker 单容器，静态前端由 FastAPI 同进程托管。
+| 层 | 技术 |
+| --- | --- |
+| 前端 | React 19、Vite、TypeScript、TanStack Query、Radix UI、Lucide Icons |
+| 后端 | FastAPI、SQLAlchemy、SQLite、Pydantic Settings |
+| 媒体 | FFmpeg、ffprobe |
+| 部署 | Docker 单容器，静态前端由 FastAPI 同进程托管 |
 
 ## 注意事项
 
