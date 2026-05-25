@@ -17,6 +17,7 @@ concurrency:
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/clipline
+  DOCKERHUB_DESCRIPTION_TOKEN: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN }}
 
 jobs:
   publish:
@@ -57,10 +58,16 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Update Docker Hub overview
+        if: env.DOCKERHUB_DESCRIPTION_TOKEN != ''
         uses: peter-evans/dockerhub-description@e98e4d1628a5f3be2be7c231e50981aee98723ae
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ env.DOCKERHUB_DESCRIPTION_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
           readme-filepath: README.md
           short-description: Xiaomi NAS backup video segment replay and export workbench.
+
+      - name: Skip Docker Hub overview sync
+        if: env.DOCKERHUB_DESCRIPTION_TOKEN == ''
+        run: |
+          echo "::notice title=Docker Hub overview skipped::Add the repository secret DOCKERHUB_DESCRIPTION_TOKEN with Docker Hub read/write/delete scope to sync README.md to Docker Hub Overview."

@@ -17,6 +17,8 @@
   ·
   <a href="#导出模式">导出模式</a>
   ·
+  <a href="#自动发布">自动发布</a>
+  ·
   <a href="#本地开发">本地开发</a>
 </p>
 
@@ -227,6 +229,28 @@ build: .
 | --- | --- | --- |
 | 快速 | 尽量不重新编码，导出速度更快，边界可能贴近关键帧。 | 临时取证、快速分享、长片段导出 |
 | 精准 | 重新编码，起止时间更准确，但速度更慢。 | 对起止点要求更高的短片段 |
+
+## 自动发布
+
+仓库内置 GitHub Actions 流程，推送到 `main` 或推送 `v*.*.*` 标签时会自动构建并发布 Docker Hub 镜像：
+
+```text
+evanqu/clipline:latest
+evanqu/clipline:sha-<commit>
+evanqu/clipline:<version>
+```
+
+需要在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 中配置：
+
+| Secret | 用途 | 必填 |
+| --- | --- | --- |
+| `DOCKERHUB_USERNAME` | Docker Hub 用户名，例如 `evanqu` | 是 |
+| `DOCKERHUB_TOKEN` | Docker Hub Access Token，用于登录并推送镜像 | 是 |
+| `DOCKERHUB_DESCRIPTION_TOKEN` | 用于把 GitHub `README.md` 同步到 Docker Hub Overview | 否 |
+
+`DOCKERHUB_DESCRIPTION_TOKEN` 建议单独创建，只用于 Overview 同步。没有配置它时，Actions 仍会正常发布镜像，并跳过 Docker Hub Overview 更新，避免因为文档同步权限不足导致整个发布失败。
+
+如果你希望 Docker Hub 页面也显示这份 README，需要给 `DOCKERHUB_DESCRIPTION_TOKEN` 使用可以更新仓库描述的 Docker Hub Access Token。配置完成后重新运行一次发布流程，Docker Hub 的 Overview 会和 GitHub README 保持一致。
 
 ## 配置项
 
