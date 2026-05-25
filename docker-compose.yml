@@ -1,13 +1,15 @@
 services:
   clipline:
-    build: .
+    image: evanqu/clipline:latest
     container_name: clipline
     ports:
-      - "8080:8080"
+      - "${CLIPLINE_HTTP_PORT:-8080}:8080"
     volumes:
-      - ./data:/app/data
-      - C:/Users/EvanQ/Desktop/200video:/recordings/200video:ro
+      - "${CLIPLINE_DATA_HOST:-./data}:/app/data"
+      - "${CLIPLINE_RECORDINGS_HOST:-./recordings}:/recordings/xiaomi-nas:ro"
     environment:
-      - TZ=Asia/Shanghai
+      - TZ=${TZ:-Asia/Shanghai}
+      - CLIPLINE_RECORDINGS_ROOT=/recordings
+      - CLIPLINE_SKIP_RECENT_SECONDS=${CLIPLINE_SKIP_RECENT_SECONDS:-30}
+      - CLIPLINE_MAX_EXPORT_MINUTES=${CLIPLINE_MAX_EXPORT_MINUTES:-30}
     restart: unless-stopped
-

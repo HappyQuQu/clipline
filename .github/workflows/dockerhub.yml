@@ -55,3 +55,74 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Update Docker Hub overview
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_REPOSITORY: clipline
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          username = os.environ["DOCKERHUB_USERNAME"]
+          secret = os.environ["DOCKERHUB_TOKEN"]
+          repository = os.environ["DOCKERHUB_REPOSITORY"]
+          description = "Xiaomi NAS backup video segment replay and export workbench."
+          overview_path = "README.md"
+
+          with open(overview_path, "r", encoding="utf-8") as handle:
+            overview = handle.read()
+
+          def call(url, method="GET", payload=None, headers=None):
+            data = None if payload is None else json.dumps(payload).encode("utf-8")
+            request = urllib.request.Request(url, data=data, method=method)
+            request.add_header("Content-Type", "application/json")
+            for key, value in (headers or {}).items():
+              request.add_header(key, value)
+            with urllib.request.urlopen(request, timeout=30) as response:
+              body = response.read().decode("utf-8")
+              return json.loads(body) if body else {}
+
+          auth_header = None
+          try:
+            auth = call(
+              "https://hub.docker.com/v2/auth/token",
+              method="POST",
+              payload={"identifier": username, "secret": secret},
+            )
+            auth_header = f"Bearer {auth['access_token']}"
+          except Exception:
+            auth = call(
+              "https://hub.docker.com/v2/users/login/",
+              method="POST",
+              payload={"username": username, "password": secret},
+            )
+            auth_header = f"JWT {auth['token']}"
+
+          payload = {
+            "description": description,
+            "full_description": overview,
+          }
+          candidates = [
+            f"https://hub.docker.com/v2/namespaces/{username}/repositories/{repository}",
+            f"https://hub.docker.com/v2/repositories/{username}/{repository}/",
+          ]
+
+          errors = []
+          for url in candidates:
+            try:
+              call(url, method="PATCH", payload=payload, headers={"Authorization": auth_header})
+              print(f"Updated Docker Hub overview for {username}/{repository}")
+              sys.exit(0)
+            except urllib.error.HTTPError as error:
+              errors.append(f"{url}: HTTP {error.code} {error.read().decode('utf-8', 'ignore')}")
+            except Exception as error:
+              errors.append(f"{url}: {error}")
+
+          raise SystemExit("Unable to update Docker Hub overview:\n" + "\n".join(errors))
+          PY
