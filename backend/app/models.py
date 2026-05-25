@@ -12,6 +12,7 @@ class Source(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     path: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    scan_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -86,6 +87,7 @@ class ScanJob(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     source_id: Mapped[str | None] = mapped_column(String, ForeignKey("sources.id"))
     status: Mapped[str] = mapped_column(String, nullable=False)
+    total_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     scanned_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     indexed_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

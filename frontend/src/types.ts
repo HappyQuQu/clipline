@@ -5,6 +5,7 @@ export interface Source {
   enabled: boolean
   createdAt: string
   updatedAt: string
+  scanIntervalMinutes: number
   lastScanAt?: string | null
   segmentCount: number
   failedCount: number
@@ -61,6 +62,7 @@ export interface Segment {
   needsTranscode: boolean
   scanStatus: string
   errorMessage?: string | null
+  thumbnailUrl?: string | null
 }
 
 export interface ExportJob {
@@ -86,6 +88,7 @@ export interface ScanJob {
   id: string
   sourceId?: string | null
   status: string
+  totalFiles: number
   scannedFiles: number
   indexedFiles: number
   failedFiles: number

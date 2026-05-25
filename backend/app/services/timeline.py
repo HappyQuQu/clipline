@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.models import Source, VideoSegment
 from app.schemas import TimelineGapOut, TimelineResponse, TimelineSegmentOut
 from app.services.common import parse_iso
+from app.services.thumbnails import thumbnail_url
 
 
 def get_day_bounds(date_value: str) -> tuple[datetime, datetime]:
@@ -78,7 +79,7 @@ def build_timeline(db: Session, source_id: str, date_value: str) -> TimelineResp
                 durationSeconds=segment.duration_seconds or 0,
                 playable=bool(segment.playable),
                 needsTranscode=bool(segment.needs_transcode),
-                thumbnailUrl=None,
+                thumbnailUrl=thumbnail_url(segment.id),
             )
             for segment in segments
         ],

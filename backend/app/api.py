@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ from app.services.exports import create_export_job, get_export_job, list_export_
 from app.services.sources import create_source, list_sources, queue_scan, source_to_out, update_source
 from app.services.streaming import stream_file
 from app.services.timeline import build_timeline, resolve_segment_at
+from app.services.thumbnails import ensure_thumbnail, thumbnail_url
 
 router = APIRouter(prefix="/api")
 
@@ -87,6 +88,7 @@ def _scan_job_to_out(job: ScanJob) -> ScanJobOut:
         id=job.id,
         sourceId=job.source_id,
         status=job.status,
+        totalFiles=job.total_files,
         scannedFiles=job.scanned_files,
         indexedFiles=job.indexed_files,
         failedFiles=job.failed_files,
@@ -160,6 +162,7 @@ def _segment_to_out(segment: VideoSegment) -> SegmentOut:
         needsTranscode=bool(segment.needs_transcode),
         scanStatus=segment.scan_status,
         errorMessage=segment.error_message,
+        thumbnailUrl=thumbnail_url(segment.id) if segment.scan_status == "indexed" else None,
     )
 
 
@@ -167,7 +170,7 @@ def _segment_to_out(segment: VideoSegment) -> SegmentOut:
 def get_segments(
     sourceId: str | None = None,
     scanStatus: str | None = None,
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> SegmentListResponse:
@@ -180,7 +183,7 @@ def get_segments(
     total_query = select(func.count()).select_from(VideoSegment)
     segments_query = (
         select(VideoSegment)
-        .order_by(VideoSegment.updated_at.desc(), VideoSegment.filename.asc())
+        .order_by(VideoSegment.start_time.desc(), VideoSegment.filename.desc())
         .limit(limit)
         .offset(offset)
     )
@@ -195,6 +198,7 @@ def get_segments(
         total=total,
         limit=limit,
         offset=offset,
+        hasMore=offset + len(segments) < total,
     )
 
 
@@ -217,6 +221,17 @@ def get_segment_stream(segment_id: str, request: Request, db: Session = Depends(
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
     return stream_file(Path(segment.path), request)
+
+
+@router.get("/segments/{segment_id}/thumbnail")
+def get_segment_thumbnail(segment_id: str, db: Session = Depends(get_db)):
+    segment = db.get(VideoSegment, segment_id)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    path = ensure_thumbnail(db, segment)
+    if not path:
+        return Response(status_code=204)
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @router.post("/exports", response_model=ExportCreateOut)

@@ -37,6 +37,7 @@ def source_to_out(db: Session, source: Source) -> SourceOut:
         enabled=bool(source.enabled),
         createdAt=source.created_at,
         updatedAt=source.updated_at,
+        scanIntervalMinutes=source.scan_interval_minutes,
         lastScanAt=last_scan,
         segmentCount=segment_count or 0,
         failedCount=failed_count or 0,
@@ -60,6 +61,7 @@ def create_source(db: Session, payload: SourceCreate, background_tasks: Backgrou
         name=payload.name.strip(),
         path=str(path),
         enabled=1,
+        scan_interval_minutes=payload.scanIntervalMinutes,
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -91,6 +93,8 @@ def update_source(db: Session, source_id: str, payload: SourceUpdate) -> Source:
         source.name = payload.name.strip()
     if payload.enabled is not None:
         source.enabled = bool_int(payload.enabled)
+    if payload.scanIntervalMinutes is not None:
+        source.scan_interval_minutes = payload.scanIntervalMinutes
     source.updated_at = now_iso()
     db.commit()
     db.refresh(source)

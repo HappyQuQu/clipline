@@ -6,7 +6,7 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/app/data
-      - ./recordings:/recordings:ro
+      - C:/Users/EvanQ/Desktop:/recordings:ro
     environment:
       - TZ=Asia/Shanghai
       - CLIPLINE_DB=/app/data/clipline.db

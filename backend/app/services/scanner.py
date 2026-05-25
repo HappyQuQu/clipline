@@ -60,11 +60,17 @@ def run_scan_job(job_id: str) -> None:
         root = Path(source.path)
         cutoff = datetime.now(timezone.utc).astimezone() - timedelta(seconds=settings.skip_recent_seconds)
 
+        paths = sorted(
+            [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS],
+            key=lambda item: str(item),
+        )
+        job.total_files = len(paths)
+        job.updated_at = now_iso()
+        db.commit()
+
         discovered_paths: set[str] = set()
 
-        for path in root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-                continue
+        for path in paths:
             file_path = str(path)
             discovered_paths.add(file_path)
             job.scanned_files += 1

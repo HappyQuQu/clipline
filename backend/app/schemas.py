@@ -4,12 +4,14 @@ from pydantic import BaseModel, Field
 class SourceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     path: str = Field(min_length=1)
+    scanIntervalMinutes: int = Field(default=0, ge=0, le=1440)
 
 
 class SourceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     path: str | None = Field(default=None, min_length=1)
     enabled: bool | None = None
+    scanIntervalMinutes: int | None = Field(default=None, ge=0, le=1440)
 
 
 class SourceOut(BaseModel):
@@ -19,6 +21,7 @@ class SourceOut(BaseModel):
     enabled: bool
     createdAt: str
     updatedAt: str
+    scanIntervalMinutes: int = 0
     lastScanAt: str | None = None
     segmentCount: int = 0
     failedCount: int = 0
@@ -49,6 +52,7 @@ class ScanJobOut(BaseModel):
     id: str
     sourceId: str | None
     status: str
+    totalFiles: int = 0
     scannedFiles: int
     indexedFiles: int
     failedFiles: int
@@ -114,6 +118,7 @@ class SegmentOut(BaseModel):
     needsTranscode: bool
     scanStatus: str
     errorMessage: str | None = None
+    thumbnailUrl: str | None = None
 
 
 class SegmentListResponse(BaseModel):
@@ -121,6 +126,7 @@ class SegmentListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+    hasMore: bool = False
 
 
 class SegmentResolveOut(BaseModel):
