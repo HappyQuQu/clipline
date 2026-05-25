@@ -6,13 +6,8 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/app/data
-      - C:/Users/EvanQ/Desktop:/recordings:ro
+      - C:/Users/EvanQ/Desktop/200video:/recordings/200video:ro
     environment:
       - TZ=Asia/Shanghai
-      - CLIPLINE_DB=/app/data/clipline.db
-      - CLIPLINE_DATA=/app/data
-      - CLIPLINE_RECORDINGS_ROOT=/recordings
-      - CLIPLINE_LOG_LEVEL=INFO
-      - CLIPLINE_LOG_FORMAT=text
     restart: unless-stopped
 

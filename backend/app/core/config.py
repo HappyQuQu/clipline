@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     port: int = 8080
     db: str = "/app/data/clipline.db"
     data: str = "/app/data"
-    recordings_root: str = "/recordings"
+    recordings_root: str = "/"
+    recordings_roots: str | None = None
     scan_interval_seconds: int = 300
     export_ttl_hours: int = 24
     max_export_minutes: int = 30
@@ -33,6 +34,12 @@ class Settings(BaseSettings):
     @property
     def recordings_root_path(self) -> Path:
         return Path(self.recordings_root)
+
+    @property
+    def recordings_root_paths(self) -> list[Path]:
+        raw = self.recordings_roots or self.recordings_root
+        roots = [value.strip() for value in raw.split(",") if value.strip()]
+        return [Path(value) for value in roots] or [self.recordings_root_path]
 
     @property
     def exports_path(self) -> Path:

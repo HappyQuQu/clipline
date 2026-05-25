@@ -50,12 +50,44 @@ button:disabled {
   background: #ffffff;
 }
 
-.railDot {
-  width: 6px;
-  height: 6px;
-  margin-bottom: 14px;
+.railLogo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #2f6df6;
+}
+
+.railLogo:hover,
+.railLogo:focus-visible {
+  background: #f3f7ff;
+}
+
+.railLogo:focus-visible {
+  outline: 2px solid #8fb5ff;
+  outline-offset: 2px;
+}
+
+.railLogoMark {
+  width: 38px;
+  height: 38px;
+  filter: drop-shadow(0 8px 16px rgb(47 109 246 / 0.12));
+}
+
+.railLogoStatus {
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid #ffffff;
   border-radius: 999px;
-  background: #64c66a;
+  background: #55c76a;
 }
 
 .railButton {
@@ -496,7 +528,10 @@ button:disabled {
 }
 
 .workbenchContent {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   background: #ffffff;
@@ -814,6 +849,34 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.directoryHint {
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #4b5563;
+  padding: 9px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.currentPathButton {
+  min-height: 34px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2933;
+  padding: 0 10px;
+  text-align: left;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.currentPathButton:hover {
+  border-color: #2f6df6;
+  color: #2f6df6;
+}
+
 .directoryCrumbs {
   display: flex;
   gap: 8px;
@@ -1109,6 +1172,234 @@ button:disabled {
   margin-bottom: 14px;
 }
 
+.logSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.exportStage {
+  overflow: auto;
+}
+
+.exportSummaryGrid {
+  margin-bottom: 12px;
+}
+
+.moduleAlert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.moduleAlert.warning {
+  border: 1px solid #ffd9cc;
+  background: #fff7ed;
+  color: #b35416;
+}
+
+.moduleAlert span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exportCurrent {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.6fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 86px;
+  margin-bottom: 12px;
+  border: 1px solid #dbe7ff;
+  border-radius: 8px;
+  background: #f7fbff;
+  padding: 14px;
+}
+
+.exportCurrent div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.exportCurrent span {
+  color: #2f6df6;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.exportCurrent strong {
+  overflow: hidden;
+  color: #1f2933;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exportCurrent small {
+  color: #7b8794;
+  font-size: 12px;
+}
+
+.exportCurrentProgress {
+  display: grid;
+  gap: 8px;
+}
+
+.exportCurrentProgress span {
+  justify-self: end;
+  color: #1f2933;
+  font-size: 18px;
+}
+
+.exportTable {
+  display: grid;
+  border: 1px solid #e4e8ed;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.exportTableHead,
+.exportRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1.1fr) minmax(180px, 0.85fr) minmax(150px, 0.7fr);
+  gap: 14px;
+  align-items: center;
+  min-height: 54px;
+  border-bottom: 1px solid #eef1f4;
+  padding: 10px 12px;
+}
+
+.exportTableHead {
+  min-height: 42px;
+  background: #f8fafc;
+  color: #7b8794;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.exportRow {
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.exportRow:last-child {
+  border-bottom: 0;
+}
+
+.exportTaskCell,
+.exportRangeCell,
+.exportProgressCell,
+.exportResultCell {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.exportTaskCell strong,
+.exportTaskCell small,
+.exportRangeCell span,
+.exportRangeCell small,
+.exportResultCell small,
+.exportError {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exportTaskCell strong {
+  color: #1f2933;
+}
+
+.exportTaskCell small,
+.exportRangeCell small,
+.exportResultCell small,
+.exportMuted {
+  color: #8c99a6;
+  font-size: 12px;
+}
+
+.exportStatusLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exportStatusLine strong {
+  color: #1f2933;
+  font-size: 12px;
+}
+
+.exportStatusPill {
+  width: max-content;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #4b5563;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.exportStatusPill.running {
+  background: #edf4ff;
+  color: #2f6df6;
+}
+
+.exportStatusPill.completed {
+  background: #e8f8ee;
+  color: #20864c;
+}
+
+.exportStatusPill.failed {
+  background: #fff0ed;
+  color: #c24124;
+}
+
+.exportCurrent.completed .progressTrack i,
+.exportRow.completed .progressTrack i {
+  background: #15a46b;
+}
+
+.exportCurrent.failed .progressTrack i,
+.exportRow.failed .progressTrack i {
+  background: #ef4444;
+}
+
+.exportResultCell {
+  align-content: center;
+}
+
+.exportDownload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: max-content;
+  min-height: 32px;
+  border-radius: 7px;
+  background: #edf4ff;
+  color: #2f6df6;
+  padding: 0 10px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.exportError {
+  max-width: 100%;
+  color: #c24124;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .settingsCard {
   display: grid;
   gap: 8px;
@@ -1139,11 +1430,194 @@ button:disabled {
   color: #b35416;
 }
 
+.logMetricButton {
+  border: 1px solid #e4e8ed;
+  text-align: left;
+}
+
+.logMetricButton.active {
+  border-color: #bdd2ff;
+  background: #edf4ff;
+}
+
+.logMetricButton:hover {
+  border-color: #bdd2ff;
+}
+
 .settingsList {
   display: grid;
   border: 1px solid #e4e8ed;
   border-radius: 8px;
   overflow: hidden;
+}
+
+.settingsSections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settingsSection {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid #e4e8ed;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.settingsSectionTitle {
+  color: #1f2933;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.settingsKV {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  border-top: 1px solid #eef1f4;
+  padding-top: 10px;
+}
+
+.settingsKV span {
+  color: #7b8794;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settingsKV strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #1f2933;
+  font-size: 13px;
+}
+
+.logLayout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 420px;
+}
+
+.logKinds {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border-right: 1px solid #e4e8ed;
+  padding-right: 12px;
+}
+
+.logKinds button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #4b5563;
+  padding: 0 10px;
+  text-align: left;
+  font-weight: 800;
+}
+
+.logKinds button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logKinds button small {
+  color: #8c99a6;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.logKinds button.active,
+.logKinds button:hover:not(:disabled) {
+  background: #edf4ff;
+  color: #2f6df6;
+}
+
+.logKinds button.active small,
+.logKinds button:hover:not(:disabled) small {
+  color: #2f6df6;
+}
+
+.logKinds button:disabled {
+  color: #a7b1bc;
+}
+
+.logTable {
+  display: grid;
+  align-content: start;
+  border: 1px solid #e4e8ed;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.logTableHead,
+.logRow {
+  display: grid;
+  grid-template-columns: 80px 150px minmax(0, 1fr) 90px;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid #eef1f4;
+  padding: 0 12px;
+}
+
+.logTableHead {
+  background: #f8fafc;
+  color: #7b8794;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.logRow {
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.logRow:last-child {
+  border-bottom: 0;
+}
+
+.logRow strong,
+.logRow small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logRow strong {
+  color: #1f2933;
+}
+
+.logRow small {
+  color: #8c99a6;
+  font-size: 12px;
+}
+
+.logType {
+  width: max-content;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #2f6df6;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.logType.warning {
+  background: #fff4e5;
+  color: #b35416;
 }
 
 .settingsRow {
@@ -1173,11 +1647,15 @@ button:disabled {
 .viewerBand {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 10px;
-  min-height: 520px;
+  flex: 0 0 100%;
+  min-height: 0;
+  height: 100%;
 }
 
 .timeRail {
+  min-width: 0;
   overflow: hidden;
   border: 1px solid #262a31;
   border-radius: 8px;
@@ -1186,11 +1664,11 @@ button:disabled {
 }
 
 .timelineHead {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(86px, auto) minmax(116px, 1fr) minmax(420px, 560px);
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 52px;
+  gap: 12px;
+  min-height: 58px;
   padding: 8px 14px;
   color: #b8bec8;
   font-size: 13px;
@@ -1201,6 +1679,7 @@ button:disabled {
   display: flex;
   gap: 10px;
   align-items: center;
+  min-width: 0;
 }
 
 .timelineButtons button,
@@ -1219,7 +1698,9 @@ button:disabled {
 }
 
 .timelineClock {
+  justify-self: center;
   min-width: 116px;
+  max-width: 140px;
   border-radius: 4px;
   background: #f4f7fb;
   color: #1f9fd6;
@@ -1228,13 +1709,62 @@ button:disabled {
   font-size: 16px;
 }
 
-.liveButton {
-  background: #1587cf !important;
+.timelineExportTools {
+  justify-self: end;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 150px 96px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.exportRangeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  overflow: hidden;
+  border: 1px solid #343a43;
+  border-radius: 6px;
+  background: #20252d;
+  color: #e8edf5;
+  padding: 0 10px;
+  font-weight: 800;
+}
+
+button.exportRangeLabel {
+  cursor: pointer;
+}
+
+button.exportRangeLabel:hover {
+  border-color: #2f6df6;
+  background: #252d3a;
+}
+
+.exportRangeLabel span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineExportButton {
+  min-height: 36px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.timelineExportStatus {
+  border-top: 1px solid #282828;
+  background: #111418;
+  color: #94a3b8;
+  padding: 6px 14px 0;
+  font-size: 12px;
 }
 
 .recordingTimelineHost {
-  height: 86px;
-  padding: 0 14px;
+  height: 94px;
+  padding: 0;
   overscroll-behavior: contain;
 }
 
@@ -1253,7 +1783,7 @@ button:disabled {
 
 .timelineActions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border-top: 1px solid #282828;
   background: #181818;
 }
@@ -1279,7 +1809,8 @@ button:disabled {
 
 .viewer {
   position: relative;
-  min-height: 520px;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
   border-radius: 8px;
   background: #05070a;
@@ -1288,7 +1819,7 @@ button:disabled {
 .viewerVideo {
   width: 100%;
   height: 100%;
-  min-height: 520px;
+  min-height: 0;
   object-fit: contain;
   background: #05070a;
 }
@@ -1296,7 +1827,8 @@ button:disabled {
 .viewerEmpty {
   display: grid;
   place-items: center;
-  min-height: 520px;
+  height: 100%;
+  min-height: 0;
   color: #8c99a6;
 }
 
@@ -1641,12 +2173,30 @@ button:disabled {
 }
 
 .toastRoot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
   border: 1px solid #d8e7ff;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 18px 40px rgb(31 41 51 / 14%);
   color: #1f2933;
   padding: 11px 14px;
+}
+
+.toastAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 6px;
+  background: #2f6df6;
+  color: #ffffff;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
 }
 
 .toastViewport {

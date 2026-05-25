@@ -13,6 +13,7 @@ import {
   FolderOpen,
   FolderPlus,
   Grid3X3,
+  History,
   LayoutDashboard,
   Pencil,
   Pause,
@@ -26,18 +27,20 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
-import type { DirectoryNode, ExportJob, ScanJob, Segment, Source, TimelineSegment } from './types'
+import type { DirectoryNode, ExportJob, ScanJob, Segment, Source, SystemStatus, TimelineSegment } from './types'
 
 const today = new Date().toISOString().slice(0, 10)
-const recordingsRoot = '/recordings'
-const hostRecordingsRoot = 'C:\\Users\\EvanQ\\Desktop'
-type ViewKey = 'playback' | 'clips' | 'sources' | 'settings'
+type ViewKey = 'playback' | 'clips' | 'sources' | 'exports' | 'logs' | 'settings'
 type DisplaySegment = TimelineSegment & { sourceId: string; filename?: string }
+const playbackRates = [1, 1.5, 2, 4]
+const selectedSourceStorageKey = 'clipline.selectedSourceId'
 
 const navItems: Array<{ key: ViewKey; label: string; icon: typeof Play }> = [
   { key: 'playback', label: '录像回放', icon: Play },
   { key: 'clips', label: '片段墙', icon: Grid3X3 },
   { key: 'sources', label: '录像源', icon: Camera },
+  { key: 'exports', label: '导出任务', icon: Download },
+  { key: 'logs', label: '日志', icon: History },
   { key: 'settings', label: '设置', icon: Settings },
 ]
 
@@ -45,11 +48,13 @@ const viewTitles: Record<ViewKey, string> = {
   playback: '录像回放',
   clips: '片段墙',
   sources: '录像源',
+  exports: '导出任务',
+  logs: '日志',
   settings: '设置',
 }
 
 function toLocalInputValue(value: string) {
-  return value.slice(0, 16)
+  return toLocalDateTimePrecise(new Date(value))
 }
 
 function toIsoWithOffset(value: string) {
@@ -59,7 +64,9 @@ function toIsoWithOffset(value: string) {
   const abs = Math.abs(offsetMinutes)
   const hours = String(Math.floor(abs / 60)).padStart(2, '0')
   const minutes = String(abs % 60).padStart(2, '0')
-  return `${value}:00${sign}${hours}:${minutes}`
+  const hasSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)
+  const localValue = hasSeconds ? value : `${value}:00`
+  return `${localValue}${sign}${hours}:${minutes}`
 }
 
 function formatTime(value: string | null | undefined) {
@@ -70,6 +77,11 @@ function formatTime(value: string | null | undefined) {
 function toLocalDateTimeInput(dateValue: Date) {
   const offsetMs = dateValue.getTimezoneOffset() * 60_000
   return new Date(dateValue.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
+function toLocalDateTimePrecise(dateValue: Date) {
+  const offsetMs = dateValue.getTimezoneOffset() * 60_000
+  return new Date(dateValue.getTime() - offsetMs).toISOString().slice(0, 23)
 }
 
 function getDefaultRange(days = 7) {
@@ -100,15 +112,6 @@ function formatClipDateTime(value: string | null | undefined) {
   })
 }
 
-function displayPath(path: string | null | undefined) {
-  if (!path) return ''
-  if (path === recordingsRoot) return hostRecordingsRoot
-  if (path.startsWith(`${recordingsRoot}/`)) {
-    return `${hostRecordingsRoot}\\${path.slice(recordingsRoot.length + 1).replaceAll('/', '\\')}`
-  }
-  return path
-}
-
 function segmentDate(value: string | null | undefined) {
   return value ? value.slice(0, 10) : today
 }
@@ -134,6 +137,10 @@ function formatBytes(value?: number | null) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
+function formatPlaybackRate(value: number) {
+  return `${value.toFixed(1)}x`
+}
+
 function queryMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
@@ -141,21 +148,27 @@ function queryMessage(error: unknown, fallback: string) {
 export function App() {
   const queryClient = useQueryClient()
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [sourceId, setSourceId] = useState('')
+  const [sourceId, setSourceId] = useState(() => localStorage.getItem(selectedSourceStorageKey) ?? '')
   const [date, setDate] = useState(today)
   const [selectedSegment, setSelectedSegment] = useState<DisplaySegment | null>(null)
   const [previewSegment, setPreviewSegment] = useState<DisplaySegment | null>(null)
+  const [playbackTimeMs, setPlaybackTimeMs] = useState<number | null>(null)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [isPlaying, setIsPlaying] = useState(false)
   const [autoPlayNext, setAutoPlayNext] = useState(false)
   const [sourceName, setSourceName] = useState('')
   const [sourcePath, setSourcePath] = useState('')
   const [sourceScanInterval, setSourceScanInterval] = useState(0)
   const [exportStart, setExportStart] = useState('')
   const [exportEnd, setExportEnd] = useState('')
+  const [exportRangeVisible, setExportRangeVisible] = useState(false)
   const [clipRangeStart, setClipRangeStart] = useState(() => getDefaultRange(7).start)
   const [clipRangeEnd, setClipRangeEnd] = useState(() => getDefaultRange(7).end)
   const [exportMode, setExportMode] = useState<'fast' | 'accurate'>('fast')
   const [message, setMessage] = useState('')
+  const [toastDownloadUrl, setToastDownloadUrl] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(false)
+  const [watchedExportIds, setWatchedExportIds] = useState<string[]>([])
   const [activeView, setActiveView] = useState<ViewKey>('playback')
   const segmentPageSize = 1000
   const showFilterPane = activeView === 'playback' || activeView === 'clips'
@@ -179,27 +192,34 @@ export function App() {
     queryFn: api.exports,
     refetchInterval: 2500,
   })
+  const statusQuery = useQuery({
+    queryKey: ['systemStatus'],
+    queryFn: api.status,
+    refetchInterval: 10000,
+  })
   const scanJobsQuery = useQuery({
     queryKey: ['scanJobs', sourceId || 'all'],
     queryFn: () => api.scanJobs(sourceId || undefined),
     refetchInterval: 2500,
   })
   const failedSegmentsQuery = useQuery({
-    queryKey: ['segments', sourceId || 'all', 'failed'],
-    queryFn: () => api.segments({ sourceId: sourceId || undefined, scanStatus: 'failed', limit: 8 }),
+    queryKey: ['segments', sourceId, 'failed'],
+    queryFn: () => api.segments({ sourceId, scanStatus: 'failed', limit: 8 }),
+    enabled: Boolean(sourceId),
     refetchInterval: 5000,
   })
   const segmentsQuery = useInfiniteQuery({
-    queryKey: ['segments', sourceId || 'all', 'indexed'],
+    queryKey: ['segments', sourceId, 'indexed'],
     queryFn: ({ pageParam }) =>
       api.segments({
-        sourceId: sourceId || undefined,
+        sourceId,
         scanStatus: 'indexed',
         limit: segmentPageSize,
         offset: pageParam,
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage.offset + lastPage.items.length < lastPage.total ? lastPage.offset + lastPage.items.length : undefined),
+    enabled: Boolean(sourceId),
     refetchInterval: 5000,
   })
 
@@ -208,6 +228,7 @@ export function App() {
   const directoryRoot = directoriesQuery.data?.root ?? ''
   const timeline = timelineQuery.data ?? null
   const exports = exportsQuery.data?.items ?? []
+  const systemStatus = statusQuery.data ?? null
   const scanJobs = scanJobsQuery.data?.items ?? []
   const failedSegments = failedSegmentsQuery.data?.items ?? []
   const selectedSource = sources.find((source) => source.id === sourceId)
@@ -238,18 +259,24 @@ export function App() {
   )
 
   const latestExport = exports[0]
+  const activeExportCount = exports.filter((job) => job.status === 'queued' || job.status === 'running').length
   const latestScan = scanJobs[0]
-  const totalSegmentCount = useMemo(
-    () => (sourceId ? selectedSource?.segmentCount ?? allSegments.length : sources.reduce((sum, source) => sum + source.segmentCount, 0)),
-    [allSegments.length, selectedSource?.segmentCount, sourceId, sources],
+  const allSourceSegmentCount = useMemo(
+    () => sources.reduce((sum, source) => sum + source.segmentCount, 0),
+    [sources],
+  )
+  const currentSourceSegmentCount = useMemo(
+    () => (sourceId ? selectedSource?.segmentCount ?? allSegments.length : 0),
+    [allSegments.length, selectedSource?.segmentCount, sourceId],
   )
   const totalRecordedSeconds = useMemo(
     () => allSegments.reduce((sum, segment) => sum + segment.durationSeconds, 0),
     [allSegments],
   )
 
-  function notify(text: string) {
+  function notify(text: string, downloadUrl?: string | null) {
     setMessage(text)
+    setToastDownloadUrl(downloadUrl ?? null)
     setToastOpen(false)
     window.setTimeout(() => setToastOpen(true), 0)
   }
@@ -258,6 +285,7 @@ export function App() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['sources'] }),
       queryClient.invalidateQueries({ queryKey: ['exports'] }),
+      queryClient.invalidateQueries({ queryKey: ['systemStatus'] }),
       queryClient.invalidateQueries({ queryKey: ['scanJobs'] }),
       queryClient.invalidateQueries({ queryKey: ['segments'] }),
       queryClient.invalidateQueries({ queryKey: ['timeline'] }),
@@ -269,7 +297,28 @@ export function App() {
   }, [directories, sourcePath])
 
   useEffect(() => {
-    if (!rangeSegments.length) {
+    if (!sourcesQuery.isSuccess) return
+    if (!sources.length) {
+      if (sourceId) {
+        setSourceId('')
+        localStorage.removeItem(selectedSourceStorageKey)
+      }
+      return
+    }
+    const hasCurrentSource = sourceId ? sources.some((source) => source.id === sourceId) : false
+    if (sourceId && !hasCurrentSource) {
+      setSourceId('')
+      localStorage.removeItem(selectedSourceStorageKey)
+      return
+    }
+    const savedSourceId = localStorage.getItem(selectedSourceStorageKey)
+    if (!sourceId && savedSourceId && sources.some((source) => source.id === savedSourceId)) {
+      setSourceId(savedSourceId)
+    }
+  }, [sourceId, sources, sourcesQuery.isSuccess])
+
+  useEffect(() => {
+    if (!sourceId || !rangeSegments.length) {
       setSelectedSegment(null)
       return
     }
@@ -290,13 +339,35 @@ export function App() {
     })
   }, [activeView, autoPlayNext, selectedSegment])
 
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = playbackRate
+  }, [playbackRate, selectedSegment])
+
+  useEffect(() => {
+    if (!watchedExportIds.length) return
+    const watchedJobs = watchedExportIds
+      .map((id) => exports.find((job) => job.id === id))
+      .filter((job): job is ExportJob => Boolean(job))
+    const completed = watchedJobs.find((job) => job.status === 'completed' && job.downloadUrl)
+    if (completed) {
+      notify('导出已完成，可以下载', completed.downloadUrl)
+      setWatchedExportIds((ids) => ids.filter((id) => id !== completed.id))
+      return
+    }
+    const failed = watchedJobs.find((job) => job.status === 'failed')
+    if (failed) {
+      notify(`导出失败：${failed.errorMessage ?? '请查看导出任务'}`)
+      setWatchedExportIds((ids) => ids.filter((id) => id !== failed.id))
+    }
+  }, [exports, watchedExportIds])
+
   const createSourceMutation = useMutation({
     mutationFn: api.createSource,
     onSuccess: async (created) => {
       notify(`已创建源 ${created.name}`)
       setSourceName('')
       setSourceScanInterval(0)
-      setSourceId(created.id)
+      handleSourceChange(created.id)
       await refreshAll()
     },
     onError: (error) => notify(queryMessage(error, '创建源失败')),
@@ -313,8 +384,9 @@ export function App() {
 
   const exportMutation = useMutation({
     mutationFn: api.createExport,
-    onSuccess: async () => {
-      notify('导出任务已创建')
+    onSuccess: async (response) => {
+      notify('导出任务已创建，完成后会提示下载')
+      setWatchedExportIds((ids) => (ids.includes(response.exportId) ? ids : [...ids, response.exportId]))
       await queryClient.invalidateQueries({ queryKey: ['exports'] })
     },
     onError: (error) => notify(queryMessage(error, '创建导出失败')),
@@ -355,22 +427,44 @@ export function App() {
       scanMutation.mutate(sourceId)
       return
     }
-    sources.filter((source) => source.enabled).forEach((source) => scanMutation.mutate(source.id))
+    notify('先选择录像源')
   }
 
-  function selectSegment(segment: DisplaySegment, play = false) {
+  function handleSourceChange(nextSourceId: string) {
+    if (nextSourceId === sourceId) return
+    setSourceId(nextSourceId)
+    if (nextSourceId) {
+      localStorage.setItem(selectedSourceStorageKey, nextSourceId)
+    } else {
+      localStorage.removeItem(selectedSourceStorageKey)
+    }
+    setSelectedSegment(null)
+    setPreviewSegment(null)
+    setPlaybackTimeMs(null)
+    setIsPlaying(false)
+    setAutoPlayNext(false)
+    setExportStart('')
+    setExportEnd('')
+    setExportRangeVisible(false)
+  }
+
+  function selectSegment(segment: DisplaySegment, play = false, showExportRange = false) {
     setSelectedSegment(segment)
+    setPlaybackTimeMs(new Date(segment.startTime).getTime())
     setAutoPlayNext(play)
     setDate(segmentDate(segment.startTime))
     setExportStart(toLocalInputValue(segment.startTime))
     setExportEnd(toLocalInputValue(segment.endTime))
+    setExportRangeVisible(showExportRange)
   }
 
   function openClipPreview(segment: DisplaySegment) {
     setSelectedSegment(segment)
+    setPlaybackTimeMs(new Date(segment.startTime).getTime())
     setDate(segmentDate(segment.startTime))
     setExportStart(toLocalInputValue(segment.startTime))
     setExportEnd(toLocalInputValue(segment.endTime))
+    setExportRangeVisible(false)
     setPreviewSegment(segment)
   }
 
@@ -380,18 +474,71 @@ export function App() {
     const nextSegment = currentIndex >= 0 ? playbackQueue[currentIndex + 1] : null
     if (!nextSegment) {
       setAutoPlayNext(false)
+      setIsPlaying(false)
       return
     }
     setSelectedSegment(nextSegment)
+    setPlaybackTimeMs(new Date(nextSegment.startTime).getTime())
     setAutoPlayNext(true)
     setDate(segmentDate(nextSegment.startTime))
     setExportStart(toLocalInputValue(nextSegment.startTime))
     setExportEnd(toLocalInputValue(nextSegment.endTime))
+    setExportRangeVisible(false)
+  }
+
+  function syncPlaybackTime() {
+    const video = videoRef.current
+    if (!video || !selectedSegment || !Number.isFinite(video.currentTime)) return
+    setPlaybackTimeMs(new Date(selectedSegment.startTime).getTime() + video.currentTime * 1000)
+  }
+
+  function handlePlaybackRateChange(nextRate: number) {
+    setPlaybackRate(nextRate)
+    if (videoRef.current) videoRef.current.playbackRate = nextRate
+  }
+
+  function togglePlayback() {
+    const video = videoRef.current
+    if (!video || !selectedSegment) {
+      notify('先选择片段')
+      return
+    }
+    if (video.paused) {
+      video.play().catch(() => notify('浏览器阻止了自动播放，请再点一次播放'))
+      return
+    }
+    video.pause()
+  }
+
+  function showExportRange() {
+    if (selectedSegment) {
+      setExportStart(toLocalInputValue(selectedSegment.startTime))
+      setExportEnd(toLocalInputValue(selectedSegment.endTime))
+      setExportRangeVisible(true)
+      return true
+    }
+    if (exportStart && exportEnd) {
+      setExportRangeVisible(true)
+      return true
+    }
+    notify('先选择片段')
+    return false
   }
 
   function handleExport() {
     const exportSourceId = selectedSegment?.sourceId ?? sourceId
-    if (!exportSourceId || !exportStart || !exportEnd) return
+    if (!exportRangeVisible) {
+      showExportRange()
+      return
+    }
+    if (!exportSourceId || !exportStart || !exportEnd) {
+      notify('先在时间线上选择导出区间')
+      return
+    }
+    if (new Date(exportStart).getTime() >= new Date(exportEnd).getTime()) {
+      notify('导出结束时间必须晚于开始时间')
+      return
+    }
     exportMutation.mutate({
       sourceId: exportSourceId,
       startTime: toIsoWithOffset(exportStart),
@@ -411,14 +558,15 @@ export function App() {
     directoriesQuery.isFetching ||
     timelineQuery.isFetching ||
     exportsQuery.isFetching ||
+    statusQuery.isFetching ||
     scanJobsQuery.isFetching ||
     failedSegmentsQuery.isFetching ||
     segmentsQuery.isFetching
 
   const filterPane = showFilterPane ? (
     <aside className="controlPane">
-      <div className="filterTitle">筛选</div>
-      <div className="filterSectionLabel">时间</div>
+      <div className="filterTitle">浏览范围</div>
+      <div className="filterSectionLabel">片段时间</div>
       <div className="rangeFields unifiedRange">
         <label>
           <span>开始</span>
@@ -446,13 +594,13 @@ export function App() {
           setClipRangeStart('')
           setClipRangeEnd('')
         }}>
-          清除时间
+          清除范围
         </button>
       </div>
       <div className="filterDivider" />
       <div className="filterSectionLabel">当前源</div>
       <div className="filterMeta">
-        <strong>{selectedSource?.name ?? '全部源'}</strong>
+        <strong>{selectedSource?.name ?? '请选择源'}</strong>
         <small>{rangeSegments.length} 个片段</small>
       </div>
       <div className="filterCount">
@@ -462,12 +610,46 @@ export function App() {
     </aside>
   ) : null
 
+  const stageMeta =
+    activeView === 'playback' || activeView === 'clips'
+      ? sourceId
+        ? `${formatRangeLabel(clipRangeStart, clipRangeEnd)} · ${currentSourceSegmentCount} 个片段 · ${Math.round(totalRecordedSeconds)} 秒`
+        : '请选择录像源后加载片段'
+      : activeView === 'sources'
+        ? `${sources.length} 个源 · ${allSourceSegmentCount} 个片段`
+        : activeView === 'logs'
+          ? `${scanJobs.length} 条扫描 · ${exports.length} 条导出 · ${failedSegments.length} 个错误`
+          : activeView === 'exports'
+            ? `${exports.length} 条导出记录 · ${activeExportCount} 个进行中`
+          : `版本 ${systemStatus?.version ?? '-'} · 数据库 ${systemStatus?.database.path ?? '/app/data/clipline.db'}`
+  const showSourceSelect = activeView === 'playback' || activeView === 'clips' || activeView === 'sources'
+
   return (
     <Toast.Provider swipeDirection="right">
       <div className="protectShell compactShell">
         <aside className="rail">
-          <div className="railDot" />
-          {navItems.slice(0, 4).map((item) => {
+          <button className="railLogo" title="Clipline" aria-label="Clipline 录像回放" onClick={() => setActiveView('playback')}>
+            <svg className="railLogoMark" viewBox="0 0 40 40" role="img" aria-hidden="true">
+              <defs>
+                <linearGradient id="cliplineLogoFill" x1="7" y1="4" x2="33" y2="36" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#ffffff" />
+                  <stop offset="1" stopColor="#eaf2ff" />
+                </linearGradient>
+                <linearGradient id="cliplineLogoAccent" x1="13" y1="22" x2="29" y2="22" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#34d3c8" />
+                  <stop offset="1" stopColor="#2f6df6" />
+                </linearGradient>
+              </defs>
+              <rect x="4.5" y="4.5" width="31" height="31" rx="10" fill="url(#cliplineLogoFill)" />
+              <rect x="4.5" y="4.5" width="31" height="31" rx="10" fill="none" stroke="#d6e5ff" />
+              <path d="M12 13.5H24.5" stroke="#8ba2bd" strokeWidth="2.4" strokeLinecap="round" />
+              <path d="M12 26.5H28" stroke="#b5c4d6" strokeWidth="2.4" strokeLinecap="round" />
+              <rect x="11" y="18.5" width="3.5" height="7" rx="1.75" fill="#34d3c8" />
+              <path d="M18 16.5L28.5 22L18 27.5V16.5Z" fill="url(#cliplineLogoAccent)" />
+            </svg>
+            <span className="railLogoStatus" />
+          </button>
+          {navItems.slice(0, 5).map((item) => {
             const Icon = item.icon
             return (
               <button
@@ -483,7 +665,7 @@ export function App() {
             )
           })}
           <div className="railSpacer" />
-          {navItems.slice(4).map((item) => {
+          {navItems.slice(5).map((item) => {
             const Icon = item.icon
             return (
               <button
@@ -507,11 +689,11 @@ export function App() {
                 {activeView === 'playback' ? selectedSource?.name ?? viewTitles[activeView] : viewTitles[activeView]}
               </div>
               <div className="stageMeta">
-                {formatRangeLabel(clipRangeStart, clipRangeEnd)} · {totalSegmentCount} 个片段 · {Math.round(totalRecordedSeconds)} 秒
+                {stageMeta}
               </div>
             </div>
             <div className="stageTools">
-              <SourceSelect sources={sources} value={sourceId} onChange={setSourceId} />
+              {showSourceSelect && <SourceSelect sources={sources} value={sourceId} onChange={handleSourceChange} />}
               <button className="refreshButton" onClick={() => void refreshAll()}>
                 <RefreshCw size={18} className={busy ? 'spin' : ''} />
               </button>
@@ -530,7 +712,7 @@ export function App() {
               scanJobs={scanJobs}
               creating={createSourceMutation.isPending}
               scanning={scanMutation.isPending}
-              onSelect={setSourceId}
+              onSelect={handleSourceChange}
               onScan={(id) => scanMutation.mutate(id)}
               onCreate={handleCreateSource}
               onNameChange={setSourceName}
@@ -544,6 +726,20 @@ export function App() {
             />
           ) : activeView === 'settings' ? (
             <SettingsStage
+              sources={sources}
+              status={systemStatus}
+              onRefresh={() => void refreshAll()}
+              busy={busy}
+            />
+          ) : activeView === 'exports' ? (
+            <ExportStage
+              exports={exports}
+              error={exportsQuery.error}
+              onRefresh={() => void refreshAll()}
+              busy={busy}
+            />
+          ) : activeView === 'logs' ? (
+            <LogsStage
               sources={sources}
               scanJobs={scanJobs}
               exports={exports}
@@ -582,12 +778,6 @@ export function App() {
               {filterPane}
               <div className="workbenchContent">
                 <section className="viewerBand">
-                  <TimeRail
-                    date={`${clipRangeStart}-${clipRangeEnd}`}
-                    segments={rangeSegments}
-                    selectedId={selectedSegment?.id}
-                    onSelect={(segment) => selectSegment(segment, true)}
-                  />
                   <div className="viewer">
                     {selectedSegment ? (
                       <>
@@ -597,9 +787,18 @@ export function App() {
                           className="viewerVideo"
                           controls
                           src={`/api/segments/${selectedSegment.id}/stream`}
+                          onLoadedMetadata={syncPlaybackTime}
+                          onTimeUpdate={syncPlaybackTime}
+                          onSeeking={syncPlaybackTime}
                           onEnded={handleSegmentEnded}
-                          onPlay={() => setAutoPlayNext(true)}
-                          onPause={() => setAutoPlayNext(false)}
+                          onPlay={() => {
+                            setIsPlaying(true)
+                            setAutoPlayNext(true)
+                          }}
+                          onPause={() => {
+                            setIsPlaying(false)
+                            setAutoPlayNext(false)
+                          }}
                         />
                         <div className="videoBadge">
                           {formatTime(selectedSegment.startTime)} | {sourceNames.get(selectedSegment.sourceId) ?? selectedSource?.name ?? 'Camera'}
@@ -620,21 +819,33 @@ export function App() {
                       <div className="viewerEmpty">选择片段</div>
                     )}
                   </div>
-                </section>
-
-                <section className="playbackBar">
-                  <div className="nowPill">
-                    <Play size={16} />
-                    {formatTime(selectedSegment?.startTime)}
-                  </div>
-                  <input type="datetime-local" value={exportStart} onChange={(event) => setExportStart(event.target.value)} />
-                  <input type="datetime-local" value={exportEnd} onChange={(event) => setExportEnd(event.target.value)} />
-                  <ExportMode value={exportMode} onChange={setExportMode} />
-                  <button className="exportButton" onClick={handleExport} disabled={exportMutation.isPending}>
-                    <Download size={16} />
-                    导出
-                  </button>
-                  {latestExport && <div className="exportHint">{latestExport.status} · {formatBytes(latestExport.outputSizeBytes)}</div>}
+                  <TimeRail
+                    date={`${clipRangeStart}-${clipRangeEnd}`}
+                    segments={rangeSegments}
+                    selectedId={selectedSegment?.id}
+                    playbackTimeMs={playbackTimeMs}
+                    playbackRate={playbackRate}
+                    isPlaying={isPlaying}
+                    exportStart={exportStart}
+                    exportEnd={exportEnd}
+                    exportRangeVisible={exportRangeVisible}
+                    exportMode={exportMode}
+                    exportStatus={latestExport ? `${latestExport.status} · ${formatBytes(latestExport.outputSizeBytes)}` : ''}
+                    exporting={exportMutation.isPending}
+                    onSelect={(segment) => selectSegment(segment, true)}
+                    onPlaybackRateChange={handlePlaybackRateChange}
+                    onTogglePlayback={togglePlayback}
+                    onExportRangeChange={(start, end) => {
+                      setExportStart(start)
+                      setExportEnd(end)
+                      setExportRangeVisible(true)
+                    }}
+                    onExportRangeActivate={() => {
+                      showExportRange()
+                    }}
+                    onExportModeChange={setExportMode}
+                    onExport={handleExport}
+                  />
                 </section>
 
                 <section className="clipDock">
@@ -661,6 +872,13 @@ export function App() {
 
       <Toast.Root className="toastRoot" open={toastOpen} onOpenChange={setToastOpen}>
         <Toast.Description>{message}</Toast.Description>
+        {toastDownloadUrl && (
+          <Toast.Action asChild altText="下载导出文件">
+            <a className="toastAction" href={toastDownloadUrl}>
+              下载
+            </a>
+          </Toast.Action>
+        )}
       </Toast.Root>
       {previewSegment && (
         <div className="modalBackdrop clipPreviewBackdrop" role="dialog" aria-modal="true" onClick={() => setPreviewSegment(null)}>
@@ -849,7 +1067,7 @@ function SourceStage({
                   ) : (
                     <button className="sourceCardBody" onClick={() => onSelect(source.id)}>
                       <strong>{source.name}</strong>
-                      <small>{displayPath(source.path)}</small>
+                      <small>{source.path}</small>
                     </button>
                   )}
                 </div>
@@ -909,6 +1127,217 @@ function SourceStage({
 
 function SettingsStage({
   sources,
+  status,
+  onRefresh,
+  busy,
+}: {
+  sources: Source[]
+  status: SystemStatus | null
+  onRefresh: () => void
+  busy: boolean
+}) {
+  return (
+    <section className="modulePanel">
+      <div className="moduleHead">
+        <div>
+          <div className="moduleTitle">系统设置</div>
+          <div className="moduleMeta">运行环境、存储路径和后端能力。</div>
+        </div>
+        <button className="refreshButton" onClick={onRefresh}>
+          <RefreshCw size={18} className={busy ? 'spin' : ''} />
+        </button>
+      </div>
+
+      <div className="settingsGrid">
+        <div className="settingsCard">
+          <LayoutDashboard size={20} />
+          <strong>{status?.version ?? '-'}</strong>
+          <span>版本</span>
+        </div>
+        <div className="settingsCard">
+          <Check size={20} />
+          <strong>{status?.ffmpeg.available ? '可用' : '不可用'}</strong>
+          <span>FFmpeg</span>
+        </div>
+        <div className="settingsCard">
+          <Check size={20} />
+          <strong>{status?.ffprobe.available ? '可用' : '不可用'}</strong>
+          <span>FFprobe</span>
+        </div>
+        <div className="settingsCard">
+          <Camera size={20} />
+          <strong>{sources.length}</strong>
+          <span>录像源</span>
+        </div>
+      </div>
+
+      <div className="settingsSections">
+        <div className="settingsSection">
+          <div className="settingsSectionTitle">路径</div>
+          <div className="settingsKV">
+            <span>数据库</span>
+            <strong>{status?.database.path ?? '-'}</strong>
+          </div>
+          <div className="settingsKV">
+            <span>日志文件</span>
+            <strong>{status?.logging.file ?? '-'}</strong>
+          </div>
+          <div className="settingsKV">
+            <span>默认浏览根</span>
+            <strong>/</strong>
+          </div>
+        </div>
+        <div className="settingsSection">
+          <div className="settingsSectionTitle">运行配置</div>
+          <div className="settingsKV">
+            <span>日志级别</span>
+            <strong>{status?.logging.level ?? '-'}</strong>
+          </div>
+          <div className="settingsKV">
+            <span>日志格式</span>
+            <strong>{status?.logging.format ?? '-'}</strong>
+          </div>
+          <div className="settingsKV">
+            <span>导出缓存</span>
+            <strong>{formatBytes(status?.cache.exportBytes)}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ExportStage({
+  exports,
+  error,
+  onRefresh,
+  busy,
+}: {
+  exports: ExportJob[]
+  error: unknown
+  onRefresh: () => void
+  busy: boolean
+}) {
+  const activeJobs = exports.filter((job) => job.status === 'queued' || job.status === 'running')
+  const completedJobs = exports.filter((job) => job.status === 'completed')
+  const failedJobs = exports.filter((job) => job.status === 'failed')
+  const latestActive = activeJobs[0] ?? exports[0]
+
+  return (
+    <section className="modulePanel exportStage">
+      <div className="moduleHead">
+        <div>
+          <div className="moduleTitle">导出任务</div>
+          <div className="moduleMeta">查看正在导出的进度、历史记录和下载入口。</div>
+        </div>
+        <button className="refreshButton" onClick={onRefresh} title="刷新导出任务">
+          <RefreshCw size={18} className={busy ? 'spin' : ''} />
+        </button>
+      </div>
+
+      <div className="settingsGrid exportSummaryGrid">
+        <div className="settingsCard">
+          <Activity size={20} />
+          <strong>{activeJobs.length}</strong>
+          <span>进行中</span>
+        </div>
+        <div className="settingsCard">
+          <Check size={20} />
+          <strong>{completedJobs.length}</strong>
+          <span>已完成</span>
+        </div>
+        <div className="settingsCard warning">
+          <AlertTriangle size={20} />
+          <strong>{failedJobs.length}</strong>
+          <span>失败</span>
+        </div>
+        <div className="settingsCard">
+          <Download size={20} />
+          <strong>{exports.length}</strong>
+          <span>总记录</span>
+        </div>
+      </div>
+
+      {Boolean(error) ? (
+        <div className="moduleAlert warning">
+          <AlertTriangle size={16} />
+          <span>导出记录读取失败：{queryMessage(error, '请检查后端连接')}</span>
+        </div>
+      ) : null}
+
+      {latestActive && (
+        <div className={`exportCurrent ${latestActive.status}`}>
+          <div>
+            <span>{exportStatusLabel(latestActive.status)}</span>
+            <strong>{latestActive.sourceName ?? latestActive.sourceId}</strong>
+            <small>
+              {formatClipDateTime(latestActive.startTime)} - {formatClipDateTime(latestActive.endTime)}
+            </small>
+          </div>
+          <div className="exportCurrentProgress">
+            <span>{exportProgressPercent(latestActive)}%</span>
+            <div className="progressTrack">
+              <i style={{ width: `${exportProgressPercent(latestActive)}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="exportTable">
+        <div className="exportTableHead">
+          <span>任务</span>
+          <span>时间范围</span>
+          <span>进度</span>
+          <span>结果</span>
+        </div>
+        {exports.length ? exports.map((job) => {
+          const progress = exportProgressPercent(job)
+          return (
+            <div className={`exportRow ${job.status}`} key={job.id}>
+              <div className="exportTaskCell">
+                <strong>{job.sourceName ?? job.sourceId}</strong>
+                <small>{job.mode === 'fast' ? '快速导出' : '精准导出'} · {job.id}</small>
+              </div>
+              <div className="exportRangeCell">
+                <span>{formatClipDateTime(job.startTime)} - {formatClipDateTime(job.endTime)}</span>
+                {job.hasGaps && <small>包含断档，跳过约 {formatDuration(job.gapDurationSeconds)}</small>}
+              </div>
+              <div className="exportProgressCell">
+                <div className="exportStatusLine">
+                  <span className={`exportStatusPill ${job.status}`}>{exportStatusLabel(job.status)}</span>
+                  <strong>{progress}%</strong>
+                </div>
+                <div className="progressTrack">
+                  <i style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+              <div className="exportResultCell">
+                {job.status === 'completed' && job.downloadUrl ? (
+                  <a className="exportDownload" href={job.downloadUrl}>
+                    <Download size={15} />
+                    下载
+                  </a>
+                ) : job.status === 'failed' ? (
+                  <span className="exportError" title={job.errorMessage ?? '导出失败'}>
+                    {job.errorMessage ?? '导出失败'}
+                  </span>
+                ) : (
+                  <span className="exportMuted">等待完成</span>
+                )}
+                <small>{formatBytes(job.outputSizeBytes)}</small>
+              </div>
+            </div>
+          )
+        }) : (
+          <div className="moduleEmpty">暂无导出记录</div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function LogsStage({
+  sources,
   scanJobs,
   exports,
   failedSegments,
@@ -922,52 +1351,136 @@ function SettingsStage({
   onRefresh: () => void
   busy: boolean
 }) {
-  const latestScan = scanJobs[0]
-  const latestExport = exports[0]
+  type LogKind = 'all' | 'scan' | 'scheduledScan' | 'manualScan' | 'export' | 'error' | 'login' | 'sourceChange'
+  const sourceNames = new Map(sources.map((source) => [source.id, source.name]))
+  const [logKind, setLogKind] = useState<LogKind>('all')
+  const scanRows = scanJobs.map((job) => {
+    const scheduled = job.trigger === 'scheduled'
+    return {
+      id: job.id,
+      category: scheduled ? 'scheduledScan' as const : 'manualScan' as const,
+      type: scheduled ? '定时' : '手动',
+      time: job.finishedAt ?? job.startedAt ?? job.createdAt,
+      title: `${sourceNames.get(job.sourceId ?? '') ?? '全部源'} · ${scheduled ? '定时扫描' : '手动扫描'} · ${scanStatusLabel(job.status)}`,
+      detail: `${job.scannedFiles}/${job.totalFiles || '-'} 文件 · ${job.indexedFiles} 入库 · ${job.failedFiles} 错误`,
+      status: job.status,
+      statusLabel: scanStatusLabel(job.status),
+    }
+  })
+  const exportRows = exports.slice(0, 8).map((job) => ({
+    id: job.id,
+    category: 'export' as const,
+    type: '导出',
+    time: job.updatedAt ?? job.createdAt,
+    title: `${job.sourceName ?? sourceNames.get(job.sourceId) ?? '录像源'} · ${job.mode === 'fast' ? '快速' : '精准'}`,
+    detail: `${formatClipDateTime(job.startTime)} - ${formatClipDateTime(job.endTime)} · ${formatBytes(job.outputSizeBytes)}`,
+    status: job.status,
+    statusLabel: exportStatusLabel(job.status),
+  }))
+  const errorRows = failedSegments.slice(0, 8).map((segment) => ({
+    id: segment.id,
+    category: 'error' as const,
+    type: '错误',
+    time: segment.startTime ?? '',
+    title: `${sourceNames.get(segment.sourceId) ?? '录像源'} · ${segment.filename}`,
+    detail: segment.errorMessage ?? '扫描失败',
+    status: segment.scanStatus,
+    statusLabel: scanStatusLabel(segment.scanStatus),
+  }))
+  const allRows = [...scanRows, ...exportRows, ...errorRows]
+  const logCounts: Record<LogKind, number> = {
+    all: allRows.length,
+    scan: scanRows.length,
+    scheduledScan: scanRows.filter((row) => row.category === 'scheduledScan').length,
+    manualScan: scanRows.filter((row) => row.category === 'manualScan').length,
+    export: exportRows.length,
+    error: errorRows.length,
+    login: 0,
+    sourceChange: 0,
+  }
+  const logFilters: Array<{ key: LogKind; label: string }> = [
+    { key: 'all', label: '全部日志' },
+    { key: 'scheduledScan', label: '定时扫描' },
+    { key: 'manualScan', label: '手动扫描' },
+    { key: 'export', label: '导出任务' },
+    { key: 'error', label: '错误日志' },
+    { key: 'login', label: '登录日志' },
+    { key: 'sourceChange', label: '源配置变更' },
+  ]
+  const activeLogLabel = logFilters.find((filter) => filter.key === logKind)?.label ?? '日志'
+  const rows = allRows
+    .filter((row) => {
+      if (logKind === 'all') return true
+      if (logKind === 'scan') return row.category === 'scheduledScan' || row.category === 'manualScan'
+      return row.category === logKind
+    })
+    .sort((left, right) => new Date(right.time || 0).getTime() - new Date(left.time || 0).getTime())
+
   return (
     <section className="modulePanel">
       <div className="moduleHead">
         <div>
-          <div className="moduleTitle">系统概览</div>
-          <div className="moduleMeta">运行状态和任务摘要</div>
+          <div className="moduleTitle">日志</div>
+          <div className="moduleMeta">扫描、导出、错误和后续登录审计都会集中到这里。</div>
         </div>
         <button className="refreshButton" onClick={onRefresh}>
           <RefreshCw size={18} className={busy ? 'spin' : ''} />
         </button>
       </div>
 
-      <div className="settingsGrid">
-        <div className="settingsCard">
-          <LayoutDashboard size={20} />
-          <strong>{sources.length}</strong>
-          <span>录像源</span>
-        </div>
-        <div className="settingsCard">
+      <div className="logSummaryGrid">
+        <button className={logKind === 'scan' ? 'settingsCard logMetricButton active' : 'settingsCard logMetricButton'} onClick={() => setLogKind('scan')}>
           <Activity size={20} />
-          <strong>{latestScan?.status ?? '-'}</strong>
-          <span>最近扫描</span>
-        </div>
-        <div className="settingsCard">
+          <strong>{scanJobs.length}</strong>
+          <span>扫描日志</span>
+        </button>
+        <button className={logKind === 'export' ? 'settingsCard logMetricButton active' : 'settingsCard logMetricButton'} onClick={() => setLogKind('export')}>
           <Download size={20} />
-          <strong>{latestExport?.status ?? '-'}</strong>
-          <span>最近导出</span>
-        </div>
-        <div className="settingsCard warning">
+          <strong>{exports.length}</strong>
+          <span>导出日志</span>
+        </button>
+        <button className={logKind === 'error' ? 'settingsCard warning logMetricButton active' : 'settingsCard warning logMetricButton'} onClick={() => setLogKind('error')}>
           <AlertTriangle size={20} />
           <strong>{failedSegments.length}</strong>
-          <span>扫描问题</span>
-        </div>
+          <span>错误日志</span>
+        </button>
+        <button className={logKind === 'login' ? 'settingsCard logMetricButton active' : 'settingsCard logMetricButton'} onClick={() => setLogKind('login')}>
+          <History size={20} />
+          <strong>{logCounts.login}</strong>
+          <span>登录日志</span>
+        </button>
       </div>
 
-      <div className="settingsList">
-        {scanJobs.slice(0, 5).map((job) => (
-          <div className="settingsRow" key={job.id}>
-            <span>{job.status}</span>
-            <span>{formatTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}</span>
-            <span>{job.scannedFiles} 文件</span>
-            <span>{job.failedFiles} 错误</span>
+      <div className="logLayout">
+        <aside className="logKinds">
+          {logFilters.map((filter) => (
+            <button className={logKind === filter.key ? 'active' : ''} key={filter.key} onClick={() => setLogKind(filter.key)}>
+              <span>{filter.label}</span>
+              <small>{logCounts[filter.key]}</small>
+            </button>
+          ))}
+        </aside>
+        <div className="logTable">
+          <div className="logTableHead">
+            <span>类型</span>
+            <span>时间</span>
+            <span>事件</span>
+            <span>状态</span>
           </div>
-        ))}
+          {rows.length ? rows.map((row) => (
+            <div className="logRow" key={`${row.type}-${row.id}`}>
+              <span className={`logType ${row.type === '错误' ? 'warning' : ''}`}>{row.type}</span>
+              <span>{row.time ? formatClipDateTime(row.time) : '-'}</span>
+              <span>
+                <strong>{row.title}</strong>
+                <small>{row.detail}</small>
+              </span>
+              <span>{row.statusLabel}</span>
+            </div>
+          )) : (
+            <div className="moduleEmpty">暂无{activeLogLabel}</div>
+          )}
+        </div>
       </div>
     </section>
   )
@@ -983,7 +1496,7 @@ function SourceSelect({
   onChange: (value: string) => void
 }) {
   return (
-    <Select.Root value={value || 'all'} onValueChange={(next) => onChange(next === 'all' ? '' : next)} disabled={!sources.length}>
+    <Select.Root value={value || undefined} onValueChange={onChange} disabled={!sources.length}>
       <Select.Trigger className="selectTrigger" aria-label="选择源">
         <Camera size={16} />
         <Select.Value placeholder="选择源" />
@@ -994,9 +1507,6 @@ function SourceSelect({
       <Select.Portal>
         <Select.Content className="selectContent" position="popper" sideOffset={6}>
           <Select.Viewport>
-            <Select.Item className="selectItem" value="all">
-              <Select.ItemText>全部源</Select.ItemText>
-            </Select.Item>
             {sources.map((source) => (
               <Select.Item className="selectItem" key={source.id} value={source.id}>
                 <Select.ItemText>{source.name}</Select.ItemText>
@@ -1016,6 +1526,34 @@ function scanStatusLabel(status?: string) {
   if (status === 'completed') return '已完成'
   if (status === 'failed') return '失败'
   return status
+}
+
+function exportStatusLabel(status?: string) {
+  if (!status) return '未开始'
+  if (status === 'queued') return '排队中'
+  if (status === 'running') return '导出中'
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '失败'
+  if (status === 'canceled') return '已取消'
+  if (status === 'expired') return '已过期'
+  return status
+}
+
+function exportProgressPercent(job: ExportJob) {
+  if (job.status === 'completed') return 100
+  const progress = Number.isFinite(job.progress) ? job.progress : 0
+  return Math.max(0, Math.min(100, Math.round(progress * 100)))
+}
+
+function formatDuration(seconds?: number | null) {
+  const total = Math.max(0, Math.round(seconds ?? 0))
+  if (total < 60) return `${total} 秒`
+  const minutes = Math.floor(total / 60)
+  const remainingSeconds = total % 60
+  if (minutes < 60) return remainingSeconds ? `${minutes} 分 ${remainingSeconds} 秒` : `${minutes} 分`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes ? `${hours} 小时 ${remainingMinutes} 分` : `${hours} 小时`
 }
 
 function ScanProgress({ job }: { job?: ScanJob }) {
@@ -1103,15 +1641,16 @@ function PathPicker({
   const [open, setOpen] = useState(false)
   return (
     <div className="pathPicker">
-      <input className="field" value={displayPath(value)} placeholder="选择 Windows 视频目录" readOnly />
+      <input className="field" value={value} placeholder="选择 Docker 视频目录，例如 /video1" readOnly />
       <button className="pathBrowseButton" type="button" onClick={() => setOpen(true)}>
         <FolderOpen size={15} />
         选择目录
       </button>
       {open && (
         <DirectoryPickerModal
-          initialPath={value || root}
-          root={root}
+          currentValue={value}
+          initialPath={root || '/'}
+          root={root || '/'}
           fallbackNodes={nodes}
           onClose={() => setOpen(false)}
           onPick={(path) => {
@@ -1125,12 +1664,14 @@ function PathPicker({
 }
 
 function DirectoryPickerModal({
+  currentValue,
   initialPath,
   root,
   fallbackNodes,
   onClose,
   onPick,
 }: {
+  currentValue: string
   initialPath: string
   root: string
   fallbackNodes: DirectoryNode[]
@@ -1144,8 +1685,8 @@ function DirectoryPickerModal({
     enabled: Boolean(currentPath),
   })
   const items = directoryQuery.data?.items ?? (currentPath === root ? fallbackNodes : [])
-  const canGoUp = root && currentPath !== root && currentPath.startsWith(root)
-  const parentPath = canGoUp ? currentPath.slice(0, currentPath.lastIndexOf('/')) || root : root
+  const canGoUp = currentPath !== '/'
+  const parentPath = canGoUp ? currentPath.slice(0, currentPath.lastIndexOf('/')) || '/' : '/'
 
   return (
     <div className="modalBackdrop" role="dialog" aria-modal="true">
@@ -1153,14 +1694,22 @@ function DirectoryPickerModal({
         <div className="directoryModalHead">
           <div>
             <strong>选择视频目录</strong>
-            <span>{displayPath(currentPath)}</span>
+            <span>容器路径：{currentPath}</span>
           </div>
           <button className="iconAction" onClick={onClose}>
             <X size={16} />
           </button>
         </div>
+        <div className="directoryHint">
+          这里浏览 Docker 容器文件系统。Windows 目录需要先在 compose 里挂载成容器路径，例如 `/video1`。
+        </div>
+        {currentValue && (
+          <button className="currentPathButton" onClick={() => onPick(currentValue)}>
+            当前已选：{currentValue}
+          </button>
+        )}
         <div className="directoryCrumbs">
-          <button onClick={() => setCurrentPath(root)} disabled={!root}>根目录</button>
+          <button onClick={() => setCurrentPath('/')}>容器根 /</button>
           {canGoUp && <button onClick={() => setCurrentPath(parentPath)}>上一级</button>}
         </div>
         <div className="directoryBrowser">
@@ -1168,10 +1717,10 @@ function DirectoryPickerModal({
             <div className="directoryEmpty">正在读取目录...</div>
           ) : items.length ? (
             items.map((node) => (
-              <button key={node.path} onClick={() => setCurrentPath(node.path)} disabled={!node.readable}>
+              <button key={node.path} onClick={() => setCurrentPath(node.path)} disabled={!node.readable} title={node.path}>
                 <FolderOpen size={16} />
                 <span>{node.name}</span>
-                <em>{displayPath(node.path)}</em>
+                <em>{node.path}</em>
                 <small>{node.hasChildren ? '可展开' : '空目录'}</small>
               </button>
             ))
@@ -1182,7 +1731,7 @@ function DirectoryPickerModal({
         <div className="directoryModalActions">
           <button className="ghostAction" onClick={onClose}>取消</button>
           <button className="blueAction" onClick={() => onPick(currentPath)} disabled={!currentPath}>
-            使用当前目录
+            使用此容器路径
           </button>
         </div>
       </div>
@@ -1207,13 +1756,13 @@ function DirectoryList({
       {root && (
         <button className={value === root ? 'active' : ''} onClick={() => onPick(root)}>
           <FolderOpen size={14} />
-          <span>{displayPath(root)}</span>
+          <span>{root}</span>
         </button>
       )}
       {options.slice(0, 12).map((node) => (
         <button className={value === node.path ? 'active' : ''} key={node.path} onClick={() => onPick(node.path)} disabled={!node.readable}>
           <FolderOpen size={14} />
-          <span>{displayPath(node.path)}</span>
+          <span>{node.path}</span>
         </button>
       ))}
     </div>
@@ -1224,15 +1773,50 @@ function TimeRail({
   date,
   segments,
   selectedId,
+  playbackTimeMs,
+  playbackRate,
+  isPlaying,
+  exportStart,
+  exportEnd,
+  exportRangeVisible,
+  exportMode,
+  exportStatus,
+  exporting,
   onSelect,
+  onPlaybackRateChange,
+  onTogglePlayback,
+  onExportRangeChange,
+  onExportRangeActivate,
+  onExportModeChange,
+  onExport,
 }: {
   date: string
   segments: DisplaySegment[]
   selectedId?: string
+  playbackTimeMs: number | null
+  playbackRate: number
+  isPlaying: boolean
+  exportStart: string
+  exportEnd: string
+  exportRangeVisible: boolean
+  exportMode: 'fast' | 'accurate'
+  exportStatus: string
+  exporting: boolean
   onSelect: (segment: DisplaySegment) => void
+  onPlaybackRateChange: (rate: number) => void
+  onTogglePlayback: () => void
+  onExportRangeChange: (start: string, end: string) => void
+  onExportRangeActivate: () => void
+  onExportModeChange: (value: 'fast' | 'accurate') => void
+  onExport: () => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const dragRef = useRef<{ x: number; start: number; end: number; moved: boolean } | null>(null)
+  const dragRef = useRef<
+    | { kind: 'pan'; x: number; start: number; end: number; moved: boolean }
+    | { kind: 'export-start' | 'export-end'; moved: boolean }
+  >(null)
+  const previousSelectedIdRef = useRef<string | undefined>(undefined)
+  const trackInset = 14
   const orderedSegments = useMemo(
     () => [...segments].sort((left, right) => new Date(left.startTime).getTime() - new Date(right.startTime).getTime()),
     [segments],
@@ -1242,6 +1826,9 @@ function TimeRail({
     ? new Date(orderedSegments[orderedSegments.length - 1].endTime).getTime()
     : firstStart
   const selectedSegment = orderedSegments.find((segment) => segment.id === selectedId)
+  const currentTimeMs = playbackTimeMs ?? (selectedSegment ? new Date(selectedSegment.startTime).getTime() : null)
+  const exportStartMs = exportStart ? new Date(exportStart).getTime() : null
+  const exportEndMs = exportEnd ? new Date(exportEnd).getTime() : null
   const [windowRange, setWindowRange] = useState(() => {
     const span = Math.max(lastEnd - firstStart, 30 * 60_000)
     return { start: lastEnd - span, end: lastEnd }
@@ -1254,11 +1841,26 @@ function TimeRail({
   }, [date, firstStart, lastEnd, orderedSegments.length])
 
   useEffect(() => {
+    if (!selectedSegment || !selectedId) return
+    if (previousSelectedIdRef.current === selectedId) return
+    previousSelectedIdRef.current = selectedId
+    const selectedStart = new Date(selectedSegment.startTime).getTime()
+    const selectedEnd = new Date(selectedSegment.endTime).getTime()
+    const segmentSpan = Math.max(selectedEnd - selectedStart, 1)
+    const center =
+      currentTimeMs !== null && currentTimeMs >= selectedStart && currentTimeMs <= selectedEnd
+        ? currentTimeMs
+        : selectedStart + segmentSpan / 2
+    const span = Math.max(60_000, Math.min(10 * 60_000, Math.max(segmentSpan * 2, 2 * 60_000)))
+    setWindowRange({ start: center - span / 2, end: center + span / 2 })
+  }, [currentTimeMs, selectedId, selectedSegment])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const parent = canvas.parentElement
-    const width = parent?.clientWidth ?? 800
-    const height = 94
+    const width = Math.max(1, parent?.clientWidth ?? 800)
+    const height = parent?.clientHeight ?? 94
     const ratio = window.devicePixelRatio || 1
     canvas.width = Math.round(width * ratio)
     canvas.height = Math.round(height * ratio)
@@ -1273,21 +1875,24 @@ function TimeRail({
     const span = Math.max(end - start, 1)
     const bandTop = 34
     const bandHeight = 36
-    const xForTime = (time: number) => ((time - start) / span) * width
+    const trackStart = trackInset
+    const trackWidth = Math.max(1, width - trackInset * 2)
+    const xForTime = (time: number) => trackStart + ((time - start) / span) * trackWidth
+    const clampedXForTime = (time: number) => Math.min(width - trackInset, Math.max(trackInset, xForTime(time)))
     const shouldShowSegmentLabels = span <= 3 * 60 * 60_000
 
     context.clearRect(0, 0, width, height)
     context.fillStyle = '#151515'
     context.fillRect(0, 0, width, height)
     context.fillStyle = '#565656'
-    context.fillRect(0, bandTop, width, bandHeight)
+    context.fillRect(trackStart, bandTop, trackWidth, bandHeight)
 
     context.save()
     context.beginPath()
-    context.rect(0, bandTop, width, bandHeight)
+    context.rect(trackStart, bandTop, trackWidth, bandHeight)
     context.clip()
     context.strokeStyle = 'rgba(0,0,0,.18)'
-    for (let x = -height; x < width + height; x += 9) {
+    for (let x = trackStart - height; x < width - trackInset + height; x += 9) {
       context.beginPath()
       context.moveTo(x, bandTop + bandHeight)
       context.lineTo(x + bandHeight, bandTop)
@@ -1299,8 +1904,8 @@ function TimeRail({
       const segmentStart = new Date(segment.startTime).getTime()
       const segmentEnd = new Date(segment.endTime).getTime()
       if (segmentEnd < start || segmentStart > end) return
-      const x = Math.max(0, xForTime(segmentStart))
-      const segmentWidth = Math.max(3, Math.min(width, xForTime(segmentEnd)) - x)
+      const x = Math.max(trackInset, xForTime(segmentStart))
+      const segmentWidth = Math.max(3, Math.min(width - trackInset, xForTime(segmentEnd)) - x)
       context.fillStyle = segment.id === selectedId ? '#8befff' : '#43d3ec'
       context.fillRect(x, bandTop, segmentWidth, bandHeight)
       context.strokeStyle = 'rgba(9, 54, 69, .55)'
@@ -1315,6 +1920,27 @@ function TimeRail({
       }
     })
 
+    if (exportRangeVisible && exportStartMs !== null && exportEndMs !== null && exportEndMs > exportStartMs && exportEndMs >= start && exportStartMs <= end) {
+      const rangeX = clampedXForTime(exportStartMs)
+      const rangeEndX = clampedXForTime(exportEndMs)
+      const rangeWidth = Math.max(2, rangeEndX - rangeX)
+      context.fillStyle = 'rgba(47, 109, 246, .28)'
+      context.fillRect(rangeX, bandTop - 6, rangeWidth, bandHeight + 12)
+      context.strokeStyle = '#2f6df6'
+      context.lineWidth = 2
+      context.strokeRect(rangeX + 1, bandTop - 5, Math.max(1, rangeWidth - 2), bandHeight + 10)
+
+      ;[rangeX, rangeEndX].forEach((x) => {
+        context.fillStyle = '#ffffff'
+        context.strokeStyle = '#2f6df6'
+        context.lineWidth = 2
+        context.beginPath()
+        context.roundRect(x - 5, bandTop - 11, 10, bandHeight + 22, 4)
+        context.fill()
+        context.stroke()
+      })
+    }
+
     const majorTicks = Math.max(2, Math.min(10, Math.floor(width / 110)))
     context.strokeStyle = '#d1d5db'
     context.fillStyle = '#9fb6c8'
@@ -1322,7 +1948,7 @@ function TimeRail({
     context.textAlign = 'center'
     context.textBaseline = 'alphabetic'
     for (let index = 0; index <= majorTicks; index += 1) {
-      const x = (width / majorTicks) * index
+      const x = trackStart + (trackWidth / majorTicks) * index
       const time = start + (span / majorTicks) * index
       context.beginPath()
       context.moveTo(x, 10)
@@ -1331,9 +1957,8 @@ function TimeRail({
       context.fillText(formatTime(new Date(time).toISOString()).slice(0, 5), x, bandTop - 10)
     }
 
-    const current = selectedSegment ? new Date(selectedSegment.startTime).getTime() : null
-    if (current !== null && current >= start && current <= end) {
-      const x = xForTime(current)
+    if (currentTimeMs !== null && currentTimeMs >= start && currentTimeMs <= end) {
+      const x = xForTime(currentTimeMs)
       context.strokeStyle = '#ffffff'
       context.lineWidth = 2
       context.beginPath()
@@ -1341,7 +1966,7 @@ function TimeRail({
       context.lineTo(x, bandTop + bandHeight + 18)
       context.stroke()
     }
-  }, [orderedSegments, selectedId, selectedSegment, windowRange])
+  }, [orderedSegments, selectedId, currentTimeMs, exportRangeVisible, exportStartMs, exportEndMs, windowRange])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1365,12 +1990,18 @@ function TimeRail({
     return () => canvas.removeEventListener('wheel', handleWheel)
   }, [])
 
-  function pickSegmentAt(clientX: number) {
+  function timeAt(clientX: number) {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
-    const ratio = (clientX - rect.left) / rect.width
-    const target = windowRange.start + ratio * (windowRange.end - windowRange.start)
+    const trackWidth = Math.max(1, rect.width - trackInset * 2)
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left - trackInset) / trackWidth))
+    return windowRange.start + ratio * (windowRange.end - windowRange.start)
+  }
+
+  function pickSegmentAt(clientX: number) {
+    const target = timeAt(clientX)
+    if (target === null) return
     const containing = orderedSegments.find((segment) => {
       const start = new Date(segment.startTime).getTime()
       const end = new Date(segment.endTime).getTime()
@@ -1402,29 +2033,102 @@ function TimeRail({
     setWindowRange({ start: windowRange.start + delta, end: windowRange.end + delta })
   }
 
+  function focusCurrentPlayback() {
+    const selectedStart = selectedSegment ? new Date(selectedSegment.startTime).getTime() : null
+    const selectedEnd = selectedSegment ? new Date(selectedSegment.endTime).getTime() : null
+    const center = currentTimeMs ?? selectedStart
+    if (center === null) return
+    const segmentSpan = selectedStart !== null && selectedEnd !== null ? selectedEnd - selectedStart : 0
+    const span = Math.max(60_000, Math.min(10 * 60_000, Math.max(segmentSpan * 2, 2 * 60_000)))
+    setWindowRange({ start: center - span / 2, end: center + span / 2 })
+  }
+
+  function cyclePlaybackRate() {
+    const currentIndex = playbackRates.findIndex((rate) => rate === playbackRate)
+    const nextRate = playbackRates[(currentIndex + 1) % playbackRates.length] ?? 1
+    onPlaybackRateChange(nextRate)
+  }
+
+  function exportHandleAt(clientX: number) {
+    if (!exportRangeVisible) return null
+    if (exportStartMs === null || exportEndMs === null) return null
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    const span = Math.max(windowRange.end - windowRange.start, 1)
+    const trackWidth = Math.max(1, rect.width - trackInset * 2)
+    const xForTime = (time: number) => trackInset + ((time - windowRange.start) / span) * trackWidth
+    const x = clientX - rect.left
+    const startDistance = Math.abs(x - xForTime(exportStartMs))
+    const endDistance = Math.abs(x - xForTime(exportEndMs))
+    if (startDistance <= 12 || endDistance <= 12) {
+      return startDistance <= endDistance ? 'export-start' : 'export-end'
+    }
+    return null
+  }
+
+  function updateExportHandle(kind: 'export-start' | 'export-end', clientX: number) {
+    if (exportStartMs === null || exportEndMs === null) return
+    const target = timeAt(clientX)
+    if (target === null) return
+    const minDuration = 1000
+    if (kind === 'export-start') {
+      const nextStart = Math.min(target, exportEndMs - minDuration)
+      onExportRangeChange(toLocalDateTimePrecise(new Date(nextStart)), toLocalDateTimePrecise(new Date(exportEndMs)))
+      return
+    }
+    const nextEnd = Math.max(target, exportStartMs + minDuration)
+    onExportRangeChange(toLocalDateTimePrecise(new Date(exportStartMs)), toLocalDateTimePrecise(new Date(nextEnd)))
+  }
+
   return (
     <aside className="timeRail">
       <div className="timelineHead">
         <div className="timelineButtons">
-          <button title="暂停"><Pause size={16} /></button>
-          <button>1.0x</button>
+          <button title={isPlaying ? '暂停播放' : '播放'} onClick={onTogglePlayback} disabled={!selectedSegment}>
+            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+          </button>
+          <button title="切换播放倍速" onClick={cyclePlaybackRate}>{formatPlaybackRate(playbackRate)}</button>
         </div>
-        <div className="timelineClock">{formatTime(selectedSegment?.startTime ?? orderedSegments[orderedSegments.length - 1]?.startTime)}</div>
-        <div className="timelineButtons right">
-          <button title="回退" onClick={() => moveWindow(-0.5)}><RotateCcw size={16} /></button>
-          <button className="liveButton">LIVE</button>
+        <div className="timelineClock">{currentTimeMs !== null ? formatTime(new Date(currentTimeMs).toISOString()) : formatTime(orderedSegments[orderedSegments.length - 1]?.startTime)}</div>
+        <div className="timelineExportTools">
+          <button className="exportRangeLabel" onClick={onExportRangeActivate} title="在时间线上显示导出区间，然后拖动左右把手调整">
+            <Download size={15} />
+            <span>{exportRangeVisible && exportStart && exportEnd ? `${formatTime(toIsoWithOffset(exportStart))} - ${formatTime(toIsoWithOffset(exportEnd))}` : '选择导出区间'}</span>
+          </button>
+          <ExportMode value={exportMode} onChange={onExportModeChange} />
+          <button
+            className="exportButton timelineExportButton"
+            onClick={onExport}
+            disabled={exporting}
+            title={exportRangeVisible ? '按当前时间线区间创建导出任务' : '先显示导出区间，确认后再导出'}
+          >
+            <Download size={16} />
+            {exportRangeVisible ? '确认导出' : '导出'}
+          </button>
         </div>
       </div>
+      {exportStatus && <div className="timelineExportStatus">{exportStatus}</div>}
       <div className="recordingTimelineHost">
         <canvas
           ref={canvasRef}
           onPointerDown={(event) => {
             event.currentTarget.setPointerCapture(event.pointerId)
-            dragRef.current = { x: event.clientX, start: windowRange.start, end: windowRange.end, moved: false }
+            const handle = exportHandleAt(event.clientX)
+            if (handle) {
+              dragRef.current = { kind: handle, moved: false }
+              return
+            }
+            dragRef.current = { kind: 'pan', x: event.clientX, start: windowRange.start, end: windowRange.end, moved: false }
           }}
           onPointerMove={(event) => {
             const drag = dragRef.current
             if (!drag) return
+            if (drag.kind !== 'pan') {
+              drag.moved = true
+              updateExportHandle(drag.kind, event.clientX)
+              return
+            }
             const canvas = canvasRef.current
             if (!canvas) return
             const rect = canvas.getBoundingClientRect()
@@ -1436,6 +2140,10 @@ function TimeRail({
           onPointerUp={(event) => {
             const drag = dragRef.current
             dragRef.current = null
+            if (drag?.kind === 'export-start' || drag?.kind === 'export-end') {
+              updateExportHandle(drag.kind, event.clientX)
+              return
+            }
             if (!drag?.moved) pickSegmentAt(event.clientX)
           }}
         />
@@ -1443,12 +2151,13 @@ function TimeRail({
       <div className="timelineActions">
         <button onClick={() => selectRelative(-1)}><RotateCcw size={18} /><span>上一个事件</span></button>
         <button onClick={() => selectRelative(1)}><RotateCw size={18} /><span>下一个事件</span></button>
-        <button onClick={() => selectRelative(1)}><RefreshCw size={18} /><span>快速</span></button>
+        <button onClick={focusCurrentPlayback} disabled={currentTimeMs === null && !selectedSegment}><RefreshCw size={18} /><span>定位当前</span></button>
         <button onClick={() => {
-          const center = selectedSegment ? new Date(selectedSegment.startTime).getTime() : (windowRange.start + windowRange.end) / 2
+          const center = currentTimeMs ?? (windowRange.start + windowRange.end) / 2
           const span = Math.max(60_000, (windowRange.end - windowRange.start) * 0.5)
           setWindowRange({ start: center - span / 2, end: center + span / 2 })
         }}><Unlink size={18} /><span>放大时间刻度</span></button>
+        <button title="把时间线往更早时间移动半屏" onClick={() => moveWindow(-0.5)}><RotateCcw size={18} /><span>左移时间线</span></button>
       </div>
     </aside>
   )
@@ -1470,10 +2179,10 @@ function ExportMode({
         if (next === 'fast' || next === 'accurate') onChange(next)
       }}
     >
-      <ToggleGroup.Item className="toggleItem" value="fast">
+      <ToggleGroup.Item className="toggleItem" value="fast" title="快速：不重新编码，导出更快，边界可能贴近关键帧而不是逐帧精确">
         快速
       </ToggleGroup.Item>
-      <ToggleGroup.Item className="toggleItem" value="accurate">
+      <ToggleGroup.Item className="toggleItem" value="accurate" title="精准：重新编码，起止时间更准，但导出更慢、文件可能重新压缩">
         精准
       </ToggleGroup.Item>
     </ToggleGroup.Root>

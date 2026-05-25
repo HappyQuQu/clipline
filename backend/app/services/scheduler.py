@@ -54,7 +54,7 @@ async def scheduled_scan_loop(stop_event: asyncio.Event) -> None:
                         .limit(1)
                     )
                     if _due_for_scan(source, last_scan_at):
-                        scan_job_id = create_scan_job(source.id)
+                        scan_job_id = create_scan_job(source.id, trigger="scheduled")
                         asyncio.create_task(asyncio.to_thread(run_scan_job, scan_job_id))
                         logger.info(
                             "scheduled scan queued",

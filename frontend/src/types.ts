@@ -87,6 +87,7 @@ export interface ExportJob {
 export interface ScanJob {
   id: string
   sourceId?: string | null
+  trigger?: 'manual' | 'scheduled' | string
   status: string
   totalFiles: number
   scannedFiles: number
@@ -97,4 +98,15 @@ export interface ScanJob {
   errorMessage?: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface SystemStatus {
+  version: string
+  ffmpeg: { available: boolean }
+  ffprobe: { available: boolean }
+  database: { available: boolean; path: string }
+  logging: { level: string; format: string; file: string }
+  recordingsRoot: { path: string; readable: boolean }
+  cache: { thumbnailBytes: number; exportBytes: number }
+  sources: Source[]
 }

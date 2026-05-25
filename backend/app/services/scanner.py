@@ -17,13 +17,14 @@ SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".ts", ".m4v"}
 logger = get_logger(__name__)
 
 
-def create_scan_job(source_id: str | None) -> str:
+def create_scan_job(source_id: str | None, trigger: str = "manual") -> str:
     db = SessionLocal()
     try:
         timestamp = now_iso()
         job = ScanJob(
             id=make_id("scan"),
             source_id=source_id,
+            trigger=trigger,
             status="queued",
             created_at=timestamp,
             updated_at=timestamp,

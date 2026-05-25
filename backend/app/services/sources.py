@@ -51,14 +51,15 @@ def list_sources(db: Session) -> list[SourceOut]:
 
 def create_source(db: Session, payload: SourceCreate, background_tasks: BackgroundTasks) -> tuple[Source, str]:
     path = validate_source_path(payload.path)
-    existing = db.scalar(select(Source).where(Source.path == str(path)))
-    if existing:
-        raise HTTPException(status_code=409, detail="Source path already exists")
+    name = payload.name.strip()
+    existing_name = db.scalar(select(Source).where(Source.name == name))
+    if existing_name:
+        raise HTTPException(status_code=409, detail="录像源名称已存在")
 
     timestamp = now_iso()
     source = Source(
         id=make_id("src"),
-        name=payload.name.strip(),
+        name=name,
         path=str(path),
         enabled=1,
         scan_interval_minutes=payload.scanIntervalMinutes,
@@ -68,7 +69,7 @@ def create_source(db: Session, payload: SourceCreate, background_tasks: Backgrou
     db.add(source)
     db.commit()
     db.refresh(source)
-    scan_job_id = create_scan_job(source.id)
+    scan_job_id = create_scan_job(source.id, trigger="manual")
     background_tasks.add_task(run_scan_job, scan_job_id)
     logger.info(
         "source created",
@@ -84,13 +85,14 @@ def update_source(db: Session, source_id: str, payload: SourceUpdate) -> Source:
 
     if payload.path is not None:
         path = validate_source_path(payload.path)
-        existing = db.scalar(select(Source).where(Source.path == str(path), Source.id != source_id))
-        if existing:
-            raise HTTPException(status_code=409, detail="Source path already exists")
         source.path = str(path)
 
     if payload.name is not None:
-        source.name = payload.name.strip()
+        name = payload.name.strip()
+        existing_name = db.scalar(select(Source).where(Source.name == name, Source.id != source_id))
+        if existing_name:
+            raise HTTPException(status_code=409, detail="录像源名称已存在")
+        source.name = name
     if payload.enabled is not None:
         source.enabled = bool_int(payload.enabled)
     if payload.scanIntervalMinutes is not None:
@@ -122,7 +124,7 @@ def queue_scan(db: Session, source_id: str, background_tasks: BackgroundTasks) -
         )
         return active_job.id, active_job.status
 
-    scan_job_id = create_scan_job(source.id)
+    scan_job_id = create_scan_job(source.id, trigger="manual")
     background_tasks.add_task(run_scan_job, scan_job_id)
     logger.info("manual scan queued", extra={"source_id": source.id, "scan_job_id": scan_job_id})
     return scan_job_id, "queued"

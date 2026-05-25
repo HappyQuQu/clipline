@@ -87,6 +87,7 @@ def _scan_job_to_out(job: ScanJob) -> ScanJobOut:
     return ScanJobOut(
         id=job.id,
         sourceId=job.source_id,
+        trigger=job.trigger,
         status=job.status,
         totalFiles=job.total_files,
         scannedFiles=job.scanned_files,

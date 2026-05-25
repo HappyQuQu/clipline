@@ -51,6 +51,7 @@ class DirectoryTreeResponse(BaseModel):
 class ScanJobOut(BaseModel):
     id: str
     sourceId: str | None
+    trigger: str = "manual"
     status: str
     totalFiles: int = 0
     scannedFiles: int

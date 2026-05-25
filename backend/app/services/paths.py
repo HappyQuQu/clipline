@@ -5,19 +5,11 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from app.core.config import get_settings
-
-
 def resolve_recording_path(path: str | None = None) -> Path:
-    settings = get_settings()
-    root = settings.recordings_root_path.resolve()
-    requested = Path(path or str(root))
+    requested = Path(path or "/")
     if not requested.is_absolute():
         raise HTTPException(status_code=400, detail="Path must be absolute")
-    resolved = requested.resolve()
-    if os.path.commonpath([str(root), str(resolved)]) != str(root):
-        raise HTTPException(status_code=400, detail=f"Path must be within {root}")
-    return resolved
+    return requested.resolve()
 
 
 def validate_source_path(path: str) -> Path:

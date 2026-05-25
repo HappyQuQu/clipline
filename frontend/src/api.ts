@@ -1,4 +1,4 @@
-import type { DirectoryNode, ExportJob, ScanJob, Segment, Source, TimelineResponse } from './types'
+import type { DirectoryNode, ExportJob, ScanJob, Segment, Source, SystemStatus, TimelineResponse } from './types'
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -7,7 +7,19 @@ async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(text || response.statusText)
+    let message = text || response.statusText
+    try {
+      const payload = JSON.parse(text) as { detail?: unknown }
+      if (typeof payload.detail === 'string') message = payload.detail
+    } catch {
+      // Keep the raw response text when the backend did not return JSON.
+    }
+    throw new Error(message)
+  }
+
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('接口返回的不是 JSON，请检查 /api 是否连接到 Clipline 后端')
   }
   return response.json() as Promise<T>
 }
@@ -53,5 +65,5 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  status: () => request<Record<string, unknown>>('/api/system/status'),
+  status: () => request<SystemStatus>('/api/system/status'),
 }

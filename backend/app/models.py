@@ -6,7 +6,7 @@ from app.db import Base
 
 class Source(Base):
     __tablename__ = "sources"
-    __table_args__ = (UniqueConstraint("path", name="uq_sources_path"),)
+    __table_args__ = (UniqueConstraint("name", name="uq_sources_name"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -86,6 +86,7 @@ class ScanJob(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     source_id: Mapped[str | None] = mapped_column(String, ForeignKey("sources.id"))
+    trigger: Mapped[str] = mapped_column(String, nullable=False, default="manual")
     status: Mapped[str] = mapped_column(String, nullable=False)
     total_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     scanned_files: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
