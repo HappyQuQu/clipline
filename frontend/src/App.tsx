@@ -2904,6 +2904,30 @@ function ClipGrid({
   onTranscribe?: (segmentId: string) => void
 }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; segment: DisplaySegment } | null>(null)
+  const [transcriptionStatuses, setTranscriptionStatuses] = useState<Map<string, string>>(new Map())
+
+  // 批量获取识别状态
+  useEffect(() => {
+    const segmentIds = segments.map((s) => s.id)
+    if (segmentIds.length === 0) return
+
+    // 批量获取识别状态
+    const fetchStatuses = async () => {
+      const statuses = new Map<string, string>()
+      await Promise.all(
+        segmentIds.map(async (id) => {
+          try {
+            const status = await api.getTranscriptionStatus(id)
+            statuses.set(id, status.status)
+          } catch {
+            // 忽略错误
+          }
+        })
+      )
+      setTranscriptionStatuses(statuses)
+    }
+    fetchStatuses()
+  }, [segments])
 
   function handleContextMenu(e: React.MouseEvent, segment: DisplaySegment) {
     e.preventDefault()
@@ -2912,6 +2936,22 @@ function ClipGrid({
 
   function handleCloseContextMenu() {
     setContextMenu(null)
+  }
+
+  function getTranscriptionStatusIcon(segmentId: string) {
+    const status = transcriptionStatuses.get(segmentId)
+    switch (status) {
+      case 'completed':
+        return <span className="transcriptionStatus completed" title="已识别">✓</span>
+      case 'processing':
+        return <span className="transcriptionStatus processing" title="识别中">⟳</span>
+      case 'pending':
+        return <span className="transcriptionStatus pending" title="等待识别">...</span>
+      case 'failed':
+        return <span className="transcriptionStatus failed" title="识别失败">✗</span>
+      default:
+        return null
+    }
   }
 
   if (!segments.length) return <div className="emptyDock">暂无录像片段</div>
@@ -2936,6 +2976,7 @@ function ClipGrid({
               {formatClipDateTime(segment.startTime)}
             </span>
             <span className="confidence">{segment.playable ? '可播放' : '转码'}</span>
+            {getTranscriptionStatusIcon(segment.id)}
           </button>
         ))}
       </div>
