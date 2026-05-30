@@ -1,4 +1,15 @@
-import type { DirectoryNode, ExportJob, ScanJob, Segment, Source, SystemStatus, TimelineResponse } from './types'
+import type {
+  DirectoryNode,
+  ExportJob,
+  ScanJob,
+  SearchResponse,
+  Segment,
+  Source,
+  SystemStatus,
+  TimelineResponse,
+  Transcription,
+  TranscriptionJob,
+} from './types'
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -66,4 +77,57 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   status: () => request<SystemStatus>('/api/system/status'),
+
+  // 搜索
+  search: (params: {
+    q: string
+    sourceId?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+    offset?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    searchParams.set('q', params.q)
+    if (params.sourceId) searchParams.set('sourceId', params.sourceId)
+    if (params.startDate) searchParams.set('startDate', params.startDate)
+    if (params.endDate) searchParams.set('endDate', params.endDate)
+    searchParams.set('limit', String(params.limit ?? 50))
+    searchParams.set('offset', String(params.offset ?? 0))
+    return request<SearchResponse>(`/api/search?${searchParams}`)
+  },
+
+  searchSuggestions: (q: string) =>
+    request<{ suggestions: string[] }>(`/api/search/suggestions?q=${encodeURIComponent(q)}`),
+
+  popularSearches: () =>
+    request<{ popular: string[] }>('/api/search/popular'),
+
+  // 语音识别
+  triggerTranscription: (segmentId: string) =>
+    request<TranscriptionJob>(`/api/segments/${segmentId}/transcribe`, { method: 'POST' }),
+
+  getTranscriptionJobs: (params?: { segmentId?: string; status?: string }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.segmentId) searchParams.set('segmentId', params.segmentId)
+    if (params?.status) searchParams.set('status', params.status)
+    return request<{ items: TranscriptionJob[] }>(`/api/transcription-jobs?${searchParams}`)
+  },
+
+  getTranscriptionJob: (jobId: string) =>
+    request<TranscriptionJob>(`/api/transcription-jobs/${jobId}`),
+
+  getTranscription: (segmentId: string) =>
+    request<{ items: Transcription[] }>(`/api/segments/${segmentId}/transcription`),
+
+  getTranscriptionStatus: (segmentId: string) =>
+    request<{ status: string; progress: number; jobId?: string; errorMessage?: string }>(
+      `/api/segments/${segmentId}/transcription/status`
+    ),
+
+  deleteTranscription: (segmentId: string) =>
+    request<{ deleted: number }>(`/api/segments/${segmentId}/transcription`, { method: 'DELETE' }),
+
+  exportTranscription: (segmentId: string, format: 'srt' | 'txt' = 'srt') =>
+    request<{ content: string }>(`/api/segments/${segmentId}/transcription/export?format=${format}`),
 }

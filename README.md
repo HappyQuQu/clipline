@@ -204,6 +204,7 @@ build: .
 | 区间导出 | 在时间线上通过滑块选择范围，支持快速和精准两种模式。 |
 | 后台任务 | 确认导出后创建任务，完成后提示下载，不打断当前回放页面。 |
 | 状态与日志 | 查看系统状态、扫描任务、导出任务和错误信息。 |
+| 语音识别 | 识别视频中的对话内容，支持全文检索和字幕导出。 |
 | Docker 优先 | 前后端打包到同一个镜像，适合 NAS 或家庭服务器部署。 |
 
 ## 使用流程
@@ -213,15 +214,28 @@ build: .
 ```
 
 1. 启动 Docker 服务。
-2. 在“录像源”中添加容器内的视频目录。
+2. 在”录像源”中添加容器内的视频目录。
 3. 等待扫描完成，片段进入索引。
-4. 在“录像回放”中选择源和片段。
+4. 在”录像回放”中选择源和片段。
 5. 使用时间线定位当前播放点，或切换上一个、下一个事件。
-6. 点击“导出”显示导出区间滑块。
+6. 点击”导出”显示导出区间滑块。
 7. 拖动左右滑块选择范围。
-8. 选择“快速”或“精准”模式。
-9. 点击“确认导出”创建后台导出任务。
-10. 导出完成后根据提示下载文件，或进入“导出任务”查看历史。
+8. 选择”快速”或”精准”模式。
+9. 点击”确认导出”创建后台导出任务。
+10. 导出完成后根据提示下载文件，或进入”导出任务”查看历史。
+
+### 语音识别使用流程
+
+```text
+触发识别 -> 等待完成 -> 搜索对话 -> 点击跳转 -> 导出字幕
+```
+
+1. 在视频播放器中点击 🔍 按钮触发语音识别。
+2. 或在片段墙中批量选择后点击”批量识别语音”。
+3. 等待识别任务完成（可在日志页面查看进度）。
+4. 在顶部搜索框输入关键词进行搜索。
+5. 点击搜索结果跳转到对应时间点。
+6. 可导出 SRT 或 TXT 格式的字幕文件。
 
 ## 导出模式
 
@@ -272,6 +286,12 @@ evanqu/clipline:<version>
 | `CLIPLINE_SKIP_RECENT_SECONDS` | `30` | 扫描时跳过最近写入的文件，避免读取未写完片段 |
 | `CLIPLINE_LOG_LEVEL` | `INFO` | 日志级别 |
 | `CLIPLINE_LOG_FILE` | `/app/data/logs/clipline.log` | 日志文件路径 |
+| `CLIPLINE_ASR_MODEL` | `funasr` | ASR 模型选择：`funasr` / `sensevoice` / `whisper` |
+| `CLIPLINE_ASR_MODEL_SIZE` | `medium` | 模型大小：`tiny` / `base` / `medium` / `large` |
+| `CLIPLINE_ASR_DEVICE` | `auto` | 运行设备：`auto` / `cpu` / `cuda` / `mps` |
+| `CLIPLINE_ASR_LANGUAGE` | `zh` | 识别语言：`zh` / `en` / `mixed` |
+| `CLIPLINE_ASR_AUTO_TRANSCRIBE` | `false` | 自动识别新视频 |
+| `CLIPLINE_ASR_HOTWORDS` | 空 | 热词配置，逗号分隔 |
 
 ## 本地开发
 
@@ -282,6 +302,9 @@ cd backend
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
+
+# 如果需要语音识别功能，安装 ASR 依赖
+pip install -e ".[asr]"
 
 $env:CLIPLINE_DATA = "../data"
 $env:CLIPLINE_DB = "../data/clipline.db"
@@ -346,6 +369,10 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/system/status
 | `POST` | `/api/exports` | 创建导出任务 |
 | `GET` | `/api/exports` | 导出任务列表 |
 | `GET` | `/api/exports/{export_id}/download` | 下载导出文件 |
+| `POST` | `/api/segments/{segment_id}/transcribe` | 触发语音识别 |
+| `GET` | `/api/segments/{segment_id}/transcription` | 获取识别结果 |
+| `GET` | `/api/segments/{segment_id}/transcription/export` | 导出字幕（SRT/TXT） |
+| `GET` | `/api/search` | 全文检索 |
 
 更完整的接口和数据结构说明见 [docs/API_AND_DB.md](https://github.com/HappyQuQu/clipline/blob/main/docs/API_AND_DB.md)。
 
@@ -370,6 +397,7 @@ clipline/
 | 前端 | React 19、Vite、TypeScript、TanStack Query、Radix UI、Lucide Icons |
 | 后端 | FastAPI、SQLAlchemy、SQLite、Pydantic Settings |
 | 媒体 | FFmpeg、ffprobe |
+| 语音识别 | FunASR、SenseVoice、Whisper（可选） |
 | 部署 | Docker 单容器，静态前端由 FastAPI 同进程托管 |
 
 ## 注意事项
@@ -380,3 +408,6 @@ clipline/
 - 扫描会跳过最近写入的文件，避免索引未写完的视频片段。
 - 大文件导出会占用 CPU 和磁盘空间，建议根据机器性能调整并发数。
 - 如果页面没有加载片段，先确认已经选择录像源，并且该源扫描完成。
+- 语音识别功能需要安装额外的 ASR 依赖（`pip install -e ".[asr]"`）。
+- 首次使用语音识别时会自动下载模型文件，请确保网络连接正常。
+- 语音识别是 CPU/GPU 密集型任务，建议在系统空闲时运行。

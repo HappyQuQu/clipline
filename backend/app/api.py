@@ -20,6 +20,7 @@ from app.schemas import (
     ScanJobOut,
     ScanJobsResponse,
     ScanQueuedOut,
+    SearchResponse,
     SegmentListResponse,
     SegmentOut,
     SegmentResolveOut,
@@ -28,6 +29,9 @@ from app.schemas import (
     SourcesResponse,
     SourceUpdate,
     TimelineResponse,
+    TranscriptionJobListResponse,
+    TranscriptionJobOut,
+    TranscriptionListResponse,
 )
 from app.services.paths import directory_tree
 from app.services.exports import create_export_job, get_export_job, list_export_jobs
@@ -35,6 +39,16 @@ from app.services.sources import create_source, list_sources, queue_scan, source
 from app.services.streaming import stream_file
 from app.services.timeline import build_timeline, resolve_segment_at
 from app.services.thumbnails import ensure_thumbnail, thumbnail_url
+from app.services.transcription import (
+    create_transcription_job,
+    run_transcription_job,
+    list_transcription_jobs,
+    get_transcription_job,
+    list_transcriptions,
+    get_transcription_status,
+    delete_transcription,
+)
+from app.services.search import search_transcriptions, get_search_suggestions, get_popular_searches
 
 router = APIRouter(prefix="/api")
 
@@ -313,3 +327,178 @@ def system_logs(lines: int = Query(default=200, ge=1, le=2000)) -> dict:
         return {"path": str(path), "lines": []}
     content = path.read_text(encoding="utf-8", errors="replace").splitlines()
     return {"path": str(path), "lines": content[-lines:]}
+
+
+# 语音识别相关端点
+
+@router.post("/segments/{segment_id}/transcribe", response_model=TranscriptionJobOut)
+def trigger_transcription(
+    segment_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> TranscriptionJobOut:
+    """手动触发语音识别"""
+    try:
+        job = create_transcription_job(db, segment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    # 后台执行识别任务
+    background_tasks.add_task(run_transcription_job, job.id)
+
+    return TranscriptionJobOut(
+        id=job.id,
+        segmentId=job.segment_id,
+        status=job.status,
+        progress=job.progress,
+        errorMessage=job.error_message,
+        createdAt=job.created_at,
+        updatedAt=job.updated_at,
+    )
+
+
+@router.get("/transcription-jobs", response_model=TranscriptionJobListResponse)
+def get_transcription_jobs(
+    segmentId: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> TranscriptionJobListResponse:
+    """获取识别任务列表"""
+    result = list_transcription_jobs(db, segmentId, status, limit, offset)
+    return TranscriptionJobListResponse(**result)
+
+
+@router.get("/transcription-jobs/{job_id}", response_model=TranscriptionJobOut)
+def get_transcription_job_by_id(job_id: str, db: Session = Depends(get_db)) -> TranscriptionJobOut:
+    """获取识别任务详情"""
+    job = get_transcription_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Transcription job not found")
+    return TranscriptionJobOut(**job)
+
+
+@router.get("/segments/{segment_id}/transcription", response_model=TranscriptionListResponse)
+def get_segment_transcription(
+    segment_id: str,
+    limit: int = Query(default=1000, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> TranscriptionListResponse:
+    """获取某个视频的识别结果"""
+    result = list_transcriptions(db, segment_id, limit, offset)
+    return TranscriptionListResponse(**result)
+
+
+@router.get("/segments/{segment_id}/transcription/status")
+def get_segment_transcription_status(
+    segment_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    """获取某个视频的识别状态"""
+    return get_transcription_status(db, segment_id)
+
+
+@router.delete("/segments/{segment_id}/transcription")
+def delete_segment_transcription(
+    segment_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    """删除某个视频的所有识别结果"""
+    count = delete_transcription(db, segment_id)
+    return {"deleted": count}
+
+
+@router.get("/segments/{segment_id}/transcription/export")
+def export_transcription(
+    segment_id: str,
+    format: str = Query(default="srt", regex="^(srt|txt)$"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """导出识别结果（SRT/TXT）"""
+    result = list_transcriptions(db, segment_id, limit=5000)
+    transcriptions = result["items"]
+
+    if format == "srt":
+        content = _export_srt(transcriptions)
+    else:
+        content = _export_txt(transcriptions)
+
+    return {"content": content}
+
+
+def _export_srt(transcriptions: list[dict]) -> str:
+    """导出为 SRT 格式"""
+    lines = []
+    for i, t in enumerate(transcriptions, 1):
+        start = _format_srt_time(t["startTime"])
+        end = _format_srt_time(t["endTime"])
+        text = t["text"]
+        lines.append(f"{i}")
+        lines.append(f"{start} --> {end}")
+        lines.append(text)
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _export_txt(transcriptions: list[dict]) -> str:
+    """导出为 TXT 格式"""
+    lines = []
+    for t in transcriptions:
+        start = _format_time(t["startTime"])
+        text = t["text"]
+        lines.append(f"[{start}] {text}")
+    return "\n".join(lines)
+
+
+def _format_srt_time(seconds: float) -> str:
+    """格式化 SRT 时间"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _format_time(seconds: float) -> str:
+    """格式化时间"""
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    return f"{minutes:02d}:{secs:02d}"
+
+
+@router.get("/search", response_model=SearchResponse)
+def search(
+    q: str = Query(..., min_length=1),
+    sourceId: str | None = None,
+    startDate: str | None = None,
+    endDate: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> SearchResponse:
+    """全文检索"""
+    result = search_transcriptions(db, q, sourceId, startDate, endDate, limit, offset)
+    return SearchResponse(**result)
+
+
+@router.get("/search/suggestions")
+def search_suggestions(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(default=10, ge=1, le=20),
+    db: Session = Depends(get_db),
+) -> dict:
+    """获取搜索建议"""
+    suggestions = get_search_suggestions(db, q, limit)
+    return {"suggestions": suggestions}
+
+
+@router.get("/search/popular")
+def popular_searches(
+    limit: int = Query(default=10, ge=1, le=20),
+    db: Session = Depends(get_db),
+) -> dict:
+    """获取热门搜索"""
+    popular = get_popular_searches(db, limit)
+    return {"popular": popular}

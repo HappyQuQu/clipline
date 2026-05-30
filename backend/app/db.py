@@ -42,6 +42,7 @@ def init_db() -> None:
             connection.execute(
                 text("ALTER TABLE scan_jobs ADD COLUMN trigger VARCHAR NOT NULL DEFAULT 'manual'")
             )
+        _ensure_transcription_indexes(connection)
 
 
 def _migrate_sources_unique_name(connection) -> None:
@@ -92,6 +93,19 @@ def _migrate_sources_unique_name(connection) -> None:
     connection.execute(text("DROP TABLE sources"))
     connection.execute(text("ALTER TABLE sources_new RENAME TO sources"))
     connection.execute(text("PRAGMA foreign_keys=ON"))
+
+
+def _ensure_transcription_indexes(connection) -> None:
+    """确保转录相关表的索引存在"""
+    indexes = {row[1] for row in connection.execute(text("PRAGMA index_list(transcriptions)"))}
+    if "idx_transcription_segment" not in indexes:
+        connection.execute(text("CREATE INDEX IF NOT EXISTS idx_transcription_segment ON transcriptions(segment_id)"))
+    if "idx_transcription_text" not in indexes:
+        connection.execute(text("CREATE INDEX IF NOT EXISTS idx_transcription_text ON transcriptions(text)"))
+
+    job_indexes = {row[1] for row in connection.execute(text("PRAGMA index_list(transcription_jobs)"))}
+    if "idx_transcription_job_segment" not in job_indexes:
+        connection.execute(text("CREATE INDEX IF NOT EXISTS idx_transcription_job_segment ON transcription_jobs(segment_id)"))
 
 
 def get_db() -> Generator[Session, None, None]:

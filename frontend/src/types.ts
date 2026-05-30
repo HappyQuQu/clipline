@@ -110,3 +110,39 @@ export interface SystemStatus {
   cache: { thumbnailBytes: number; exportBytes: number }
   sources: Source[]
 }
+
+export interface Transcription {
+  id: string
+  segmentId: string
+  startTime: number
+  endTime: number
+  text: string
+  confidence: number
+  createdAt: string
+}
+
+export interface TranscriptionJob {
+  id: string
+  segmentId: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  progress: number
+  errorMessage?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SearchResult {
+  transcription: Transcription
+  segmentId: string
+  segmentStartTime?: string | null
+  sourceId: string
+  sourceName: string
+  highlight: string
+}
+
+export interface SearchResponse {
+  items: SearchResult[]
+  total: number
+  limit: number
+  offset: number
+}

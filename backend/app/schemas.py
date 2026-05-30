@@ -177,3 +177,53 @@ class ExportListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class TranscriptionOut(BaseModel):
+    id: str
+    segmentId: str
+    startTime: float
+    endTime: float
+    text: str
+    confidence: float
+    createdAt: str
+
+
+class TranscriptionJobOut(BaseModel):
+    id: str
+    segmentId: str
+    status: str
+    progress: float
+    errorMessage: str | None = None
+    createdAt: str
+    updatedAt: str
+
+
+class TranscriptionListResponse(BaseModel):
+    items: list[TranscriptionOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class TranscriptionJobListResponse(BaseModel):
+    items: list[TranscriptionJobOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class SearchResultOut(BaseModel):
+    transcription: TranscriptionOut
+    segmentId: str
+    segmentStartTime: str | None = None
+    sourceId: str
+    sourceName: str
+    highlight: str
+
+
+class SearchResponse(BaseModel):
+    items: list[SearchResultOut]
+    total: int
+    limit: int
+    offset: int

@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     log_format: str = "text"
     log_file: str | None = None
 
+    # ASR 配置
+    asr_model: str = "funasr"
+    asr_model_size: str = "medium"
+    asr_device: str = "auto"
+    asr_language: str = "zh"
+    asr_auto_transcribe: bool = False
+    asr_hotwords: str = ""
+
     @property
     def data_path(self) -> Path:
         return Path(self.data)

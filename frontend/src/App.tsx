@@ -6,6 +6,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   Camera,
   Check,
   ChevronDown,
@@ -21,19 +22,33 @@ import {
   RefreshCw,
   RotateCcw,
   RotateCw,
+  Search,
   Settings,
+  Star,
   Unlink,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
-import type { DirectoryNode, ExportJob, ScanJob, Segment, Source, SystemStatus, TimelineSegment } from './types'
+import type {
+  DirectoryNode,
+  ExportJob,
+  ScanJob,
+  SearchResponse as SearchResponseType,
+  Segment,
+  Source,
+  SystemStatus,
+  TimelineSegment,
+  Transcription,
+  TranscriptionJob,
+} from './types'
 
 const today = new Date().toISOString().slice(0, 10)
-type ViewKey = 'playback' | 'clips' | 'sources' | 'exports' | 'logs' | 'settings'
+type ViewKey = 'playback' | 'clips' | 'sources' | 'exports' | 'logs' | 'settings' | 'search'
 type DisplaySegment = TimelineSegment & { sourceId: string; filename?: string }
 const playbackRates = [1, 1.5, 2, 4]
 const selectedSourceStorageKey = 'clipline.selectedSourceId'
+const searchHistoryStorageKey = 'clipline.searchHistory'
 
 const navItems: Array<{ key: ViewKey; label: string; icon: typeof Play }> = [
   { key: 'playback', label: '录像回放', icon: Play },
@@ -51,6 +66,7 @@ const viewTitles: Record<ViewKey, string> = {
   exports: '导出任务',
   logs: '日志',
   settings: '设置',
+  search: '搜索',
 }
 
 function toLocalInputValue(value: string) {
@@ -170,6 +186,29 @@ export function App() {
   const [toastOpen, setToastOpen] = useState(false)
   const [watchedExportIds, setWatchedExportIds] = useState<string[]>([])
   const [activeView, setActiveView] = useState<ViewKey>('playback')
+
+  // 搜索相关状态
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(searchHistoryStorageKey)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [searchSourceId, setSearchSourceId] = useState<string | undefined>(undefined)
+  const [searchStartDate, setSearchStartDate] = useState<string | undefined>(undefined)
+  const [searchEndDate, setSearchEndDate] = useState<string | undefined>(undefined)
+  const [selectedSearchResult, setSelectedSearchResult] = useState<SearchResponseType['items'][0] | null>(null)
+  const [searchTranscriptions, setSearchTranscriptions] = useState<Transcription[]>([])
+
+  // 字幕相关状态
+  const [currentTranscriptions, setCurrentTranscriptions] = useState<Transcription[]>([])
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0)
+  const [subtitleMode, setSubtitleMode] = useState<'list' | 'overlay'>('overlay')
+
   const segmentPageSize = 1000
   const showFilterPane = activeView === 'playback' || activeView === 'clips'
 
@@ -197,6 +236,26 @@ export function App() {
     queryFn: api.status,
     refetchInterval: 10000,
   })
+
+  // 搜索查询
+  const searchQuery_ = useQuery({
+    queryKey: ['search', searchQuery, searchSourceId, searchStartDate, searchEndDate],
+    queryFn: () => api.search({
+      q: searchQuery,
+      sourceId: searchSourceId,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
+    }),
+    enabled: activeView === 'search' && searchQuery.length > 0,
+  })
+
+  // 当前视频的识别结果查询
+  const transcriptionQuery = useQuery({
+    queryKey: ['transcription', selectedSegment?.id],
+    queryFn: () => api.getTranscription(selectedSegment!.id),
+    enabled: Boolean(selectedSegment?.id) && activeView === 'playback',
+  })
+
   const scanJobsQuery = useQuery({
     queryKey: ['scanJobs', sourceId || 'all'],
     queryFn: () => api.scanJobs(sourceId || undefined),
@@ -232,6 +291,7 @@ export function App() {
   const scanJobs = scanJobsQuery.data?.items ?? []
   const failedSegments = failedSegmentsQuery.data?.items ?? []
   const selectedSource = sources.find((source) => source.id === sourceId)
+  const searchResults = searchQuery_.data ?? null
   const sourceNames = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
   const allSegments = useMemo(
     () =>
@@ -279,6 +339,57 @@ export function App() {
     setToastDownloadUrl(downloadUrl ?? null)
     setToastOpen(false)
     window.setTimeout(() => setToastOpen(true), 0)
+  }
+
+  // 搜索相关函数
+  function handleSearch(query: string) {
+    if (!query.trim()) return
+    setSearchQuery(query.trim())
+    setActiveView('search')
+    setSelectedSearchResult(null)
+    setSearchTranscriptions([])
+
+    // 保存搜索历史
+    const newHistory = [query.trim(), ...searchHistory.filter((h) => h !== query.trim())].slice(0, 20)
+    setSearchHistory(newHistory)
+    localStorage.setItem(searchHistoryStorageKey, JSON.stringify(newHistory))
+  }
+
+  function handleSelectSearchResult(result: SearchResponseType['items'][0]) {
+    setSelectedSearchResult(result)
+    // 加载该视频的识别结果
+    api.getTranscription(result.segmentId).then((data) => {
+      setSearchTranscriptions(data.items)
+    })
+  }
+
+  function handleExportSrt(segmentId: string) {
+    api.exportTranscription(segmentId, 'srt').then((data) => {
+      const blob = new Blob([data.content], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `transcription_${segmentId}.srt`
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }
+
+  function handleExportTxt(segmentId: string) {
+    api.exportTranscription(segmentId, 'txt').then((data) => {
+      const blob = new Blob([data.content], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `transcription_${segmentId}.txt`
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }
+
+  function handleClearSearchHistory() {
+    setSearchHistory([])
+    localStorage.removeItem(searchHistoryStorageKey)
   }
 
   async function refreshAll() {
@@ -693,6 +804,31 @@ export function App() {
               </div>
             </div>
             <div className="stageTools">
+              <div className="searchBar">
+                <Search size={16} />
+                <input
+                  type="text"
+                  placeholder="搜索对话内容..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchInput.trim()) {
+                      handleSearch(searchInput.trim())
+                    }
+                  }}
+                  onFocus={() => {
+                    // 显示搜索历史
+                  }}
+                />
+                {searchInput && (
+                  <button
+                    className="searchClear"
+                    onClick={() => setSearchInput('')}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
               {showSourceSelect && <SourceSelect sources={sources} value={sourceId} onChange={handleSourceChange} />}
               <button className="refreshButton" onClick={() => void refreshAll()}>
                 <RefreshCw size={18} className={busy ? 'spin' : ''} />
@@ -723,6 +859,25 @@ export function App() {
                 updateSourceMutation.mutate({ id, scanIntervalMinutes })
               }
               onSave={(id, payload) => updateSourceMutation.mutate({ id, ...payload })}
+            />
+          ) : activeView === 'search' ? (
+            <SearchStage
+              searchQuery={searchQuery}
+              searchResults={searchResults}
+              selectedResult={selectedSearchResult}
+              transcriptions={searchTranscriptions}
+              sources={sources}
+              searchSourceId={searchSourceId}
+              searchStartDate={searchStartDate}
+              searchEndDate={searchEndDate}
+              loading={searchQuery_.isFetching}
+              onBack={() => setActiveView('playback')}
+              onSelectResult={handleSelectSearchResult}
+              onSourceChange={setSearchSourceId}
+              onStartDateChange={setSearchStartDate}
+              onEndDateChange={setSearchEndDate}
+              onExportSrt={handleExportSrt}
+              onExportTxt={handleExportTxt}
             />
           ) : activeView === 'settings' ? (
             <SettingsStage
@@ -759,6 +914,17 @@ export function App() {
                     </div>
                     {failedSegments.length > 0 && <FailurePill segments={failedSegments} />}
                   </div>
+                  <BatchActions
+                    segments={filteredSegments}
+                    onBatchTranscribe={(segmentIds) => {
+                      segmentIds.forEach((id) => {
+                        api.triggerTranscription(id).catch(() => {
+                          // 忽略单个失败
+                        })
+                      })
+                      notify(`已创建 ${segmentIds.length} 个识别任务`)
+                    }}
+                  />
                   <ClipGrid
                     sourceName={selectedSource?.name ?? 'Camera'}
                     sourceNames={sourceNames}
@@ -788,7 +954,12 @@ export function App() {
                           controls
                           src={`/api/segments/${selectedSegment.id}/stream`}
                           onLoadedMetadata={syncPlaybackTime}
-                          onTimeUpdate={syncPlaybackTime}
+                          onTimeUpdate={() => {
+                            syncPlaybackTime()
+                            if (videoRef.current) {
+                              setCurrentPlaybackTime(videoRef.current.currentTime)
+                            }
+                          }}
                           onSeeking={syncPlaybackTime}
                           onEnded={handleSegmentEnded}
                           onPlay={() => {
@@ -800,6 +971,13 @@ export function App() {
                             setAutoPlayNext(false)
                           }}
                         />
+                        {/* 实时字幕 */}
+                        {subtitleMode === 'overlay' && currentTranscriptions.length > 0 && (
+                          <SubtitleOverlay
+                            transcriptions={currentTranscriptions}
+                            currentTime={currentPlaybackTime}
+                          />
+                        )}
                         <div className="videoBadge">
                           {formatTime(selectedSegment.startTime)} | {sourceNames.get(selectedSegment.sourceId) ?? selectedSource?.name ?? 'Camera'}
                         </div>
@@ -812,6 +990,21 @@ export function App() {
                           </button>
                           <button title="扫描" onClick={handleScan} disabled={scanMutation.isPending}>
                             <Activity size={17} />
+                          </button>
+                          <button
+                            title="识别语音"
+                            onClick={() => {
+                              if (selectedSegment) {
+                                api.triggerTranscription(selectedSegment.id).then(() => {
+                                  notify('语音识别任务已创建')
+                                  void queryClient.invalidateQueries({ queryKey: ['transcription'] })
+                                }).catch((err) => {
+                                  notify(queryMessage(err, '创建识别任务失败'))
+                                })
+                              }
+                            }}
+                          >
+                            <Search size={17} />
                           </button>
                         </div>
                       </>
@@ -847,6 +1040,23 @@ export function App() {
                     onExport={handleExport}
                   />
                 </section>
+
+                {/* 字幕列表 */}
+                {selectedSegment && currentTranscriptions.length > 0 && (
+                  <TranscriptionList
+                    transcriptions={currentTranscriptions}
+                    currentTime={currentPlaybackTime}
+                    mode={subtitleMode}
+                    onModeChange={setSubtitleMode}
+                    onSelect={(time) => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = time
+                      }
+                    }}
+                    onExportSrt={() => handleExportSrt(selectedSegment.id)}
+                    onExportTxt={() => handleExportTxt(selectedSegment.id)}
+                  />
+                )}
 
                 <section className="clipDock">
                   <div className="dockHead">
@@ -918,6 +1128,347 @@ export function App() {
       )}
       <Toast.Viewport className="toastViewport" />
     </Toast.Provider>
+  )
+}
+
+function SearchStage({
+  searchQuery,
+  searchResults,
+  selectedResult,
+  transcriptions,
+  sources,
+  searchSourceId,
+  searchStartDate,
+  searchEndDate,
+  loading,
+  onBack,
+  onSelectResult,
+  onSourceChange,
+  onStartDateChange,
+  onEndDateChange,
+  onExportSrt,
+  onExportTxt,
+}: {
+  searchQuery: string
+  searchResults: SearchResponseType | null
+  selectedResult: SearchResponseType['items'][0] | null
+  transcriptions: Transcription[]
+  sources: Source[]
+  searchSourceId: string | undefined
+  searchStartDate: string | undefined
+  searchEndDate: string | undefined
+  loading: boolean
+  onBack: () => void
+  onSelectResult: (result: SearchResponseType['items'][0]) => void
+  onSourceChange: (sourceId: string | undefined) => void
+  onStartDateChange: (date: string | undefined) => void
+  onEndDateChange: (date: string | undefined) => void
+  onExportSrt: (segmentId: string) => void
+  onExportTxt: (segmentId: string) => void
+}) {
+  const [currentTime, setCurrentTime] = useState(0)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  function formatSearchTime(seconds: number) {
+    const minutes = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  function formatDateTime(value: string | null | undefined) {
+    if (!value) return '-'
+    return new Date(value).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  }
+
+  function highlightText(text: string, highlight: string) {
+    if (!highlight) return text
+    // 简单的高亮实现
+    const parts = highlight.split('**')
+    if (parts.length === 1) return text
+    return (
+      <>
+        {parts[0]}
+        <mark>{parts[1]}</mark>
+        {parts[2]}
+      </>
+    )
+  }
+
+  return (
+    <div className="searchStage">
+      <div className="searchHeader">
+        <button className="searchBack" onClick={onBack}>
+          <ArrowLeft size={18} />
+          <span>返回</span>
+        </button>
+        <div className="searchTitle">
+          搜索: &quot;{searchQuery}&quot;
+          {searchResults && <span className="searchCount">共 {searchResults.total} 条结果</span>}
+        </div>
+        <div className="searchFilters">
+          <select
+            value={searchSourceId ?? ''}
+            onChange={(e) => onSourceChange(e.target.value || undefined)}
+          >
+            <option value="">所有摄像头</option>
+            {sources.map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={searchStartDate ?? ''}
+            onChange={(e) => onStartDateChange(e.target.value || undefined)}
+            placeholder="开始日期"
+          />
+          <input
+            type="date"
+            value={searchEndDate ?? ''}
+            onChange={(e) => onEndDateChange(e.target.value || undefined)}
+            placeholder="结束日期"
+          />
+        </div>
+      </div>
+
+      <div className="searchBody">
+        {selectedResult && (
+          <div className="searchPlayer">
+            <div className="searchPlayerWrapper">
+              <video
+                key={selectedResult.segmentId}
+                ref={videoRef}
+                className="searchVideo"
+                src={`/api/segments/${selectedResult.segmentId}/stream`}
+                controls
+                onTimeUpdate={() => {
+                  if (videoRef.current) {
+                    setCurrentTime(videoRef.current.currentTime)
+                  }
+                }}
+                onLoadedMetadata={() => {
+                  // 定位到识别结果的时间点
+                  if (videoRef.current && selectedResult.transcription.startTime > 0) {
+                    videoRef.current.currentTime = selectedResult.transcription.startTime
+                  }
+                }}
+              />
+              {selectedResult.transcription.startTime > 0 && (
+                <div className="searchTimeBadge">
+                  {formatSearchTime(selectedResult.transcription.startTime)} / {formatSearchTime(currentTime)}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="searchResults">
+          {loading ? (
+            <div className="searchLoading">
+              <RefreshCw size={20} className="spin" />
+              <span>搜索中...</span>
+            </div>
+          ) : searchResults && searchResults.items.length > 0 ? (
+            <>
+              <div className="searchResultsHeader">
+                <span>搜索结果</span>
+              </div>
+              <div className="searchResultsList">
+                {searchResults.items.map((result) => (
+                  <div
+                    key={result.transcription.id}
+                    className={`searchResultCard ${selectedResult?.transcription.id === result.transcription.id ? 'active' : ''}`}
+                    onClick={() => onSelectResult(result)}
+                  >
+                    <div className="searchResultTime">
+                      <span className="searchResultDate">{formatDateTime(result.segmentStartTime)}</span>
+                      <span className="searchResultSource">{result.sourceName}</span>
+                      <span className="searchResultTimestamp">{formatSearchTime(result.transcription.startTime)}</span>
+                    </div>
+                    <div className="searchResultText">
+                      {highlightText(result.transcription.text, result.highlight)}
+                    </div>
+                    <div className="searchResultActions">
+                      <button onClick={(e) => { e.stopPropagation(); onExportSrt(result.segmentId) }}>
+                        导出 SRT
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); onExportTxt(result.segmentId) }}>
+                        导出 TXT
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : searchResults ? (
+            <div className="searchEmpty">
+              <div className="searchEmptyTitle">没有找到匹配的结果</div>
+              <div className="searchEmptySuggestions">
+                <p>试试其他关键词：</p>
+                <ul>
+                  <li>使用更短的关键词</li>
+                  <li>检查是否有多音字</li>
+                  <li>尝试使用拼音</li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="searchEmpty">
+              <div className="searchEmptyTitle">输入关键词开始搜索</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SubtitleOverlay({
+  transcriptions,
+  currentTime,
+}: {
+  transcriptions: Transcription[]
+  currentTime: number
+}) {
+  const currentSubtitle = transcriptions.find(
+    (t) => currentTime >= t.startTime && currentTime <= t.endTime
+  )
+
+  if (!currentSubtitle) return null
+
+  return (
+    <div className="subtitleOverlay">
+      <span className="subtitleText">{currentSubtitle.text}</span>
+    </div>
+  )
+}
+
+function TranscriptionList({
+  transcriptions,
+  currentTime,
+  mode,
+  onModeChange,
+  onSelect,
+  onExportSrt,
+  onExportTxt,
+}: {
+  transcriptions: Transcription[]
+  currentTime: number
+  mode: 'list' | 'overlay'
+  onModeChange: (mode: 'list' | 'overlay') => void
+  onSelect: (time: number) => void
+  onExportSrt: () => void
+  onExportTxt: () => void
+}) {
+  function formatTranscriptionTime(seconds: number) {
+    const minutes = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  return (
+    <div className="transcriptionList">
+      <div className="transcriptionListHeader">
+        <span>📝 语音识别结果</span>
+        <div className="transcriptionListActions">
+          <button
+            className={mode === 'list' ? 'active' : ''}
+            onClick={() => onModeChange('list')}
+          >
+            字幕列表
+          </button>
+          <button
+            className={mode === 'overlay' ? 'active' : ''}
+            onClick={() => onModeChange('overlay')}
+          >
+            实时字幕
+          </button>
+          <button onClick={onExportSrt}>导出 SRT</button>
+          <button onClick={onExportTxt}>导出 TXT</button>
+        </div>
+      </div>
+      <div className="transcriptionListContent">
+        {transcriptions.map((t) => (
+          <div
+            key={t.id}
+            className={`transcriptionItem ${
+              currentTime >= t.startTime && currentTime <= t.endTime ? 'active' : ''
+            }`}
+            onClick={() => onSelect(t.startTime)}
+          >
+            <span className="transcriptionTime">{formatTranscriptionTime(t.startTime)}</span>
+            <span className="transcriptionText">{t.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BatchActions({
+  segments,
+  onBatchTranscribe,
+}: {
+  segments: DisplaySegment[]
+  onBatchTranscribe: (segmentIds: string[]) => void
+}) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  function toggleSelect(id: string) {
+    const next = new Set(selectedIds)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    setSelectedIds(next)
+  }
+
+  function selectAll() {
+    setSelectedIds(new Set(segments.map((s) => s.id)))
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+  }
+
+  if (segments.length === 0) return null
+
+  return (
+    <div className="batchActions">
+      <div className="batchActionsLeft">
+        <button className="batchSelectAll" onClick={selectAll}>
+          全选
+        </button>
+        <button className="batchClear" onClick={clearSelection}>
+          清除
+        </button>
+        <span className="batchCount">
+          已选择 {selectedIds.size} / {segments.length} 个片段
+        </span>
+      </div>
+      {selectedIds.size > 0 && (
+        <div className="batchActionsRight">
+          <button
+            className="batchTranscribe"
+            onClick={() => {
+              onBatchTranscribe(Array.from(selectedIds))
+              clearSelection()
+            }}
+          >
+            🔍 批量识别语音
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1202,6 +1753,33 @@ function SettingsStage({
             <strong>{formatBytes(status?.cache.exportBytes)}</strong>
           </div>
         </div>
+        <div className="settingsSection">
+          <div className="settingsSectionTitle">语音识别配置</div>
+          <div className="settingsKV">
+            <span>识别模型</span>
+            <strong>FunASR</strong>
+          </div>
+          <div className="settingsKV">
+            <span>模型大小</span>
+            <strong>Medium</strong>
+          </div>
+          <div className="settingsKV">
+            <span>运行设备</span>
+            <strong>自动</strong>
+          </div>
+          <div className="settingsKV">
+            <span>识别语言</span>
+            <strong>中文</strong>
+          </div>
+          <div className="settingsKV">
+            <span>自动识别</span>
+            <strong>关闭</strong>
+          </div>
+          <div className="settingsKV">
+            <span>热词</span>
+            <strong>-</strong>
+          </div>
+        </div>
       </div>
     </section>
   )
@@ -1351,7 +1929,7 @@ function LogsStage({
   onRefresh: () => void
   busy: boolean
 }) {
-  type LogKind = 'all' | 'scan' | 'scheduledScan' | 'manualScan' | 'export' | 'error' | 'login' | 'sourceChange'
+  type LogKind = 'all' | 'scan' | 'scheduledScan' | 'manualScan' | 'export' | 'error' | 'login' | 'sourceChange' | 'transcription'
   const sourceNames = new Map(sources.map((source) => [source.id, source.name]))
   const [logKind, setLogKind] = useState<LogKind>('all')
   const scanRows = scanJobs.map((job) => {
@@ -1397,12 +1975,14 @@ function LogsStage({
     error: errorRows.length,
     login: 0,
     sourceChange: 0,
+    transcription: 0,
   }
   const logFilters: Array<{ key: LogKind; label: string }> = [
     { key: 'all', label: '全部日志' },
     { key: 'scheduledScan', label: '定时扫描' },
     { key: 'manualScan', label: '手动扫描' },
     { key: 'export', label: '导出任务' },
+    { key: 'transcription', label: '语音识别' },
     { key: 'error', label: '错误日志' },
     { key: 'login', label: '登录日志' },
     { key: 'sourceChange', label: '源配置变更' },

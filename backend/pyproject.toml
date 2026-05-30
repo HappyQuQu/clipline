@@ -11,6 +11,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+asr = [
+  "funasr>=1.0.0",
+  "torch>=2.0.0",
+  "torchaudio>=2.0.0",
+  "openai-whisper>=20231117",
+]
 dev = [
   "ruff>=0.6.0",
 ]

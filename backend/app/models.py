@@ -98,3 +98,27 @@ class ScanJob(Base):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
 
+
+class Transcription(Base):
+    __tablename__ = "transcriptions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    segment_id: Mapped[str] = mapped_column(String, ForeignKey("video_segments.id"), nullable=False, index=True)
+    start_time: Mapped[float] = mapped_column(Float, nullable=False)
+    end_time: Mapped[float] = mapped_column(Float, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class TranscriptionJob(Base):
+    __tablename__ = "transcription_jobs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    segment_id: Mapped[str] = mapped_column(String, ForeignKey("video_segments.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    progress: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+
