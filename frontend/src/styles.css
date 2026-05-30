@@ -1521,7 +1521,7 @@ button:disabled {
 .logLayout {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
-  gap: 14px;
+  gap: 16px;
   min-height: 420px;
 }
 
@@ -1530,7 +1530,7 @@ button:disabled {
   align-content: start;
   gap: 6px;
   border-right: 1px solid #e4e8ed;
-  padding-right: 12px;
+  padding-right: 14px;
 }
 
 .logKinds button {
@@ -1538,7 +1538,7 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-height: 34px;
+  min-height: 36px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -1546,6 +1546,7 @@ button:disabled {
   padding: 0 10px;
   text-align: left;
   font-weight: 800;
+  transition: all 0.15s;
 }
 
 .logKinds button span {
@@ -1558,6 +1559,7 @@ button:disabled {
   color: #8c99a6;
   font-size: 11px;
   font-weight: 900;
+  font-variant-numeric: tabular-nums;
 }
 
 .logKinds button.active,
@@ -1579,7 +1581,7 @@ button:disabled {
   display: grid;
   align-content: start;
   border: 1px solid #e4e8ed;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
@@ -1591,7 +1593,7 @@ button:disabled {
   align-items: center;
   min-height: 44px;
   border-bottom: 1px solid #eef1f4;
-  padding: 0 12px;
+  padding: 0 14px;
 }
 
 .logTableHead {
@@ -1604,6 +1606,11 @@ button:disabled {
 .logRow {
   color: #4b5563;
   font-size: 13px;
+  transition: background 0.15s;
+}
+
+.logRow:hover {
+  background: #f8fafc;
 }
 
 .logRow:last-child {
@@ -1632,7 +1639,7 @@ button:disabled {
   border-radius: 999px;
   background: #edf4ff;
   color: #2f6df6;
-  padding: 4px 8px;
+  padding: 4px 10px;
   font-size: 12px;
   font-weight: 900;
 }
