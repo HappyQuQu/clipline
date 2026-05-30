@@ -29,12 +29,12 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     with engine.begin() as connection:
-        _migrate_sources_unique_name(connection)
         columns = {row[1] for row in connection.execute(text("PRAGMA table_info(sources)"))}
         if "scan_interval_minutes" not in columns:
             connection.execute(
                 text("ALTER TABLE sources ADD COLUMN scan_interval_minutes INTEGER NOT NULL DEFAULT 0")
             )
+        _migrate_sources_unique_name(connection)
         scan_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(scan_jobs)"))}
         if "total_files" not in scan_columns:
             connection.execute(text("ALTER TABLE scan_jobs ADD COLUMN total_files INTEGER NOT NULL DEFAULT 0"))
