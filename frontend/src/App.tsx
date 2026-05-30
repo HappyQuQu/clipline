@@ -472,6 +472,27 @@ export function App() {
     }
   }, [exports, watchedExportIds])
 
+  // 快捷键支持
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+K 或 Cmd+K 聚焦搜索框
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        const searchInput = document.querySelector('.searchBar input') as HTMLInputElement
+        if (searchInput) {
+          searchInput.focus()
+          searchInput.select()
+        }
+      }
+      // Escape 键返回
+      if (e.key === 'Escape' && activeView === 'search') {
+        setActiveView('playback')
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [activeView])
+
   const createSourceMutation = useMutation({
     mutationFn: api.createSource,
     onSuccess: async (created) => {
@@ -808,26 +829,39 @@ export function App() {
                 <Search size={16} />
                 <input
                   type="text"
-                  placeholder="搜索对话内容..."
+                  placeholder="搜索对话内容... (Ctrl+K)"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && searchInput.trim()) {
                       handleSearch(searchInput.trim())
                     }
-                  }}
-                  onFocus={() => {
-                    // 显示搜索历史
+                    if (e.key === 'Escape') {
+                      setSearchInput('')
+                    }
                   }}
                 />
                 {searchInput && (
                   <button
                     className="searchClear"
                     onClick={() => setSearchInput('')}
+                    title="清除"
                   >
                     <X size={14} />
                   </button>
                 )}
+                <button
+                  className="searchButton"
+                  onClick={() => {
+                    if (searchInput.trim()) {
+                      handleSearch(searchInput.trim())
+                    }
+                  }}
+                  disabled={!searchInput.trim()}
+                  title="搜索"
+                >
+                  <Search size={14} />
+                </button>
               </div>
               {showSourceSelect && <SourceSelect sources={sources} value={sourceId} onChange={handleSourceChange} />}
               <button className="refreshButton" onClick={() => void refreshAll()}>
@@ -1181,7 +1215,39 @@ function SearchStage({
   onExportTxt: (segmentId: string) => void
 }) {
   const [currentTime, setCurrentTime] = useState(0)
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const resultsListRef = useRef<HTMLDivElement | null>(null)
+
+  // 键盘导航
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!searchResults?.items.length) return
+
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.min(prev + 1, searchResults.items.length - 1))
+      } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.max(prev - 1, 0))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        onSelectResult(searchResults.items[selectedIndex])
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [searchResults, selectedIndex, onSelectResult])
+
+  // 滚动到选中的结果
+  useEffect(() => {
+    if (resultsListRef.current) {
+      const selectedCard = resultsListRef.current.querySelector('.searchResultCard.active')
+      if (selectedCard) {
+        selectedCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }
+  }, [selectedIndex])
 
   function formatSearchTime(seconds: number) {
     const minutes = Math.floor(seconds / 60)
@@ -1295,12 +1361,15 @@ function SearchStage({
               <div className="searchResultsHeader">
                 <span>搜索结果</span>
               </div>
-              <div className="searchResultsList">
-                {searchResults.items.map((result) => (
+              <div className="searchResultsList" ref={resultsListRef}>
+                {searchResults.items.map((result, index) => (
                   <div
                     key={result.transcription.id}
-                    className={`searchResultCard ${selectedResult?.transcription.id === result.transcription.id ? 'active' : ''}`}
-                    onClick={() => onSelectResult(result)}
+                    className={`searchResultCard ${index === selectedIndex ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedIndex(index)
+                      onSelectResult(result)
+                    }}
                   >
                     <div className="searchResultTime">
                       <span className="searchResultDate">{formatDateTime(result.segmentStartTime)}</span>
@@ -1311,10 +1380,10 @@ function SearchStage({
                       {highlightText(result.transcription.text, result.highlight)}
                     </div>
                     <div className="searchResultActions">
-                      <button onClick={(e) => { e.stopPropagation(); onExportSrt(result.segmentId) }}>
+                      <button onClick={(e) => { e.stopPropagation(); onExportSrt(result.segmentId) }} title="导出 SRT 字幕">
                         导出 SRT
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); onExportTxt(result.segmentId) }}>
+                      <button onClick={(e) => { e.stopPropagation(); onExportTxt(result.segmentId) }} title="导出 TXT 文本">
                         导出 TXT
                       </button>
                     </div>
