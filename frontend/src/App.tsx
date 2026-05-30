@@ -190,6 +190,7 @@ export function App() {
   // 搜索相关状态
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [showSearchHistory, setShowSearchHistory] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(searchHistoryStorageKey)
@@ -825,43 +826,70 @@ export function App() {
               </div>
             </div>
             <div className="stageTools">
-              <div className="searchBar">
-                <Search size={16} />
-                <input
-                  type="text"
-                  placeholder="搜索对话内容... (Ctrl+K)"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && searchInput.trim()) {
-                      handleSearch(searchInput.trim())
-                    }
-                    if (e.key === 'Escape') {
-                      setSearchInput('')
-                    }
-                  }}
-                />
-                {searchInput && (
+              <div className="searchBarWrapper">
+                <div className="searchBar">
+                  <Search size={16} />
+                  <input
+                    type="text"
+                    placeholder="搜索对话内容... (Ctrl+K)"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && searchInput.trim()) {
+                        handleSearch(searchInput.trim())
+                      }
+                      if (e.key === 'Escape') {
+                        setSearchInput('')
+                      }
+                    }}
+                    onFocus={() => setShowSearchHistory(true)}
+                    onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
+                  />
+                  {searchInput && (
+                    <button
+                      className="searchClear"
+                      onClick={() => setSearchInput('')}
+                      title="清除"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                   <button
-                    className="searchClear"
-                    onClick={() => setSearchInput('')}
-                    title="清除"
+                    className="searchButton"
+                    onClick={() => {
+                      if (searchInput.trim()) {
+                        handleSearch(searchInput.trim())
+                      }
+                    }}
+                    disabled={!searchInput.trim()}
+                    title="搜索"
                   >
-                    <X size={14} />
+                    <Search size={14} />
                   </button>
+                </div>
+                {showSearchHistory && searchHistory.length > 0 && (
+                  <div className="searchHistory">
+                    {searchHistory.slice(0, 8).map((item, index) => (
+                      <button
+                        key={index}
+                        className="searchHistoryItem"
+                        onClick={() => {
+                          setSearchInput(item)
+                          handleSearch(item)
+                        }}
+                      >
+                        <History size={14} />
+                        <span>{item}</span>
+                      </button>
+                    ))}
+                    <button
+                      className="searchHistoryClear"
+                      onClick={handleClearSearchHistory}
+                    >
+                      清除搜索历史
+                    </button>
+                  </div>
                 )}
-                <button
-                  className="searchButton"
-                  onClick={() => {
-                    if (searchInput.trim()) {
-                      handleSearch(searchInput.trim())
-                    }
-                  }}
-                  disabled={!searchInput.trim()}
-                  title="搜索"
-                >
-                  <Search size={14} />
-                </button>
               </div>
               {showSourceSelect && <SourceSelect sources={sources} value={sourceId} onChange={handleSourceChange} />}
               <button className="refreshButton" onClick={() => void refreshAll()}>

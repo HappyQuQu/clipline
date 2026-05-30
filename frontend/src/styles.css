@@ -2319,6 +2319,85 @@ button.exportRangeLabel:hover {
   cursor: not-allowed;
 }
 
+/* 搜索历史下拉 */
+.searchBarWrapper {
+  position: relative;
+}
+
+.searchHistory {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin-top: 4px;
+  border: 1px solid #dce3ea;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(31 41 51 / 16%);
+  padding: 6px;
+  animation: searchHistoryFadeIn 0.15s ease-out;
+}
+
+.searchHistoryItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4b5563;
+  padding: 0 12px;
+  font-size: 13px;
+  text-align: left;
+  transition: all 0.1s;
+}
+
+.searchHistoryItem:hover {
+  background: #f3f7ff;
+  color: #2f6df6;
+}
+
+.searchHistoryItem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchHistoryClear {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  margin-top: 4px;
+  border: 0;
+  border-top: 1px solid #eef1f4;
+  border-radius: 0;
+  background: transparent;
+  color: #7b8794;
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  text-align: center;
+  transition: all 0.1s;
+}
+
+.searchHistoryClear:hover {
+  color: #c24124;
+  background: #fef2f2;
+}
+
+@keyframes searchHistoryFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* 搜索历史 */
 .searchHistory {
   position: absolute;
