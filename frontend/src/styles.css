@@ -641,7 +641,7 @@ button:disabled {
 
 .sourceTable {
   border: 1px solid #e4e8ed;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   background: #ffffff;
 }
@@ -652,7 +652,7 @@ button:disabled {
   grid-template-columns: minmax(320px, 1.8fr) minmax(88px, 0.45fr) minmax(104px, 0.5fr) minmax(126px, 0.55fr) minmax(180px, 0.8fr) 92px;
   gap: 12px;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 14px;
 }
 
 .sourceTableHead {
@@ -667,6 +667,11 @@ button:disabled {
 .sourceRow {
   min-height: 78px;
   border-bottom: 1px solid #eef1f4;
+  transition: background 0.15s;
+}
+
+.sourceRow:hover {
+  background: #f8fafc;
 }
 
 .sourceRow:last-child {
