@@ -2752,6 +2752,38 @@ button.exportRangeLabel:hover {
   background: #1d5bd6;
 }
 
+/* 右键菜单 */
+.clipContextMenu {
+  position: fixed;
+  z-index: 100;
+  min-width: 160px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(31 41 51 / 16%);
+  padding: 6px;
+}
+
+.clipContextMenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1f2933;
+  padding: 0 12px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.clipContextMenu button:hover {
+  background: #f3f7ff;
+  color: #2f6df6;
+}
+
 .spin {
   animation: spin 900ms linear infinite;
 }

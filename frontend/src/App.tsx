@@ -935,6 +935,13 @@ export function App() {
                     total={totalAvailableSegments}
                     onLoadMore={() => void segmentsQuery.fetchNextPage()}
                     onSelect={openClipPreview}
+                    onTranscribe={(segmentId) => {
+                      api.triggerTranscription(segmentId).then(() => {
+                        notify('语音识别任务已创建')
+                      }).catch((err) => {
+                        notify(queryMessage(err, '创建识别任务失败'))
+                      })
+                    }}
                   />
                 </section>
               </div>
@@ -1072,6 +1079,13 @@ export function App() {
                     segments={allSegments}
                     selectedId={selectedSegment?.id}
                     onSelect={(segment) => selectSegment(segment, true)}
+                    onTranscribe={(segmentId) => {
+                      api.triggerTranscription(segmentId).then(() => {
+                        notify('语音识别任务已创建')
+                      }).catch((err) => {
+                        notify(queryMessage(err, '创建识别任务失败'))
+                      })
+                    }}
                   />
                 </section>
               </div>
@@ -2779,6 +2793,7 @@ function ClipGrid({
   total,
   onLoadMore,
   onSelect,
+  onTranscribe,
 }: {
   sourceName: string
   sourceNames?: Map<string, string>
@@ -2789,7 +2804,19 @@ function ClipGrid({
   total?: number
   onLoadMore?: () => void
   onSelect: (segment: DisplaySegment) => void
+  onTranscribe?: (segmentId: string) => void
 }) {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; segment: DisplaySegment } | null>(null)
+
+  function handleContextMenu(e: React.MouseEvent, segment: DisplaySegment) {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, segment })
+  }
+
+  function handleCloseContextMenu() {
+    setContextMenu(null)
+  }
+
   if (!segments.length) return <div className="emptyDock">暂无录像片段</div>
 
   return (
@@ -2800,6 +2827,7 @@ function ClipGrid({
             key={segment.id}
             className={segment.id === selectedId ? 'clipCard selected' : 'clipCard'}
             onClick={() => onSelect(segment)}
+            onContextMenu={(e) => handleContextMenu(e, segment)}
           >
             <div className="clipPoster">
               {segment.thumbnailUrl && <img src={segment.thumbnailUrl} loading="lazy" decoding="async" alt="" />}
@@ -2819,7 +2847,57 @@ function ClipGrid({
           {loadingMore ? '加载中...' : `继续加载，已显示 ${segments.length}/${total ?? segments.length}`}
         </button>
       )}
+      {contextMenu && (
+        <ClipContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          segment={contextMenu.segment}
+          onTranscribe={onTranscribe}
+          onClose={handleCloseContextMenu}
+        />
+      )}
     </>
+  )
+}
+
+function ClipContextMenu({
+  x,
+  y,
+  segment,
+  onTranscribe,
+  onClose,
+}: {
+  x: number
+  y: number
+  segment: DisplaySegment
+  onTranscribe?: (segmentId: string) => void
+  onClose: () => void
+}) {
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [onClose])
+
+  return (
+    <div
+      ref={menuRef}
+      className="clipContextMenu"
+      style={{ left: x, top: y }}
+    >
+      <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>
+        🔍 识别语音
+      </button>
+      <button onClick={() => { window.open(`/api/segments/${segment.id}/stream`, '_blank'); onClose() }}>
+        📹 在新窗口播放
+      </button>
+    </div>
   )
 }
 
