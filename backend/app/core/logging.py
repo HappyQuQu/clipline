@@ -87,6 +87,10 @@ def setup_logging() -> None:
     level = settings.log_level.upper()
     formatter_name = "json" if settings.log_format.lower() == "json" else "text"
 
+    # 日志文件名包含日期，按天轮转
+    log_file = settings.resolved_log_file
+    log_filename = str(log_file).replace(".log", "")
+
     logging.config.dictConfig(
         {
             "version": 1,
@@ -113,13 +117,14 @@ def setup_logging() -> None:
                     "filters": ["request_id"],
                 },
                 "file": {
-                    "class": "logging.handlers.RotatingFileHandler",
+                    "class": "logging.handlers.TimedRotatingFileHandler",
                     "level": level,
                     "formatter": formatter_name,
                     "filters": ["request_id"],
-                    "filename": str(settings.resolved_log_file),
-                    "maxBytes": 10 * 1024 * 1024,
-                    "backupCount": 5,
+                    "filename": str(log_file),
+                    "when": "midnight",
+                    "interval": 1,
+                    "backupCount": 30,
                     "encoding": "utf-8",
                 },
             },

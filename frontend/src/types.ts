@@ -125,6 +125,7 @@ export interface TranscriptionJob {
   id: string
   segmentId: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
+  stage: string
   progress: number
   errorMessage?: string | null
   createdAt: string

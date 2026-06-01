@@ -12,6 +12,31 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# 运行时 ASR 配置（内存存储，重启后恢复默认值）
+_asr_runtime_overrides: dict[str, str | bool] = {}
+
+
+def get_asr_config() -> dict:
+    """获取 ASR 配置（优先使用运行时配置）"""
+    settings = get_settings()
+    return {
+        "model": _asr_runtime_overrides.get("model", settings.asr_model),
+        "modelSize": _asr_runtime_overrides.get("modelSize", settings.asr_model_size),
+        "device": _asr_runtime_overrides.get("device", settings.asr_device),
+        "language": _asr_runtime_overrides.get("language", settings.asr_language),
+        "autoTranscribe": _asr_runtime_overrides.get("autoTranscribe", settings.asr_auto_transcribe),
+        "hotwords": _asr_runtime_overrides.get("hotwords", settings.asr_hotwords),
+    }
+
+
+def update_asr_config(updates: dict) -> dict:
+    """更新运行时 ASR 配置"""
+    allowed_keys = {"model", "modelSize", "device", "language", "autoTranscribe", "hotwords"}
+    for key, value in updates.items():
+        if key in allowed_keys:
+            _asr_runtime_overrides[key] = value
+    return get_asr_config()
+
 
 class TranscriptionSegment(TypedDict):
     """识别结果片段"""
@@ -28,19 +53,37 @@ class ASRService:
         self.settings = get_settings()
         self._model = None
         self._model_loaded = False
+        self._current_model_type = None
+        self._current_model_size = None
 
     @property
     def model_loaded(self) -> bool:
         return self._model_loaded
 
+    def invalidate_model(self):
+        """清除已加载的模型，下次使用时重新加载"""
+        self._model = None
+        self._model_loaded = False
+        self._current_model_type = None
+        self._current_model_size = None
+
+    def _get_runtime_asr_config(self) -> dict:
+        """获取 ASR 配置（优先使用运行时配置）"""
+        return get_asr_config()
+
     def _load_model(self):
         """延迟加载 ASR 模型"""
-        if self._model is not None:
-            return self._model
+        config = self._get_runtime_asr_config()
+        model_type = config["model"]
+        model_size = config["modelSize"]
+        device = config["device"]
 
-        model_type = self.settings.asr_model
-        model_size = self.settings.asr_model_size
-        device = self.settings.asr_device
+        # 如果模型类型或大小变了，需要重新加载
+        if self._model is not None:
+            if self._current_model_type == model_type and self._current_model_size == model_size:
+                return self._model
+            # 配置变了，清除旧模型
+            self.invalidate_model()
 
         logger.info(f"Loading ASR model: {model_type} ({model_size}) on {device}")
 
@@ -55,6 +98,8 @@ class ASRService:
                 raise ValueError(f"Unknown ASR model: {model_type}")
 
             self._model_loaded = True
+            self._current_model_type = model_type
+            self._current_model_size = model_size
             logger.info(f"ASR model loaded successfully: {model_type}")
             return self._model
 
@@ -66,6 +111,7 @@ class ASRService:
     def _load_funasr(self, model_size: str, device: str):
         """加载 FunASR 模型"""
         try:
+            import torch
             from funasr import AutoModel
 
             # 根据模型大小选择模型
@@ -77,11 +123,24 @@ class ASRService:
             }
             model_name = model_map.get(model_size, "paraformer-zh")
 
+            # 确定设备
+            if device == "auto":
+                if torch.cuda.is_available():
+                    actual_device = "cuda"
+                elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                    actual_device = "mps"
+                else:
+                    actual_device = "cpu"
+            else:
+                actual_device = device
+
+            logger.info(f"Using device: {actual_device}")
+
             return AutoModel(
                 model=model_name,
                 vad_model="fsmn-vad",
                 punc_model="ct-punc",
-                device=device if device != "auto" else None,
+                device=actual_device,
             )
         except ImportError:
             raise ImportError("FunASR not installed. Run: pip install funasr")
@@ -143,8 +202,9 @@ class ASRService:
     def transcribe(self, audio_path: str) -> list[TranscriptionSegment]:
         """语音识别，返回带时间戳的文字"""
         model = self._load_model()
-        model_type = self.settings.asr_model
-        hotwords = self.settings.asr_hotwords if self.settings.asr_hotwords else None
+        config = self._get_runtime_asr_config()
+        model_type = config["model"]
+        hotwords = config.get("hotwords") or None
 
         logger.info(f"Transcribing audio: {audio_path}")
 
@@ -166,26 +226,35 @@ class ASRService:
             hotword=hotwords,
         )
 
+        import sys
+        print(f"[ASR DEBUG] result type: {type(result)}, length: {len(result) if result else 0}", file=sys.stderr, flush=True)
+        if result:
+            for i, item in enumerate(result[:5]):
+                print(f"[ASR DEBUG] result[{i}]: {item}", file=sys.stderr, flush=True)
+
         segments = []
         if result and len(result) > 0:
-            # FunASR 返回格式: [{"text": "...", "timestamp": [[start, end], ...]}]
             for item in result:
-                text = item.get("text", "")
-                timestamp = item.get("timestamp", [])
+                text = item.get("text", "") if isinstance(item, dict) else str(item)
+                timestamp = item.get("timestamp", []) if isinstance(item, dict) else []
 
-                if timestamp:
-                    # 有时间戳的情况
+                print(f"[ASR DEBUG] text='{text}', timestamp={timestamp}", file=sys.stderr, flush=True)
+
+                if not text:
+                    continue
+
+                if timestamp and len(timestamp) > 0:
                     for ts in timestamp:
-                        start = ts[0] / 1000.0  # 毫秒转秒
-                        end = ts[1] / 1000.0
-                        segments.append(TranscriptionSegment(
-                            start=start,
-                            end=end,
-                            text=text,
-                            confidence=0.9,
-                        ))
+                        if isinstance(ts, (list, tuple)) and len(ts) == 2:
+                            start = ts[0] / 1000.0
+                            end = ts[1] / 1000.0
+                            segments.append(TranscriptionSegment(
+                                start=start,
+                                end=end,
+                                text=text,
+                                confidence=0.9,
+                            ))
                 else:
-                    # 没有时间戳的情况，估计时长
                     segments.append(TranscriptionSegment(
                         start=0.0,
                         end=0.0,
@@ -193,6 +262,7 @@ class ASRService:
                         confidence=0.9,
                     ))
 
+        print(f"[ASR DEBUG] parsed {len(segments)} segments", file=sys.stderr, flush=True)
         return segments
 
     def _transcribe_whisper(self, model, audio_path: str) -> list[TranscriptionSegment]:

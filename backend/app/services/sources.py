@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import BackgroundTasks, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
@@ -128,3 +128,41 @@ def queue_scan(db: Session, source_id: str, background_tasks: BackgroundTasks) -
     background_tasks.add_task(run_scan_job, scan_job_id)
     logger.info("manual scan queued", extra={"source_id": source.id, "scan_job_id": scan_job_id})
     return scan_job_id, "queued"
+
+
+def delete_source(db: Session, source_id: str) -> None:
+    """删除录像源及其所有关联数据"""
+    source = db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    # 检查是否有正在进行的扫描任务
+    active_job = db.scalar(
+        select(ScanJob)
+        .where(ScanJob.source_id == source.id, ScanJob.status.in_(ACTIVE_SCAN_STATUSES))
+        .limit(1)
+    )
+    if active_job:
+        raise HTTPException(status_code=409, detail="无法删除：有正在进行的扫描任务")
+
+    # 删除关联的片段
+    segment_count = db.scalar(
+        select(func.count()).select_from(VideoSegment).where(VideoSegment.source_id == source.id)
+    )
+    db.execute(
+        delete(VideoSegment).where(VideoSegment.source_id == source.id)
+    )
+
+    # 删除关联的扫描任务
+    db.execute(
+        delete(ScanJob).where(ScanJob.source_id == source.id)
+    )
+
+    # 删除录像源
+    db.delete(source)
+    db.commit()
+
+    logger.info(
+        "source deleted",
+        extra={"source_id": source_id, "source_name": source.name, "segments_deleted": segment_count},
+    )

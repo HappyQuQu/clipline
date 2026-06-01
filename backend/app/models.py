@@ -117,6 +117,7 @@ class TranscriptionJob(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     segment_id: Mapped[str] = mapped_column(String, ForeignKey("video_segments.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    stage: Mapped[str] = mapped_column(String, nullable=False, default="")
     progress: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(String, nullable=False)

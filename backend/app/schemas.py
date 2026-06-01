@@ -193,6 +193,7 @@ class TranscriptionJobOut(BaseModel):
     id: str
     segmentId: str
     status: str
+    stage: str = ""
     progress: float
     errorMessage: str | None = None
     createdAt: str

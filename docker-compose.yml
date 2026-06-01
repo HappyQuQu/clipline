@@ -1,6 +1,7 @@
 services:
   clipline:
-    image: evanqu/clipline:latest
+    build: .
+    image: clipline:local
     container_name: clipline
     ports:
       - "${CLIPLINE_HTTP_PORT:-8080}:8080"

@@ -8,6 +8,9 @@ RUN npm run build
 
 FROM python:3.12-slim AS backend
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     CLIPLINE_PORT=8080 \
@@ -21,7 +24,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY backend /app/backend
-RUN pip install --no-cache-dir /app/backend
+RUN pip install --no-cache-dir --index-url ${PIP_INDEX_URL} --trusted-host ${PIP_TRUSTED_HOST} /app/backend[asr]
 RUN cp -R /app/backend/app /app/app
 COPY --from=frontend-build /src/frontend/dist /app/static
 

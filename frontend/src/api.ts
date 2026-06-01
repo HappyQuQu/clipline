@@ -47,6 +47,10 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+  deleteSource: (sourceId: string) =>
+    request<{ deleted: boolean }>(`/api/sources/${sourceId}`, {
+      method: 'DELETE',
+    }),
   scanSource: (sourceId: string) =>
     request<{ scanJobId: string; status: string }>(`/api/sources/${sourceId}/scan`, {
       method: 'POST',
@@ -121,7 +125,7 @@ export const api = {
     request<{ items: Transcription[] }>(`/api/segments/${segmentId}/transcription`),
 
   getTranscriptionStatus: (segmentId: string) =>
-    request<{ status: string; progress: number; jobId?: string; errorMessage?: string }>(
+    request<{ status: string; stage: string; progress: number; jobId?: string; errorMessage?: string }>(
       `/api/segments/${segmentId}/transcription/status`
     ),
 
@@ -130,4 +134,16 @@ export const api = {
 
   exportTranscription: (segmentId: string, format: 'srt' | 'txt' = 'srt') =>
     request<{ content: string }>(`/api/segments/${segmentId}/transcription/export?format=${format}`),
+
+  // ASR 设置
+  getAsrSettings: () =>
+    request<{ model: string; modelSize: string; device: string; language: string; autoTranscribe: boolean; hotwords: string }>(
+      '/api/settings/asr'
+    ),
+
+  updateAsrSettings: (payload: Partial<{ model: string; modelSize: string; device: string; language: string; autoTranscribe: boolean; hotwords: string }>) =>
+    request<{ model: string; modelSize: string; device: string; language: string; autoTranscribe: boolean; hotwords: string }>(
+      '/api/settings/asr',
+      { method: 'PATCH', body: JSON.stringify(payload) }
+    ),
 }

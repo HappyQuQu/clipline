@@ -1126,6 +1126,15 @@ button:disabled {
   color: #2f6df6;
 }
 
+.iconAction.danger {
+  color: #c24124;
+}
+
+.iconAction.danger:hover {
+  background: #fef2f2;
+  color: #c24124;
+}
+
 .sourceState,
 .sourceScan,
 .sourceScanButton {
@@ -1523,6 +1532,38 @@ button:disabled {
   font-size: 13px;
 }
 
+.settingsSelect,
+.settingsInput {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2933;
+  font-size: 13px;
+  font-weight: 500;
+  transition: border-color 0.15s;
+}
+
+.settingsSelect:focus,
+.settingsInput:focus {
+  outline: none;
+  border-color: #2f6df6;
+}
+
+.settingsInput {
+  width: 100%;
+}
+
+.settingsSaving {
+  grid-column: 1 / -1;
+  text-align: right;
+  font-size: 12px;
+  color: #2f6df6;
+  font-weight: 600;
+  padding-top: 4px;
+}
+
 .logLayout {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
@@ -1917,6 +1958,14 @@ button.exportRangeLabel:hover {
   transform: scale(0.95);
 }
 
+.floatingToolTranscribe {
+  width: auto !important;
+  padding: 0 10px !important;
+  gap: 4px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
 .playbackBar {
   display: grid;
   grid-template-columns: 150px minmax(170px, 210px) minmax(170px, 210px) 150px 96px minmax(120px, 1fr);
@@ -2194,6 +2243,360 @@ button.exportRangeLabel:hover {
   padding: 4px 6px;
 }
 
+/* 卡片字幕状态条 */
+.clipSubtitleBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  transition: all 0.15s;
+}
+
+.clipSubtitleBar.none {
+  background: rgb(107 114 128 / 50%);
+  color: rgb(209 213 219 / 80%);
+}
+
+.clipSubtitleBar.completed {
+  background: rgb(34 197 94 / 70%);
+  color: #ffffff;
+}
+
+.clipSubtitleBar.processing {
+  background: rgb(59 130 246 / 70%);
+  color: #ffffff;
+}
+
+.clipSubtitleBar.pending {
+  background: rgb(156 163 175 / 70%);
+  color: #ffffff;
+}
+
+.clipSubtitleBar.failed {
+  background: rgb(239 68 68 / 70%);
+  color: #ffffff;
+}
+
+/* 语音识别面板 */
+.transcriptionPanel {
+  background: #ffffff;
+  border: 1px solid #e4e8ed;
+  border-radius: 10px;
+  margin: 10px 0;
+  overflow: hidden;
+}
+
+/* 空状态 */
+.transcriptionEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.transcriptionEmptyIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.transcriptionEmptyTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2933;
+  margin-bottom: 8px;
+}
+
+.transcriptionEmptyDesc {
+  font-size: 13px;
+  color: #7b8794;
+  margin-bottom: 24px;
+}
+
+.transcriptionEmptyButton {
+  min-height: 44px;
+  padding: 0 32px;
+  border: none;
+  border-radius: 8px;
+  background: #2f6df6;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.transcriptionEmptyButton:hover {
+  background: #1d5bd6;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(47, 109, 246, 0.3);
+}
+
+.transcriptionEmptyButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 处理中 */
+.transcriptionProcessing {
+  padding: 20px 24px;
+}
+
+.transcriptionProcessingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.transcriptionProcessingTitle {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1f2933;
+}
+
+.transcriptionCancelButton {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #7b8794;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.transcriptionCancelButton:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+.transcriptionProcessingStage {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2f6df6;
+  margin-bottom: 12px;
+}
+
+.transcriptionProgressBar {
+  flex: 1;
+  height: 8px;
+  background: #e4e8ed;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.transcriptionProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #2f6df6, #34d3c8, #2f6df6);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  animation: shimmer 2s linear infinite;
+}
+
+.transcriptionProcessingMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.transcriptionProgressPercent {
+  font-size: 20px;
+  font-weight: 800;
+  color: #2f6df6;
+  font-variant-numeric: tabular-nums;
+}
+
+.transcriptionProcessingTime {
+  font-size: 12px;
+  color: #7b8794;
+}
+
+/* 失败状态 */
+.transcriptionFailed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+  background: #fef2f2;
+}
+
+.transcriptionFailedIcon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.transcriptionFailedText {
+  font-size: 13px;
+  color: #c24124;
+  margin-bottom: 16px;
+  max-width: 300px;
+}
+
+.transcriptionRetryButton {
+  min-height: 36px;
+  padding: 0 20px;
+  border: 1px solid #c24124;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #c24124;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.transcriptionRetryButton:hover {
+  background: #c24124;
+  color: #ffffff;
+}
+
+/* 标题栏 */
+.transcriptionPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e4e8ed;
+  background: #f8fafc;
+}
+
+.transcriptionPanelTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.transcriptionPanelTitle > span:first-child {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1f2933;
+}
+
+.transcriptionPanelStatus {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b5563;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f1f5f9;
+}
+
+.transcriptionPanelActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.transcriptionPanelActions button {
+  min-height: 32px;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #4b5563;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.transcriptionPanelActions button:hover {
+  background: #f3f7ff;
+  border-color: #2f6df6;
+  color: #2f6df6;
+}
+
+.transcriptionPanelActions button.active {
+  background: #edf4ff;
+  border-color: #2f6df6;
+  color: #2f6df6;
+}
+
+.transcriptionPanelButton {
+  background: #2f6df6 !important;
+  color: #ffffff !important;
+  border-color: #2f6df6 !important;
+  font-weight: 700 !important;
+}
+
+.transcriptionPanelButton:hover {
+  background: #1d5bd6 !important;
+}
+
+.transcriptionPanelButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 字幕列表 */
+.transcriptionPanelList {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.transcriptionPanelItem {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-left: 3px solid transparent;
+}
+
+.transcriptionPanelItem:hover {
+  background: #f3f7ff;
+}
+
+.transcriptionPanelItem.active {
+  background: #edf4ff;
+  border-left-color: #2f6df6;
+}
+
+.transcriptionPanelItemTime {
+  min-width: 50px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2f6df6;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.transcriptionPanelItemText {
+  flex: 1;
+  font-size: 13px;
+  color: #1f2933;
+  line-height: 1.5;
+}
+
+/* 空状态 */
+.transcriptionPanelEmpty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #7b8794;
+  font-size: 14px;
+}
+
 /* 识别状态 */
 .transcriptionStatus {
   position: absolute;
@@ -2228,6 +2631,159 @@ button.exportRangeLabel:hover {
 .transcriptionStatus.failed {
   background: rgb(239 68 68 / 80%);
   color: #ffffff;
+}
+
+/* 字幕任务页 */
+.subtitleStageActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.subtitleBatchButton {
+  min-height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: #2f6df6;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.subtitleBatchButton:hover {
+  background: #1d5bd6;
+}
+
+.subtitleFilters {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e4e8ed;
+  overflow-x: auto;
+}
+
+.subtitleFilter {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.subtitleFilter:hover {
+  border-color: #2f6df6;
+  color: #2f6df6;
+}
+
+.subtitleFilter.active {
+  background: #edf4ff;
+  border-color: #2f6df6;
+  color: #2f6df6;
+}
+
+.subtitleTaskList {
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+}
+
+.subtitleTaskItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.subtitleTaskItem:hover {
+  background: #f8fafc;
+}
+
+.subtitleTaskInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.subtitleTaskName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2933;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitleTaskTime {
+  font-size: 12px;
+  color: #7b8794;
+}
+
+.subtitleTaskStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.subtitleTaskProgress {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2f6df6;
+  font-variant-numeric: tabular-nums;
+}
+
+.subtitleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.subtitleBadge.completed {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.subtitleBadge.processing {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.subtitleBadge.pending {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.subtitleBadge.failed {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.subtitleBadge.none {
+  background: #f9fafb;
+  color: #9ca3af;
+}
+
+.subtitleEmpty {
+  padding: 60px 16px;
+  text-align: center;
+  color: #7b8794;
+  font-size: 14px;
 }
 
 .failurePill {
@@ -3009,6 +3565,11 @@ button.exportRangeLabel:hover {
   to {
     transform: rotate(360deg);
   }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 @media (max-width: 1180px) {

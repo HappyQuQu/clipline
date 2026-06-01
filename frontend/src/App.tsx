@@ -16,6 +16,7 @@ import {
   Grid3X3,
   History,
   LayoutDashboard,
+  Mic,
   Pencil,
   Pause,
   Play,
@@ -25,6 +26,7 @@ import {
   Search,
   Settings,
   Star,
+  Subtitles,
   Unlink,
   X,
 } from 'lucide-react'
@@ -44,7 +46,7 @@ import type {
 } from './types'
 
 const today = new Date().toISOString().slice(0, 10)
-type ViewKey = 'playback' | 'clips' | 'sources' | 'exports' | 'logs' | 'settings' | 'search'
+type ViewKey = 'playback' | 'clips' | 'subtitles' | 'sources' | 'exports' | 'logs' | 'settings' | 'search'
 type DisplaySegment = TimelineSegment & { sourceId: string; filename?: string }
 const playbackRates = [1, 1.5, 2, 4]
 const selectedSourceStorageKey = 'clipline.selectedSourceId'
@@ -53,6 +55,7 @@ const searchHistoryStorageKey = 'clipline.searchHistory'
 const navItems: Array<{ key: ViewKey; label: string; icon: typeof Play }> = [
   { key: 'playback', label: '录像回放', icon: Play },
   { key: 'clips', label: '片段墙', icon: Grid3X3 },
+  { key: 'subtitles', label: '字幕', icon: Subtitles },
   { key: 'sources', label: '录像源', icon: Camera },
   { key: 'exports', label: '导出任务', icon: Download },
   { key: 'logs', label: '日志', icon: History },
@@ -62,6 +65,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: typeof Play }> = [
 const viewTitles: Record<ViewKey, string> = {
   playback: '录像回放',
   clips: '片段墙',
+  subtitles: '字幕任务',
   sources: '录像源',
   exports: '导出任务',
   logs: '日志',
@@ -546,6 +550,17 @@ export function App() {
     onError: (error) => notify(queryMessage(error, '更新源失败')),
   })
 
+  const deleteSourceMutation = useMutation({
+    mutationFn: (id: string) => api.deleteSource(id),
+    onSuccess: async () => {
+      notify('录像源已删除')
+      setSourceId('')
+      localStorage.removeItem(selectedSourceStorageKey)
+      await refreshAll()
+    },
+    onError: (error) => notify(queryMessage(error, '删除录像源失败')),
+  })
+
   function handleCreateSource() {
     if (!sourceName.trim() || !sourcePath.trim()) return
     createSourceMutation.mutate({
@@ -921,6 +936,7 @@ export function App() {
                 updateSourceMutation.mutate({ id, scanIntervalMinutes })
               }
               onSave={(id, payload) => updateSourceMutation.mutate({ id, ...payload })}
+              onDelete={(id) => deleteSourceMutation.mutate(id)}
             />
           ) : activeView === 'search' ? (
             <SearchStage
@@ -963,6 +979,16 @@ export function App() {
               failedSegments={failedSegments}
               onRefresh={() => void refreshAll()}
               busy={busy}
+            />
+          ) : activeView === 'subtitles' ? (
+            <SubtitleStage
+              segments={allSegments}
+              sourceNames={sourceNames}
+              onSelectSegment={(segment) => {
+                selectSegment(segment, true)
+                setActiveView('playback')
+              }}
+              onNotify={notify}
             />
           ) : activeView === 'clips' ? (
             <div className="workbenchLayout">
@@ -1061,19 +1087,22 @@ export function App() {
                             <Activity size={17} />
                           </button>
                           <button
-                            title="识别语音"
+                            className="floatingToolTranscribe"
+                            title="语音识别"
                             onClick={() => {
                               if (selectedSegment) {
                                 api.triggerTranscription(selectedSegment.id).then(() => {
                                   notify('语音识别任务已创建')
                                   void queryClient.invalidateQueries({ queryKey: ['transcription'] })
+                                  void queryClient.invalidateQueries({ queryKey: ['transcriptionStatus'] })
                                 }).catch((err) => {
                                   notify(queryMessage(err, '创建识别任务失败'))
                                 })
                               }
                             }}
                           >
-                            <Search size={17} />
+                            <Mic size={15} />
+                            <span>字幕</span>
                           </button>
                         </div>
                       </>
@@ -1110,9 +1139,10 @@ export function App() {
                   />
                 </section>
 
-                {/* 字幕列表 */}
-                {selectedSegment && currentTranscriptions.length > 0 && (
-                  <TranscriptionList
+                {/* 语音识别面板 */}
+                {selectedSegment && (
+                  <TranscriptionPanel
+                    segmentId={selectedSegment.id}
                     transcriptions={currentTranscriptions}
                     currentTime={currentPlaybackTime}
                     mode={subtitleMode}
@@ -1124,6 +1154,7 @@ export function App() {
                     }}
                     onExportSrt={() => handleExportSrt(selectedSegment.id)}
                     onExportTxt={() => handleExportTxt(selectedSegment.id)}
+                    onNotify={notify}
                   />
                 )}
 
@@ -1462,6 +1493,247 @@ function SubtitleOverlay({
   )
 }
 
+function TranscriptionPanel({
+  segmentId,
+  transcriptions,
+  currentTime,
+  mode,
+  onModeChange,
+  onSelect,
+  onExportSrt,
+  onExportTxt,
+  onNotify,
+}: {
+  segmentId: string
+  transcriptions: Transcription[]
+  currentTime: number
+  mode: 'list' | 'overlay'
+  onModeChange: (mode: 'list' | 'overlay') => void
+  onSelect: (time: number) => void
+  onExportSrt: () => void
+  onExportTxt: () => void
+  onNotify: (text: string) => void
+}) {
+  const [jobStatus, setJobStatus] = useState<{ status: string; stage: string; progress: number; jobId?: string; errorMessage?: string } | null>(null)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const startTimeRef = useRef<number | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const queryClient = useQueryClient()
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // 查询识别状态
+  const statusQuery = useQuery({
+    queryKey: ['transcriptionStatus', segmentId],
+    queryFn: () => api.getTranscriptionStatus(segmentId),
+    enabled: Boolean(segmentId),
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (data && (data.status === 'processing' || data.status === 'pending')) {
+        return 1000
+      }
+      return false
+    },
+  })
+
+  useEffect(() => {
+    if (statusQuery.data) {
+      setJobStatus(statusQuery.data)
+    }
+  }, [statusQuery.data])
+
+  // 计时器：处理中时更新已用时间
+  useEffect(() => {
+    if (jobStatus?.status === 'processing' || jobStatus?.status === 'pending') {
+      if (!startTimeRef.current) {
+        startTimeRef.current = Date.now()
+      }
+      const timer = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startTimeRef.current!) / 1000))
+      }, 1000)
+      return () => clearInterval(timer)
+    } else {
+      startTimeRef.current = null
+      setElapsed(0)
+    }
+  }, [jobStatus?.status])
+
+  // 字幕列表自动滚动到当前行
+  useEffect(() => {
+    if (!listRef.current || mode !== 'list') return
+    const activeItem = listRef.current.querySelector('.transcriptionPanelItem.active')
+    if (activeItem) {
+      activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [currentTime, mode])
+
+  function handleTranscribe() {
+    setIsTranscribing(true)
+    startTimeRef.current = Date.now()
+    api.triggerTranscription(segmentId).then(() => {
+      onNotify('语音识别任务已创建')
+      void queryClient.invalidateQueries({ queryKey: ['transcriptionStatus', segmentId] })
+      void queryClient.invalidateQueries({ queryKey: ['transcription', segmentId] })
+    }).catch((err) => {
+      onNotify(queryMessage(err, '创建识别任务失败'))
+    }).finally(() => {
+      setIsTranscribing(false)
+    })
+  }
+
+  function getStageText(stage: string, progress: number) {
+    if (progress < 0.1) return '🎵 正在提取音频...'
+    if (stage === 'extracting_audio') return '🎵 正在提取音频...'
+    if (stage === 'transcribing' || progress < 0.85) return '🗣️ 正在识别语音...'
+    if (stage === 'saving') return '📝 正在生成字幕...'
+    return '🗣️ 正在识别语音...'
+  }
+
+  function formatElapsed(seconds: number) {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
+
+  function getEstimatedRemaining() {
+    if (!jobStatus || jobStatus.progress <= 0.05) return null
+    const progress = jobStatus.progress
+    const estimatedTotal = elapsed / progress
+    const remaining = Math.max(0, Math.ceil(estimatedTotal - elapsed))
+    return remaining
+  }
+
+  function formatTranscriptionTime(seconds: number) {
+    const minutes = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const isProcessing = jobStatus && (jobStatus.status === 'processing' || jobStatus.status === 'pending')
+  const isCompleted = jobStatus && jobStatus.status === 'completed'
+  const isFailed = jobStatus && jobStatus.status === 'failed'
+  const hasTranscriptions = transcriptions.length > 0
+
+  // 空状态：未识别
+  if (!hasTranscriptions && !isProcessing && !isFailed) {
+    return (
+      <div className="transcriptionPanel">
+        <div className="transcriptionEmptyState">
+          <div className="transcriptionEmptyIcon">🎤</div>
+          <div className="transcriptionEmptyTitle">此片段尚未生成字幕</div>
+          <div className="transcriptionEmptyDesc">支持中文语音识别，约需 30 秒</div>
+          <button
+            className="transcriptionEmptyButton"
+            onClick={handleTranscribe}
+            disabled={isTranscribing}
+          >
+            {isTranscribing ? '创建中...' : '开始识别'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="transcriptionPanel">
+      {/* 处理中 */}
+      {isProcessing && (
+        <div className="transcriptionProcessing">
+          <div className="transcriptionProcessingHeader">
+            <span className="transcriptionProcessingTitle">🎤 语音识别</span>
+            <button
+              className="transcriptionCancelButton"
+              onClick={() => onNotify('暂不支持取消，请等待完成')}
+            >
+              取消
+            </button>
+          </div>
+          <div className="transcriptionProcessingStage">
+            {getStageText(jobStatus.stage, jobStatus.progress)}
+          </div>
+          <div className="transcriptionProgressBar">
+            <div
+              className="transcriptionProgressFill"
+              style={{ width: `${Math.max(5, (jobStatus.progress || 0) * 100)}%` }}
+            />
+          </div>
+          <div className="transcriptionProcessingMeta">
+            <span className="transcriptionProgressPercent">
+              {Math.round((jobStatus.progress || 0) * 100)}%
+            </span>
+            <span className="transcriptionProcessingTime">
+              已用 {formatElapsed(elapsed)}
+              {getEstimatedRemaining() !== null && ` · 预估剩余 ${formatElapsed(getEstimatedRemaining()!)}`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* 失败 */}
+      {isFailed && (
+        <div className="transcriptionFailed">
+          <div className="transcriptionFailedIcon">❌</div>
+          <div className="transcriptionFailedText">{jobStatus.errorMessage || '识别失败，请重试'}</div>
+          <button className="transcriptionRetryButton" onClick={handleTranscribe}>
+            重新识别
+          </button>
+        </div>
+      )}
+
+      {/* 完成：字幕列表 */}
+      {hasTranscriptions && (
+        <>
+          <div className="transcriptionPanelHeader">
+            <div className="transcriptionPanelTitle">
+              <span>🎤 字幕 · {transcriptions.length} 条</span>
+            </div>
+            <div className="transcriptionPanelActions">
+              <button
+                className={mode === 'overlay' ? 'active' : ''}
+                onClick={() => onModeChange('overlay')}
+                title="实时字幕模式"
+              >
+                字幕
+              </button>
+              <button
+                className={mode === 'list' ? 'active' : ''}
+                onClick={() => onModeChange('list')}
+                title="字幕列表模式"
+              >
+                列表
+              </button>
+              <button onClick={onExportSrt} title="导出 SRT 字幕文件">
+                导出 SRT
+              </button>
+              <button onClick={onExportTxt} title="导出 TXT 文本文件">
+                导出 TXT
+              </button>
+              <button
+                className="transcriptionPanelButton"
+                onClick={handleTranscribe}
+                disabled={isTranscribing}
+              >
+                重新识别
+              </button>
+            </div>
+          </div>
+          <div className="transcriptionPanelList" ref={listRef}>
+            {transcriptions.map((t) => (
+              <div
+                key={t.id}
+                className={`transcriptionPanelItem ${currentTime >= t.startTime && currentTime <= t.endTime ? 'active' : ''}`}
+                onClick={() => onSelect(t.startTime)}
+              >
+                <span className="transcriptionPanelItemTime">{formatTranscriptionTime(t.startTime)}</span>
+                <span className="transcriptionPanelItemText">{t.text}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function TranscriptionList({
   transcriptions,
   currentTime,
@@ -1603,6 +1875,7 @@ function SourceStage({
   onToggle,
   onScheduleChange,
   onSave,
+  onDelete,
 }: {
   sources: Source[]
   selectedId: string
@@ -1623,6 +1896,7 @@ function SourceStage({
   onToggle: (id: string, enabled: boolean) => void
   onScheduleChange: (id: string, minutes: number) => void
   onSave: (id: string, payload: { name: string; path: string }) => void
+  onDelete: (id: string) => void
 }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [editingId, setEditingId] = useState('')
@@ -1773,6 +2047,17 @@ function SourceStage({
                       <button className="iconAction primary" title="扫描" onClick={() => onScan(source.id)} disabled={scanning}>
                         <RefreshCw size={15} />
                       </button>
+                      <button
+                        className="iconAction danger"
+                        title="删除"
+                        onClick={() => {
+                          if (confirm(`确定要删除录像源 "${source.name}" 吗？\n\n这将删除该源下的所有片段数据，此操作不可撤销。`)) {
+                            onDelete(source.id)
+                          }
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
                     </>
                   )}
                 </div>
@@ -1798,6 +2083,26 @@ function SettingsStage({
   onRefresh: () => void
   busy: boolean
 }) {
+  const queryClient = useQueryClient()
+
+  const asrQuery = useQuery({
+    queryKey: ['asrSettings'],
+    queryFn: () => api.getAsrSettings(),
+  })
+
+  const asrMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => api.updateAsrSettings(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['asrSettings'] })
+    },
+  })
+
+  const asr = asrQuery.data
+
+  function handleAsrChange(key: string, value: string | boolean) {
+    asrMutation.mutate({ [key]: value })
+  }
+
   return (
     <section className="modulePanel">
       <div className="moduleHead">
@@ -1865,31 +2170,80 @@ function SettingsStage({
           </div>
         </div>
         <div className="settingsSection">
-          <div className="settingsSectionTitle">语音识别配置</div>
+          <div className="settingsSectionTitle">🎤 语音识别配置</div>
           <div className="settingsKV">
             <span>识别模型</span>
-            <strong>FunASR</strong>
+            <select
+              className="settingsSelect"
+              value={asr?.model ?? 'funasr'}
+              onChange={(e) => handleAsrChange('model', e.target.value)}
+            >
+              <option value="funasr">FunASR</option>
+              <option value="sensevoice">SenseVoice</option>
+              <option value="whisper">Whisper</option>
+            </select>
           </div>
           <div className="settingsKV">
             <span>模型大小</span>
-            <strong>Medium</strong>
+            <select
+              className="settingsSelect"
+              value={asr?.modelSize ?? 'medium'}
+              onChange={(e) => handleAsrChange('modelSize', e.target.value)}
+            >
+              <option value="tiny">Tiny (最快)</option>
+              <option value="base">Base</option>
+              <option value="medium">Medium (推荐)</option>
+              <option value="large">Large (最准)</option>
+            </select>
           </div>
           <div className="settingsKV">
             <span>运行设备</span>
-            <strong>自动</strong>
+            <select
+              className="settingsSelect"
+              value={asr?.device ?? 'auto'}
+              onChange={(e) => handleAsrChange('device', e.target.value)}
+            >
+              <option value="auto">自动</option>
+              <option value="cpu">CPU</option>
+              <option value="cuda">CUDA (GPU)</option>
+              <option value="mps">MPS (Apple)</option>
+            </select>
           </div>
           <div className="settingsKV">
             <span>识别语言</span>
-            <strong>中文</strong>
+            <select
+              className="settingsSelect"
+              value={asr?.language ?? 'zh'}
+              onChange={(e) => handleAsrChange('language', e.target.value)}
+            >
+              <option value="zh">中文</option>
+              <option value="en">英文</option>
+              <option value="ja">日文</option>
+            </select>
           </div>
           <div className="settingsKV">
             <span>自动识别</span>
-            <strong>关闭</strong>
+            <Switch.Root
+              className="switchRoot"
+              checked={asr?.autoTranscribe ?? false}
+              onCheckedChange={(checked) => handleAsrChange('autoTranscribe', checked)}
+            >
+              <Switch.Thumb className="switchThumb" />
+            </Switch.Root>
           </div>
           <div className="settingsKV">
             <span>热词</span>
-            <strong>-</strong>
+            <input
+              className="settingsInput"
+              type="text"
+              placeholder="用逗号分隔，如：会议,项目,进度"
+              value={asr?.hotwords ?? ''}
+              onChange={(e) => handleAsrChange('hotwords', e.target.value)}
+            />
           </div>
+          {asrMutation.isPending && (
+            <div className="settingsSaving">保存中...</div>
+          )}
         </div>
       </div>
     </section>
@@ -2172,6 +2526,197 @@ function LogsStage({
             <div className="moduleEmpty">暂无{activeLogLabel}</div>
           )}
         </div>
+      </div>
+    </section>
+  )
+}
+
+function SubtitleStage({
+  segments,
+  sourceNames,
+  onSelectSegment,
+  onNotify,
+}: {
+  segments: DisplaySegment[]
+  sourceNames: Map<string, string>
+  onSelectSegment: (segment: DisplaySegment) => void
+  onNotify: (text: string) => void
+}) {
+  const [transcriptionStatuses, setTranscriptionStatuses] = useState<Map<string, { status: string; progress: number }>>(new Map())
+  const [filter, setFilter] = useState<'all' | 'completed' | 'processing' | 'pending' | 'failed' | 'none'>('all')
+  const queryClient = useQueryClient()
+
+  // 批量获取识别状态
+  useEffect(() => {
+    if (segments.length === 0) return
+    const fetchStatuses = async () => {
+      const statuses = new Map<string, { status: string; progress: number }>()
+      await Promise.all(
+        segments.map(async (s) => {
+          try {
+            const status = await api.getTranscriptionStatus(s.id)
+            statuses.set(s.id, { status: status.status, progress: status.progress })
+          } catch {
+            // 忽略
+          }
+        })
+      )
+      setTranscriptionStatuses(statuses)
+    }
+    fetchStatuses()
+  }, [segments])
+
+  // 定时刷新处理中的任务
+  useEffect(() => {
+    const hasProcessing = Array.from(transcriptionStatuses.values()).some(
+      (s) => s.status === 'processing' || s.status === 'pending'
+    )
+    if (!hasProcessing) return
+    const timer = setInterval(async () => {
+      const statuses = new Map(transcriptionStatuses)
+      for (const [id, s] of statuses) {
+        if (s.status === 'processing' || s.status === 'pending') {
+          try {
+            const updated = await api.getTranscriptionStatus(id)
+            statuses.set(id, { status: updated.status, progress: updated.progress })
+          } catch {
+            // 忽略
+          }
+        }
+      }
+      setTranscriptionStatuses(statuses)
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [transcriptionStatuses])
+
+  function handleBatchTranscribe() {
+    const pendingSegments = segments.filter((s) => {
+      const status = transcriptionStatuses.get(s.id)
+      return !status || status.status === 'none'
+    })
+    if (pendingSegments.length === 0) {
+      onNotify('没有需要识别的片段')
+      return
+    }
+    pendingSegments.forEach((s) => {
+      api.triggerTranscription(s.id).catch(() => {})
+    })
+    onNotify(`已创建 ${pendingSegments.length} 个识别任务`)
+    setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ['transcriptionStatus'] })
+    }, 500)
+  }
+
+  const filteredSegments = segments.filter((s) => {
+    if (filter === 'all') return true
+    const status = transcriptionStatuses.get(s.id)
+    if (filter === 'none') return !status || status.status === 'none'
+    return status?.status === filter
+  })
+
+  const counts = {
+    all: segments.length,
+    completed: 0,
+    processing: 0,
+    pending: 0,
+    failed: 0,
+    none: 0,
+  }
+  for (const s of segments) {
+    const status = transcriptionStatuses.get(s.id)
+    if (!status || status.status === 'none') counts.none++
+    else if (status.status === 'completed') counts.completed++
+    else if (status.status === 'processing') counts.processing++
+    else if (status.status === 'pending') counts.pending++
+    else if (status.status === 'failed') counts.failed++
+  }
+
+  function formatDateTime(iso: string) {
+    if (!iso) return '-'
+    const d = new Date(iso)
+    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`
+  }
+
+  function getStatusBadge(status?: string) {
+    switch (status) {
+      case 'completed': return <span className="subtitleBadge completed">✅ 已完成</span>
+      case 'processing': return <span className="subtitleBadge processing">🔄 处理中</span>
+      case 'pending': return <span className="subtitleBadge pending">⏳ 等待中</span>
+      case 'failed': return <span className="subtitleBadge failed">❌ 失败</span>
+      default: return <span className="subtitleBadge none">⬜ 未识别</span>
+    }
+  }
+
+  return (
+    <section className="modulePanel">
+      <div className="moduleHead">
+        <div>
+          <div className="moduleTitle">字幕任务</div>
+          <div className="moduleMeta">
+            已完成 {counts.completed} · 处理中 {counts.processing + counts.pending} · 未识别 {counts.none} · 共 {counts.all}
+          </div>
+        </div>
+        <div className="subtitleStageActions">
+          <button className="subtitleBatchButton" onClick={handleBatchTranscribe}>
+            🎤 全部识别
+          </button>
+          <button className="refreshButton" onClick={() => void queryClient.invalidateQueries({ queryKey: ['transcriptionStatus'] })}>
+            <RefreshCw size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* 筛选标签 */}
+      <div className="subtitleFilters">
+        {(['all', 'completed', 'processing', 'pending', 'failed', 'none'] as const).map((f) => (
+          <button
+            key={f}
+            className={`subtitleFilter ${filter === f ? 'active' : ''}`}
+            onClick={() => setFilter(f)}
+          >
+            {f === 'all' && `全部 (${counts.all})`}
+            {f === 'completed' && `已完成 (${counts.completed})`}
+            {f === 'processing' && `处理中 (${counts.processing})`}
+            {f === 'pending' && `等待中 (${counts.pending})`}
+            {f === 'failed' && `失败 (${counts.failed})`}
+            {f === 'none' && `未识别 (${counts.none})`}
+          </button>
+        ))}
+      </div>
+
+      {/* 任务列表 */}
+      <div className="subtitleTaskList">
+        {filteredSegments.length === 0 ? (
+          <div className="subtitleEmpty">没有匹配的片段</div>
+        ) : (
+          filteredSegments.map((segment) => {
+            const tStatus = transcriptionStatuses.get(segment.id)
+            return (
+              <div
+                key={segment.id}
+                className="subtitleTaskItem"
+                onClick={() => onSelectSegment(segment)}
+              >
+                <div className="subtitleTaskInfo">
+                  <span className="subtitleTaskName">
+                    {sourceNames?.get(segment.id) ?? segment.filename ?? '未知'}
+                  </span>
+                  <span className="subtitleTaskTime">
+                    {formatDateTime(segment.startTime)}
+                  </span>
+                </div>
+                <div className="subtitleTaskStatus">
+                  {getStatusBadge(tStatus?.status)}
+                  {(tStatus?.status === 'processing' || tStatus?.status === 'pending') && (
+                    <span className="subtitleTaskProgress">
+                      {Math.round((tStatus.progress || 0) * 100)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
     </section>
   )
@@ -2938,47 +3483,41 @@ function ClipGrid({
     setContextMenu(null)
   }
 
-  function getTranscriptionStatusIcon(segmentId: string) {
-    const status = transcriptionStatuses.get(segmentId)
-    switch (status) {
-      case 'completed':
-        return <span className="transcriptionStatus completed" title="已识别">✓</span>
-      case 'processing':
-        return <span className="transcriptionStatus processing" title="识别中">⟳</span>
-      case 'pending':
-        return <span className="transcriptionStatus pending" title="等待识别">...</span>
-      case 'failed':
-        return <span className="transcriptionStatus failed" title="识别失败">✗</span>
-      default:
-        return null
-    }
-  }
 
   if (!segments.length) return <div className="emptyDock">暂无录像片段</div>
 
   return (
     <>
       <div className="clipGrid">
-        {segments.map((segment) => (
-          <button
-            key={segment.id}
-            className={segment.id === selectedId ? 'clipCard selected' : 'clipCard'}
-            onClick={() => onSelect(segment)}
-            onContextMenu={(e) => handleContextMenu(e, segment)}
-          >
-            <div className="clipPoster">
-              {segment.thumbnailUrl && <img src={segment.thumbnailUrl} loading="lazy" decoding="async" alt="" />}
-              <Play size={22} />
-            </div>
-            <span className="clipLabel">
-              {sourceNames?.get(segment.sourceId) ?? sourceName}
-              <br />
-              {formatClipDateTime(segment.startTime)}
-            </span>
-            <span className="confidence">{segment.playable ? '可播放' : '转码'}</span>
-            {getTranscriptionStatusIcon(segment.id)}
-          </button>
-        ))}
+        {segments.map((segment) => {
+          const tStatus = transcriptionStatuses.get(segment.id)
+          return (
+            <button
+              key={segment.id}
+              className={segment.id === selectedId ? 'clipCard selected' : 'clipCard'}
+              onClick={() => onSelect(segment)}
+              onContextMenu={(e) => handleContextMenu(e, segment)}
+            >
+              <div className="clipPoster">
+                {segment.thumbnailUrl && <img src={segment.thumbnailUrl} loading="lazy" decoding="async" alt="" />}
+                <Play size={22} />
+              </div>
+              <span className="clipLabel">
+                {sourceNames?.get(segment.sourceId) ?? sourceName}
+                <br />
+                {formatClipDateTime(segment.startTime)}
+              </span>
+              <span className="confidence">{segment.playable ? '可播放' : '转码'}</span>
+              <div className={`clipSubtitleBar ${tStatus || 'none'}`}>
+                {tStatus === 'completed' && <><Check size={12} /> 已识别</>}
+                {tStatus === 'processing' && <><RotateCw size={12} className="spin" /> 识别中</>}
+                {tStatus === 'pending' && <>⏳ 等待中</>}
+                {tStatus === 'failed' && <><X size={12} /> 失败</>}
+                {(!tStatus || tStatus === 'none') && <>未识别</>}
+              </div>
+            </button>
+          )
+        })}
       </div>
       {hasMore && (
         <button className="clipGridMore" onClick={onLoadMore} disabled={loadingMore}>
@@ -2990,6 +3529,7 @@ function ClipGrid({
           x={contextMenu.x}
           y={contextMenu.y}
           segment={contextMenu.segment}
+          transcriptionStatus={transcriptionStatuses.get(contextMenu.segment.id)}
           onTranscribe={onTranscribe}
           onClose={handleCloseContextMenu}
         />
@@ -3002,12 +3542,14 @@ function ClipContextMenu({
   x,
   y,
   segment,
+  transcriptionStatus,
   onTranscribe,
   onClose,
 }: {
   x: number
   y: number
   segment: DisplaySegment
+  transcriptionStatus?: string
   onTranscribe?: (segmentId: string) => void
   onClose: () => void
 }) {
@@ -3023,15 +3565,38 @@ function ClipContextMenu({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [onClose])
 
+  const isProcessing = transcriptionStatus === 'processing' || transcriptionStatus === 'pending'
+  const isCompleted = transcriptionStatus === 'completed'
+  const isFailed = transcriptionStatus === 'failed'
+
   return (
     <div
       ref={menuRef}
       className="clipContextMenu"
       style={{ left: x, top: y }}
     >
-      <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>
-        🔍 识别语音
-      </button>
+      {!isCompleted && !isProcessing && (
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>
+          🎤 开始识别
+        </button>
+      )}
+      {isProcessing && (
+        <button disabled>
+          ⏳ 识别中...
+        </button>
+      )}
+      {isCompleted && (
+        <>
+          <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>
+            🔄 重新识别
+          </button>
+        </>
+      )}
+      {isFailed && (
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>
+          ❌ 重新识别
+        </button>
+      )}
       <button onClick={() => { window.open(`/api/segments/${segment.id}/stream`, '_blank'); onClose() }}>
         📹 在新窗口播放
       </button>

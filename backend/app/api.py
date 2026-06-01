@@ -79,6 +79,17 @@ def patch_source(
     return SourceCreateOut(**source_to_out(db, source).model_dump(), scanJobId=None)
 
 
+@router.delete("/sources/{source_id}")
+def delete_source(
+    source_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    """删除录像源"""
+    from app.services.sources import delete_source as delete_source_fn
+    delete_source_fn(db, source_id)
+    return {"deleted": True}
+
+
 @router.post("/sources/{source_id}/scan", response_model=ScanQueuedOut)
 def post_source_scan(
     source_id: str,
@@ -327,6 +338,22 @@ def system_logs(lines: int = Query(default=200, ge=1, le=2000)) -> dict:
         return {"path": str(path), "lines": []}
     content = path.read_text(encoding="utf-8", errors="replace").splitlines()
     return {"path": str(path), "lines": content[-lines:]}
+
+
+@router.get("/settings/asr")
+def get_asr_settings_api() -> dict:
+    from app.services.asr import get_asr_config
+    return get_asr_config()
+
+
+@router.patch("/settings/asr")
+def update_asr_settings_api(payload: dict) -> dict:
+    from app.services.asr import update_asr_config, get_asr_service
+    result = update_asr_config(payload)
+    # 如果模型配置变了，清除已加载的模型
+    if any(key in payload for key in ("model", "modelSize", "device")):
+        get_asr_service().invalidate_model()
+    return result
 
 
 # 语音识别相关端点

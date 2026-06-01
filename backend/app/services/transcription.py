@@ -61,7 +61,8 @@ def run_transcription_job(job_id: str) -> None:
 
         # 更新状态为处理中
         job.status = "processing"
-        job.progress = 0.0
+        job.stage = "extracting_audio"
+        job.progress = 0.05
         job.updated_at = now_iso()
         db.commit()
 
@@ -75,12 +76,22 @@ def run_transcription_job(job_id: str) -> None:
         if not video_path.exists():
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
-        # 执行识别
+        # 提取音频
         asr_service = get_asr_service()
-        asr_segments = asr_service.process_video(str(video_path))
+        audio_path = asr_service.extract_audio(str(video_path))
 
-        # 更新进度
-        job.progress = 0.5
+        # 更新进度：音频提取完成
+        job.stage = "transcribing"
+        job.progress = 0.15
+        job.updated_at = now_iso()
+        db.commit()
+
+        # 执行识别
+        asr_segments = asr_service.transcribe(audio_path)
+
+        # 更新进度：识别完成
+        job.stage = "saving"
+        job.progress = 0.85
         job.updated_at = now_iso()
         db.commit()
 
@@ -97,8 +108,16 @@ def run_transcription_job(job_id: str) -> None:
             )
             db.add(transcription)
 
+        # 清理临时音频文件
+        if audio_path and Path(audio_path).exists():
+            try:
+                Path(audio_path).unlink()
+            except Exception:
+                pass
+
         # 更新任务状态
         job.status = "completed"
+        job.stage = ""
         job.progress = 1.0
         job.updated_at = now_iso()
         db.commit()
@@ -200,6 +219,7 @@ def get_transcription_status(db: Session, segment_id: str) -> dict:
 
     return {
         "status": job.status,
+        "stage": job.stage or "",
         "progress": job.progress,
         "jobId": job.id,
         "errorMessage": job.error_message,
@@ -227,6 +247,7 @@ def _job_to_out(job: TranscriptionJob) -> dict:
         "id": job.id,
         "segmentId": job.segment_id,
         "status": job.status,
+        "stage": job.stage or "",
         "progress": job.progress,
         "errorMessage": job.error_message,
         "createdAt": job.created_at,

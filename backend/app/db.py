@@ -43,6 +43,7 @@ def init_db() -> None:
                 text("ALTER TABLE scan_jobs ADD COLUMN trigger VARCHAR NOT NULL DEFAULT 'manual'")
             )
         _ensure_transcription_indexes(connection)
+        _ensure_transcription_job_stage(connection)
 
 
 def _migrate_sources_unique_name(connection) -> None:
@@ -106,6 +107,13 @@ def _ensure_transcription_indexes(connection) -> None:
     job_indexes = {row[1] for row in connection.execute(text("PRAGMA index_list(transcription_jobs)"))}
     if "idx_transcription_job_segment" not in job_indexes:
         connection.execute(text("CREATE INDEX IF NOT EXISTS idx_transcription_job_segment ON transcription_jobs(segment_id)"))
+
+
+def _ensure_transcription_job_stage(connection) -> None:
+    """确保 transcription_jobs 表有 stage 字段"""
+    columns = {row[1] for row in connection.execute(text("PRAGMA table_info(transcription_jobs)"))}
+    if "stage" not in columns:
+        connection.execute(text("ALTER TABLE transcription_jobs ADD COLUMN stage VARCHAR NOT NULL DEFAULT ''"))
 
 
 def get_db() -> Generator[Session, None, None]:
