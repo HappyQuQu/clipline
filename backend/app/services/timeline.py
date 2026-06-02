@@ -8,6 +8,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.settings_store import get_effective
 from app.models import Source, VideoSegment
 from app.schemas import TimelineGapOut, TimelineResponse, TimelineSegmentOut
 from app.services.common import parse_iso
@@ -15,7 +16,7 @@ from app.services.thumbnails import thumbnail_url
 
 
 def get_day_bounds(date_value: str) -> tuple[datetime, datetime]:
-    tz = ZoneInfo(get_settings().timezone)
+    tz = ZoneInfo(get_effective("timezone", "Asia/Shanghai"))
     day = datetime.fromisoformat(date_value).date()
     start = datetime.combine(day, time.min, tz)
     end = start + timedelta(days=1)
@@ -70,7 +71,7 @@ def build_timeline(db: Session, source_id: str, date_value: str) -> TimelineResp
     return TimelineResponse(
         sourceId=source_id,
         date=date_value,
-        timezone=get_settings().timezone,
+        timezone=get_effective("timezone", "Asia/Shanghai"),
         segments=[
             TimelineSegmentOut(
                 id=segment.id,

@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.settings_store import get_effective, update_settings
 from app.db import get_db
 from app.models import ExportJob, ScanJob, VideoSegment
 from app.schemas import (
@@ -310,8 +311,8 @@ def system_status(db: Session = Depends(get_db)) -> dict:
         "ffprobe": {"available": shutil.which("ffprobe") is not None},
         "database": {"available": settings.db_path.exists(), "path": str(settings.db_path)},
         "logging": {
-            "level": settings.log_level,
-            "format": settings.log_format,
+            "level": get_effective("log_level", "INFO"),
+            "format": get_effective("log_format", "text"),
             "file": str(settings.resolved_log_file),
         },
         "recordingsRoot": {
@@ -346,6 +347,53 @@ def get_asr_settings_api() -> dict:
     return get_asr_config()
 
 
+@router.get("/settings")
+def get_all_settings() -> dict:
+    """获取所有有效设置（按类别分组）"""
+    from app.services.asr import get_asr_config
+    settings = get_settings()
+    return {
+        "recordings": {
+            "recordings_root": str(settings.recordings_root_path),
+            "scan_interval_seconds": int(get_effective("scan_interval_seconds", 300)),
+            "skip_recent_seconds": int(get_effective("skip_recent_seconds", 30)),
+            "timezone": get_effective("timezone", "Asia/Shanghai"),
+        },
+        "export": {
+            "export_ttl_hours": int(get_effective("export_ttl_hours", 24)),
+            "max_export_minutes": int(get_effective("max_export_minutes", 30)),
+            "max_concurrent_exports": int(get_effective("max_concurrent_exports", 1)),
+            "thumbnail_mode": get_effective("thumbnail_mode", "middle"),
+        },
+        "asr": get_asr_config(),
+        "logs": {
+            "log_level": get_effective("log_level", "INFO"),
+            "log_format": get_effective("log_format", "text"),
+            "log_file": str(settings.resolved_log_file),
+        },
+    }
+
+
+@router.patch("/settings")
+def update_all_settings(payload: dict) -> dict:
+    """批量更新设置"""
+    try:
+        update_settings(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    # 如果 ASR 模型配置变了，清除已加载的模型
+    asr_model_keys = {"asr_model", "asr_model_size", "asr_device"}
+    if asr_model_keys & set(payload.keys()):
+        from app.services.asr import get_asr_service
+        get_asr_service().invalidate_model()
+    # 如果日志配置变了，立即生效
+    log_keys = {"log_level", "log_format"}
+    if log_keys & set(payload.keys()):
+        from app.core.logging import reconfigure_logging
+        reconfigure_logging()
+    return get_all_settings()
+
+
 @router.patch("/settings/asr")
 def update_asr_settings_api(payload: dict) -> dict:
     from app.services.asr import update_asr_config, get_asr_service
@@ -354,6 +402,44 @@ def update_asr_settings_api(payload: dict) -> dict:
     if any(key in payload for key in ("model", "modelSize", "device")):
         get_asr_service().invalidate_model()
     return result
+
+
+# ASR 模型管理端点
+
+
+@router.get("/settings/asr/models")
+def list_asr_models() -> dict:
+    """列出所有 ASR 模型及下载状态"""
+    from app.services.model_manager import list_models
+    return {"models": list_models()}
+
+
+@router.post("/settings/asr/models/{model_id}/download")
+def download_asr_model(model_id: str) -> dict:
+    """触发模型下载"""
+    from app.services.model_manager import download_model
+    try:
+        return download_model(model_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/settings/asr/models/{model_id}/status")
+def get_asr_model_status(model_id: str) -> dict:
+    """获取模型下载状态"""
+    from app.services.model_manager import get_download_status
+    return get_download_status(model_id)
+
+
+@router.delete("/settings/asr/models/{model_id}")
+def delete_asr_model(model_id: str) -> dict:
+    """删除模型缓存"""
+    from app.services.model_manager import delete_model
+    try:
+        deleted = delete_model(model_id)
+        return {"deleted": deleted}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # 语音识别相关端点

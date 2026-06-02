@@ -1564,6 +1564,146 @@ button:disabled {
   padding-top: 4px;
 }
 
+/* ── Settings Tab Bar ── */
+
+.settingsTabBar {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  background: #f1f4f7;
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 16px;
+}
+
+.settingsTabItem {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #7b8794;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settingsTabItem:hover {
+  color: #4b5563;
+}
+
+.settingsTabItem.active {
+  background: #ffffff;
+  color: #2f6df6;
+  box-shadow: 0 1px 3px rgb(31 41 51 / 10%);
+}
+
+/* ── ASR Model List ── */
+
+.modelList {
+  display: grid;
+  gap: 8px;
+}
+
+.modelRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px 80px 100px;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  border: 1px solid #e4e8ed;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.modelBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.modelBadge.downloaded {
+  background: #e6f9ed;
+  color: #1a7f37;
+}
+
+.modelBadge.not-downloaded {
+  background: #f1f4f7;
+  color: #7b8794;
+}
+
+.modelBadge.downloading {
+  background: #edf4ff;
+  color: #2f6df6;
+}
+
+/* ── Settings Action Button ── */
+
+.settingsActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #e4e8ed;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settingsActionBtn:hover:not(:disabled) {
+  border-color: #2f6df6;
+  color: #2f6df6;
+}
+
+.settingsActionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settingsActionBtn.danger:hover:not(:disabled) {
+  border-color: #e53935;
+  color: #e53935;
+}
+
+/* ── Settings Note ── */
+
+.settingsNote {
+  color: #b35416;
+  font-size: 13px;
+}
+
+/* ── Settings Error ── */
+
+.settingsError {
+  grid-column: 1 / -1;
+  text-align: right;
+  font-size: 12px;
+  color: #e53935;
+  font-weight: 600;
+  padding-top: 4px;
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 1100px) {
+  .settingsTabBar {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 820px) {
+  .settingsTabBar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .logLayout {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);

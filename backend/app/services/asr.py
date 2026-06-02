@@ -9,32 +9,43 @@ from pathlib import Path
 from typing import TypedDict
 
 from app.core.config import get_settings
+from app.core.settings_store import get_effective, update_settings
 
 logger = logging.getLogger(__name__)
 
-# 运行时 ASR 配置（内存存储，重启后恢复默认值）
-_asr_runtime_overrides: dict[str, str | bool] = {}
+# camelCase (前端) → snake_case (settings_store) 映射
+_ASR_KEY_MAP = {
+    "model": "asr_model",
+    "modelSize": "asr_model_size",
+    "device": "asr_device",
+    "language": "asr_language",
+    "autoTranscribe": "asr_auto_transcribe",
+    "hotwords": "asr_hotwords",
+}
+_ASR_KEY_REVERSE = {v: k for k, v in _ASR_KEY_MAP.items()}
 
 
 def get_asr_config() -> dict:
-    """获取 ASR 配置（优先使用运行时配置）"""
-    settings = get_settings()
+    """获取 ASR 配置（从 settings_store 读取）"""
     return {
-        "model": _asr_runtime_overrides.get("model", settings.asr_model),
-        "modelSize": _asr_runtime_overrides.get("modelSize", settings.asr_model_size),
-        "device": _asr_runtime_overrides.get("device", settings.asr_device),
-        "language": _asr_runtime_overrides.get("language", settings.asr_language),
-        "autoTranscribe": _asr_runtime_overrides.get("autoTranscribe", settings.asr_auto_transcribe),
-        "hotwords": _asr_runtime_overrides.get("hotwords", settings.asr_hotwords),
+        "model": get_effective("asr_model", "funasr"),
+        "modelSize": get_effective("asr_model_size", "medium"),
+        "device": get_effective("asr_device", "auto"),
+        "language": get_effective("asr_language", "zh"),
+        "autoTranscribe": get_effective("asr_auto_transcribe", False),
+        "hotwords": get_effective("asr_hotwords", ""),
     }
 
 
 def update_asr_config(updates: dict) -> dict:
-    """更新运行时 ASR 配置"""
-    allowed_keys = {"model", "modelSize", "device", "language", "autoTranscribe", "hotwords"}
+    """更新 ASR 配置（写入 settings_store）"""
+    store_updates = {}
     for key, value in updates.items():
-        if key in allowed_keys:
-            _asr_runtime_overrides[key] = value
+        store_key = _ASR_KEY_MAP.get(key)
+        if store_key:
+            store_updates[store_key] = value
+    if store_updates:
+        update_settings(store_updates)
     return get_asr_config()
 
 
@@ -267,7 +278,7 @@ class ASRService:
 
     def _transcribe_whisper(self, model, audio_path: str) -> list[TranscriptionSegment]:
         """Whisper 识别"""
-        result = model.transcribe(audio_path, language=self.settings.asr_language)
+        result = model.transcribe(audio_path, language=get_effective("asr_language", "zh"))
 
         segments = []
         for segment in result.get("segments", []):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import BackgroundTasks, HTTPException
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.settings_store import get_effective
 from app.db import SessionLocal
 from app.models import ExportJob, Source, VideoSegment
 from app.schemas import ExportCreate, ExportJobOut
@@ -71,7 +72,7 @@ def create_export_job(db: Session, payload: ExportCreate, background_tasks: Back
     end = parse_iso(payload.endTime)
     if start >= end:
         raise HTTPException(status_code=400, detail="startTime must be before endTime")
-    if end - start > timedelta(minutes=get_settings().max_export_minutes):
+    if end - start > timedelta(minutes=int(get_effective("max_export_minutes", 30))):
         raise HTTPException(status_code=400, detail="Export range is too long")
     if payload.mode not in {"fast", "accurate"}:
         raise HTTPException(status_code=400, detail="mode must be fast or accurate")
@@ -82,6 +83,8 @@ def create_export_job(db: Session, payload: ExportCreate, background_tasks: Back
 
     has_gaps, gap_duration = calculate_export_gaps(segments, start, end)
     timestamp = now_iso()
+    ttl_hours = int(get_effective("export_ttl_hours", 24))
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=ttl_hours)).isoformat() if ttl_hours > 0 else None
     job = ExportJob(
         id=make_id("exp"),
         source_id=source.id,
@@ -94,6 +97,7 @@ def create_export_job(db: Session, payload: ExportCreate, background_tasks: Back
         gap_duration_seconds=gap_duration,
         created_at=timestamp,
         updated_at=timestamp,
+        expires_at=expires_at,
     )
     db.add(job)
     db.commit()
@@ -275,4 +279,39 @@ def run_ffmpeg(command: list[str]) -> None:
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "ffmpeg failed")
+
+
+def cleanup_expired_exports() -> int:
+    """删除过期的导出任务和文件，返回清理数量。"""
+    from app.models import ExportJob as ExportJobModel
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        expired = db.scalars(
+            select(ExportJobModel).where(
+                ExportJobModel.expires_at.is_not(None),
+                ExportJobModel.expires_at <= now,
+            )
+        ).all()
+
+        count = 0
+        for job in expired:
+            # 删除输出文件
+            if job.output_path:
+                output = Path(job.output_path)
+                if output.exists():
+                    try:
+                        output.unlink()
+                    except OSError as exc:
+                        logger.warning("failed to delete export file %s: %s", output, exc)
+            db.delete(job)
+            count += 1
+
+        if count:
+            db.commit()
+            logger.info("cleaned up %d expired export(s)", count)
+        return count
+    finally:
+        db.close()
 
