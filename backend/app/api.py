@@ -351,7 +351,7 @@ def update_asr_settings_api(payload: dict) -> dict:
     from app.services.asr import update_asr_config, get_asr_service
     result = update_asr_config(payload)
     # 如果模型配置变了，清除已加载的模型
-    if any(key in payload for key in ("model", "modelSize", "device")):
+    if any(key in payload for key in ("model", "model_size", "device")):
         get_asr_service().invalidate_model()
     return result
 

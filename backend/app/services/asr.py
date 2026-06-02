@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import tempfile
+import uuid
 from pathlib import Path
 from typing import TypedDict
 
@@ -21,20 +21,29 @@ def get_asr_config() -> dict:
     settings = get_settings()
     return {
         "model": _asr_runtime_overrides.get("model", settings.asr_model),
-        "modelSize": _asr_runtime_overrides.get("modelSize", settings.asr_model_size),
+        "model_size": _asr_runtime_overrides.get("model_size", settings.asr_model_size),
         "device": _asr_runtime_overrides.get("device", settings.asr_device),
         "language": _asr_runtime_overrides.get("language", settings.asr_language),
-        "autoTranscribe": _asr_runtime_overrides.get("autoTranscribe", settings.asr_auto_transcribe),
+        "auto_transcribe": _asr_runtime_overrides.get("auto_transcribe", settings.asr_auto_transcribe),
         "hotwords": _asr_runtime_overrides.get("hotwords", settings.asr_hotwords),
+        "audio_sample_rate": _asr_runtime_overrides.get("audio_sample_rate", settings.asr_audio_sample_rate),
+        "max_concurrent": settings.asr_max_concurrent,
+        "timeout_seconds": settings.asr_timeout_seconds,
     }
 
 
 def update_asr_config(updates: dict) -> dict:
     """更新运行时 ASR 配置"""
-    allowed_keys = {"model", "modelSize", "device", "language", "autoTranscribe", "hotwords"}
+    allowed_keys = {"model", "model_size", "device", "language", "auto_transcribe", "hotwords", "audio_sample_rate"}
     for key, value in updates.items():
         if key in allowed_keys:
             _asr_runtime_overrides[key] = value
+
+    # 如果更新了 max_concurrent，需要同步到 transcription 模块
+    if "max_concurrent" in updates:
+        from app.services.transcription import set_max_concurrent_transcriptions
+        set_max_concurrent_transcriptions(int(updates["max_concurrent"]))
+
     return get_asr_config()
 
 
@@ -71,11 +80,11 @@ class ASRService:
         """获取 ASR 配置（优先使用运行时配置）"""
         return get_asr_config()
 
-    def _load_model(self):
-        """延迟加载 ASR 模型"""
+    def _load_model(self, max_retries: int = 2):
+        """延迟加载 ASR 模型，支持重试"""
         config = self._get_runtime_asr_config()
         model_type = config["model"]
-        model_size = config["modelSize"]
+        model_size = config["model_size"]
         device = config["device"]
 
         # 如果模型类型或大小变了，需要重新加载
@@ -85,28 +94,35 @@ class ASRService:
             # 配置变了，清除旧模型
             self.invalidate_model()
 
-        logger.info(f"Loading ASR model: {model_type} ({model_size}) on {device}")
+        last_error = None
+        for attempt in range(max_retries + 1):
+            logger.info(f"Loading ASR model: {model_type} ({model_size}) on {device} (attempt {attempt + 1})")
 
-        try:
-            if model_type == "funasr":
-                self._model = self._load_funasr(model_size, device)
-            elif model_type == "sensevoice":
-                self._model = self._load_sensevoice(model_size, device)
-            elif model_type == "whisper":
-                self._model = self._load_whisper(model_size, device)
-            else:
-                raise ValueError(f"Unknown ASR model: {model_type}")
+            try:
+                if model_type == "funasr":
+                    self._model = self._load_funasr(model_size, device)
+                elif model_type == "sensevoice":
+                    self._model = self._load_sensevoice(model_size, device)
+                elif model_type == "whisper":
+                    self._model = self._load_whisper(model_size, device)
+                else:
+                    raise ValueError(f"Unknown ASR model: {model_type}")
 
-            self._model_loaded = True
-            self._current_model_type = model_type
-            self._current_model_size = model_size
-            logger.info(f"ASR model loaded successfully: {model_type}")
-            return self._model
+                self._model_loaded = True
+                self._current_model_type = model_type
+                self._current_model_size = model_size
+                logger.info(f"ASR model loaded successfully: {model_type}")
+                return self._model
 
-        except Exception as e:
-            logger.error(f"Failed to load ASR model: {e}")
-            self._model_loaded = False
-            raise
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Failed to load ASR model (attempt {attempt + 1}): {e}")
+                if attempt < max_retries:
+                    import time
+                    time.sleep(1)  # 短暂等待后重试
+
+        self._model_loaded = False
+        raise last_error
 
     def _load_funasr(self, model_size: str, device: str):
         """加载 FunASR 模型"""
@@ -171,14 +187,19 @@ class ASRService:
     def extract_audio(self, video_path: str) -> str:
         """FFmpeg 提取音频"""
         settings = get_settings()
-        audio_path = settings.tmp_path / f"audio_{Path(video_path).stem}.wav"
+        config = self._get_runtime_asr_config()
+        sample_rate = config.get("audio_sample_rate", 16000)
+
+        # 使用唯一标识符避免并发冲突
+        unique_id = uuid.uuid4().hex[:8]
+        audio_path = settings.tmp_path / f"audio_{Path(video_path).stem}_{unique_id}.wav"
 
         cmd = [
             "ffmpeg", "-y",
             "-i", video_path,
             "-vn",
             "-acodec", "pcm_s16le",
-            "-ar", "16000",
+            "-ar", str(sample_rate),
             "-ac", "1",
             str(audio_path)
         ]
@@ -221,24 +242,23 @@ class ASRService:
 
     def _transcribe_funasr(self, model, audio_path: str, hotwords: str | None) -> list[TranscriptionSegment]:
         """FunASR 识别"""
+        # 转换热词格式：逗号分隔 -> 空格分隔（FunASR 格式）
+        formatted_hotwords = None
+        if hotwords:
+            formatted_hotwords = " ".join(hotwords.split(","))
+
         result = model.generate(
             input=audio_path,
-            hotword=hotwords,
+            hotword=formatted_hotwords,
         )
 
-        import sys
-        print(f"[ASR DEBUG] result type: {type(result)}, length: {len(result) if result else 0}", file=sys.stderr, flush=True)
-        if result:
-            for i, item in enumerate(result[:5]):
-                print(f"[ASR DEBUG] result[{i}]: {item}", file=sys.stderr, flush=True)
+        logger.debug(f"FunASR result: {len(result) if result else 0} items")
 
         segments = []
         if result and len(result) > 0:
             for item in result:
                 text = item.get("text", "") if isinstance(item, dict) else str(item)
                 timestamp = item.get("timestamp", []) if isinstance(item, dict) else []
-
-                print(f"[ASR DEBUG] text='{text}', timestamp={timestamp}", file=sys.stderr, flush=True)
 
                 if not text:
                     continue
@@ -262,7 +282,7 @@ class ASRService:
                         confidence=0.9,
                     ))
 
-        print(f"[ASR DEBUG] parsed {len(segments)} segments", file=sys.stderr, flush=True)
+        logger.debug(f"Parsed {len(segments)} segments")
         return segments
 
     def _transcribe_whisper(self, model, audio_path: str) -> list[TranscriptionSegment]:
@@ -280,17 +300,35 @@ class ASRService:
 
         return segments
 
-    def process_video(self, video_path: str) -> list[TranscriptionSegment]:
-        """处理单个视频，返回识别结果"""
+    def process_video(self, video_path: str, timeout: int = 600) -> list[TranscriptionSegment]:
+        """处理单个视频，返回识别结果
+
+        Args:
+            video_path: 视频文件路径
+            timeout: 超时时间（秒），默认 10 分钟
+        """
+        import signal
+
         audio_path = None
         try:
             # 提取音频
             audio_path = self.extract_audio(video_path)
 
-            # 识别
-            segments = self.transcribe(audio_path)
+            # 设置超时
+            def timeout_handler(signum, frame):
+                raise TimeoutError(f"Transcription timed out after {timeout} seconds")
 
-            return segments
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout)
+
+            try:
+                # 识别
+                segments = self.transcribe(audio_path)
+                return segments
+            finally:
+                # 恢复信号处理
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
 
         finally:
             # 清理临时音频文件

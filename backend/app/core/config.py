@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     asr_language: str = "zh"
     asr_auto_transcribe: bool = False
     asr_hotwords: str = ""
+    asr_audio_sample_rate: int = 16000
+    asr_max_concurrent: int = 2
+    asr_timeout_seconds: int = 600
 
     @property
     def data_path(self) -> Path:

@@ -14,6 +14,7 @@ from app.core.logging import RequestLoggingMiddleware, get_logger, setup_logging
 from app.api import router as api_router
 from app.db import init_db
 from app.services.scheduler import scheduled_scan_loop
+from app.services.transcription import set_max_concurrent_transcriptions
 
 setup_logging()
 logger = get_logger(__name__)
@@ -23,6 +24,11 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     init_db()
+
+    # 初始化 ASR 并发控制
+    set_max_concurrent_transcriptions(settings.asr_max_concurrent)
+    logger.info(f"ASR max concurrent transcriptions: {settings.asr_max_concurrent}")
+
     stop_event = asyncio.Event()
     scheduler_task = asyncio.create_task(scheduled_scan_loop(stop_event))
     logger.info(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 
 from sqlalchemy import select, func
@@ -15,6 +16,25 @@ from app.services.common import make_id, now_iso
 from app.services.asr import get_asr_service
 
 logger = logging.getLogger(__name__)
+
+# 并发控制：限制同时运行的识别任务数
+_max_concurrent_transcriptions = 2
+_transcription_semaphore = threading.Semaphore(_max_concurrent_transcriptions)
+_running_jobs: set[str] = set()
+_running_jobs_lock = threading.Lock()
+
+
+def set_max_concurrent_transcriptions(max_count: int):
+    """设置最大并发识别任务数"""
+    global _max_concurrent_transcriptions, _transcription_semaphore
+    _max_concurrent_transcriptions = max_count
+    _transcription_semaphore = threading.Semaphore(max_count)
+
+
+def get_running_jobs_count() -> int:
+    """获取当前运行中的任务数"""
+    with _running_jobs_lock:
+        return len(_running_jobs)
 
 
 def create_transcription_job(db: Session, segment_id: str) -> TranscriptionJob:
@@ -51,7 +71,16 @@ def create_transcription_job(db: Session, segment_id: str) -> TranscriptionJob:
 
 
 def run_transcription_job(job_id: str) -> None:
-    """运行识别任务（后台执行）"""
+    """运行识别任务（后台执行），带并发控制"""
+    # 尝试获取信号量，如果已满则等待
+    acquired = _transcription_semaphore.acquire(blocking=False)
+    if not acquired:
+        logger.warning(f"Transcription job {job_id} waiting for available slot (max: {_max_concurrent_transcriptions})")
+        _transcription_semaphore.acquire()  # 阻塞等待
+
+    with _running_jobs_lock:
+        _running_jobs.add(job_id)
+
     db = SessionLocal()
     try:
         job = db.get(TranscriptionJob, job_id)
@@ -61,8 +90,8 @@ def run_transcription_job(job_id: str) -> None:
 
         # 更新状态为处理中
         job.status = "processing"
-        job.stage = "extracting_audio"
-        job.progress = 0.05
+        job.stage = "waiting_in_queue"
+        job.progress = 0.02
         job.updated_at = now_iso()
         db.commit()
 
@@ -76,22 +105,28 @@ def run_transcription_job(job_id: str) -> None:
         if not video_path.exists():
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
+        # 更新进度：开始提取音频
+        job.stage = "extracting_audio"
+        job.progress = 0.05
+        job.updated_at = now_iso()
+        db.commit()
+
         # 提取音频
         asr_service = get_asr_service()
         audio_path = asr_service.extract_audio(str(video_path))
 
-        # 更新进度：音频提取完成
+        # 更新进度：音频提取完成，开始识别
         job.stage = "transcribing"
-        job.progress = 0.15
+        job.progress = 0.20
         job.updated_at = now_iso()
         db.commit()
 
         # 执行识别
         asr_segments = asr_service.transcribe(audio_path)
 
-        # 更新进度：识别完成
+        # 更新进度：识别完成，开始保存
         job.stage = "saving"
-        job.progress = 0.85
+        job.progress = 0.90
         job.updated_at = now_iso()
         db.commit()
 
@@ -135,6 +170,9 @@ def run_transcription_job(job_id: str) -> None:
         logger.exception(f"Transcription job {job_id} failed")
 
     finally:
+        with _running_jobs_lock:
+            _running_jobs.discard(job_id)
+        _transcription_semaphore.release()
         db.close()
 
 
@@ -223,6 +261,10 @@ def get_transcription_status(db: Session, segment_id: str) -> dict:
         "progress": job.progress,
         "jobId": job.id,
         "errorMessage": job.error_message,
+        "concurrency": {
+            "running": get_running_jobs_count(),
+            "max": _max_concurrent_transcriptions,
+        },
     }
 
 
