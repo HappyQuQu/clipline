@@ -154,6 +154,11 @@ export interface SettingsResponse {
     scan_interval_seconds: number
     skip_recent_seconds: number
     timezone: string
+    global_ffprobe_concurrency?: number
+    auto_cleanup_days?: number
+    idle_scan_enabled?: boolean
+    idle_scan_start_hour?: number
+    idle_scan_end_hour?: number
   }
   export: {
     export_ttl_hours: number

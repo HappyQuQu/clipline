@@ -67,7 +67,7 @@ export function ExportTab() {
       </div>
 
       <div className="settingsSection">
-        <div className="settingsSectionTitle">说明</div>
+        <div className="settingsSectionTitle">💡 参数说明</div>
         <div className="settingsKV">
           <span>缓存保留</span>
           <strong>导出文件在此时间后自动清理。设为 0 则不自动清理。</strong>

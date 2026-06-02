@@ -43,6 +43,26 @@ export function LogsTab() {
         {isPending && <div className="settingsSaving">保存中...</div>}
         {saveError && <div className="settingsError">{saveError}</div>}
       </div>
+
+      <div className="settingsSection">
+        <div className="settingsSectionTitle">💡 日志级别说明</div>
+        <div className="settingsKV">
+          <span>DEBUG</span>
+          <strong>输出所有调试信息，适合开发排查问题。</strong>
+        </div>
+        <div className="settingsKV">
+          <span>INFO</span>
+          <strong>输出常规运行信息，推荐日常使用。</strong>
+        </div>
+        <div className="settingsKV">
+          <span>WARNING</span>
+          <strong>仅输出警告和错误信息。</strong>
+        </div>
+        <div className="settingsKV">
+          <span>ERROR</span>
+          <strong>仅输出错误信息，日志最少。</strong>
+        </div>
+      </div>
     </div>
   )
 }

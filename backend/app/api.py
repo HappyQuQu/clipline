@@ -358,6 +358,11 @@ def get_all_settings() -> dict:
             "scan_interval_seconds": int(get_effective("scan_interval_seconds", 300)),
             "skip_recent_seconds": int(get_effective("skip_recent_seconds", 30)),
             "timezone": get_effective("timezone", "Asia/Shanghai"),
+            "global_ffprobe_concurrency": int(get_effective("global_ffprobe_concurrency", 4)),
+            "auto_cleanup_days": int(get_effective("auto_cleanup_days", 0)),
+            "idle_scan_enabled": bool(get_effective("idle_scan_enabled", False)),
+            "idle_scan_start_hour": int(get_effective("idle_scan_start_hour", 2)),
+            "idle_scan_end_hour": int(get_effective("idle_scan_end_hour", 6)),
         },
         "export": {
             "export_ttl_hours": int(get_effective("export_ttl_hours", 24)),

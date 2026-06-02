@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import concurrent.futures
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -15,7 +17,29 @@ from app.services.probe import ffprobe
 from app.services.time_parser import infer_start_time
 
 SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".ts", ".m4v"}
+BATCH_SIZE = 50
 logger = get_logger(__name__)
+
+
+def _is_idle_time() -> bool:
+    """检查当前是否在闲时扫描时段内"""
+    if not get_effective("idle_scan_enabled", False):
+        return False  # 未启用闲时扫描时，不限制（始终允许）
+    from datetime import datetime
+    now = datetime.now()
+    start_hour = int(get_effective("idle_scan_start_hour", 2))
+    end_hour = int(get_effective("idle_scan_end_hour", 6))
+    if start_hour <= end_hour:
+        return start_hour <= now.hour < end_hour
+    else:
+        return now.hour >= start_hour or now.hour < end_hour
+
+
+def _should_skip_scan(trigger: str) -> bool:
+    """判断是否应该跳过本次扫描（闲时模式下非闲时段）"""
+    if trigger == "manual":
+        return False  # 手动扫描始终执行
+    return not _is_idle_time()
 
 
 def create_scan_job(source_id: str | None, trigger: str = "manual") -> str:
@@ -38,6 +62,14 @@ def create_scan_job(source_id: str | None, trigger: str = "manual") -> str:
         db.close()
 
 
+def _probe_file(path: Path) -> dict | None:
+    """对单个文件执行 ffprobe，返回 metadata 或 None"""
+    try:
+        return ffprobe(path)
+    except Exception:
+        return None
+
+
 def run_scan_job(job_id: str) -> None:
     settings = get_settings()
     db = SessionLocal()
@@ -45,6 +77,17 @@ def run_scan_job(job_id: str) -> None:
         job = db.get(ScanJob, job_id)
         if not job:
             return
+
+        # 闲时扫描检查
+        if _should_skip_scan(job.trigger or "manual"):
+            job.status = "completed"
+            job.finished_at = now_iso()
+            job.updated_at = job.finished_at
+            job.error_message = "非闲时段，跳过扫描"
+            db.commit()
+            logger.info("scan skipped (not idle time)", extra={"scan_job_id": job.id})
+            return
+
         source = db.get(Source, job.source_id) if job.source_id else None
         if not source:
             job.status = "failed"
@@ -63,32 +106,40 @@ def run_scan_job(job_id: str) -> None:
         skip_seconds = int(get_effective("skip_recent_seconds", 30))
         cutoff = datetime.now(timezone.utc).astimezone() - timedelta(seconds=skip_seconds)
 
+        # 收集所有文件
         paths = sorted(
-            [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS],
+            [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS],
             key=lambda item: str(item),
         )
         job.total_files = len(paths)
         job.updated_at = now_iso()
         db.commit()
 
+        # 批量加载已有记录（按 path 索引）
+        existing_map: dict[str, VideoSegment] = {}
+        for seg in db.scalars(
+            select(VideoSegment).where(VideoSegment.source_id == source.id)
+        ).all():
+            existing_map[seg.path] = seg
+
         discovered_paths: set[str] = set()
+        pending_probe: list[tuple[Path, str, datetime, str, str]] = []
+        batch_count = 0
 
         for path in paths:
             file_path = str(path)
             discovered_paths.add(file_path)
             job.scanned_files += 1
+
             stat = path.stat()
             mtime_dt = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).astimezone()
             ctime_dt = datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).astimezone()
             mtime = mtime_dt.isoformat(timespec="seconds")
             ctime = ctime_dt.isoformat(timespec="seconds")
-            existing = db.scalar(
-                select(VideoSegment).where(
-                    VideoSegment.source_id == source.id,
-                    VideoSegment.path == file_path,
-                )
-            )
 
+            existing = existing_map.get(file_path)
+
+            # 增量检查：大小和修改时间未变则跳过
             if existing and existing.size_bytes == stat.st_size and existing.mtime == mtime:
                 continue
 
@@ -113,83 +164,118 @@ def run_scan_job(job_id: str) -> None:
                 segment.scan_status = "pending"
                 segment.error_message = "File modified recently; waiting for it to become stable"
                 db.add(segment)
-                db.commit()
-                logger.info(
-                    "scan file pending",
-                    extra={"scan_job_id": job.id, "source_id": source.id, "path": file_path},
-                )
+                batch_count += 1
                 continue
 
-            try:
-                metadata = ffprobe(path)
-                duration = metadata["duration_seconds"]
-                start, source_name, confidence = infer_start_time(path, mtime_dt, duration)
-                end = start + timedelta(seconds=duration or 0)
+            # 收集待 ffprobe 的文件
+            pending_probe.append((path, file_path, mtime_dt, mtime, ctime))
 
-                segment.start_time = start.isoformat(timespec="seconds")
-                segment.end_time = end.isoformat(timespec="seconds")
-                segment.duration_seconds = duration
-                segment.time_source = source_name
-                segment.time_confidence = confidence
-                segment.container = metadata["container"]
-                segment.video_codec = metadata["video_codec"]
-                segment.audio_codec = metadata["audio_codec"]
-                segment.width = metadata["width"]
-                segment.height = metadata["height"]
-                segment.fps = metadata["fps"]
-                segment.playable = 1 if metadata["playable"] else 0
-                segment.needs_transcode = 0 if metadata["playable"] else 1
-                segment.scan_status = "indexed"
-                segment.error_message = None
-                job.indexed_files += 1
-                logger.info(
-                    "scan file indexed",
-                    extra={
-                        "scan_job_id": job.id,
-                        "source_id": source.id,
-                        "segment_id": segment.id,
-                        "path": file_path,
-                        "duration_seconds": duration,
-                    },
-                )
-            except Exception as exc:  # noqa: BLE001
-                segment.scan_status = "failed"
-                segment.error_message = str(exc)
-                job.failed_files += 1
-                logger.warning(
-                    "scan file failed",
-                    extra={
-                        "scan_job_id": job.id,
-                        "source_id": source.id,
-                        "path": file_path,
-                        "error": str(exc),
-                    },
-                )
-
-            db.add(segment)
+        # 批量提交 pending 文件
+        if batch_count > 0:
             db.commit()
 
-        discovered_path_list = sorted(discovered_paths)
-        stale_segment_ids = list(
-            db.scalars(
-                select(VideoSegment.id).where(
-                    VideoSegment.source_id == source.id,
-                    VideoSegment.path.not_in(discovered_path_list),
-                )
-            )
-        )
-        if stale_segment_ids:
-            db.execute(delete(Thumbnail).where(Thumbnail.segment_id.in_(stale_segment_ids)))
-            db.execute(delete(VideoSegment).where(VideoSegment.id.in_(stale_segment_ids)))
+        # 并发 ffprobe
+        if pending_probe:
+            workers = int(get_effective("global_ffprobe_concurrency", 4))
+            logger.info("probing %d files with %d workers", len(pending_probe), workers)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                future_map = {
+                    executor.submit(_probe_file, item[0]): item
+                    for item in pending_probe
+                }
+                for future in concurrent.futures.as_completed(future_map):
+                    path, file_path, mtime_dt, mtime, ctime = future_map[future]
+                    metadata = future.result()
+                    timestamp = now_iso()
+                    existing = existing_map.get(file_path)
+                    segment = existing or VideoSegment(
+                        id=make_id("seg"),
+                        source_id=source.id,
+                        path=file_path,
+                        filename=path.name,
+                        size_bytes=path.stat().st_size,
+                        scan_status="pending",
+                        created_at=timestamp,
+                        updated_at=timestamp,
+                    )
+                    segment.filename = path.name
+                    segment.size_bytes = path.stat().st_size
+                    segment.mtime = mtime
+                    segment.ctime = ctime
+                    segment.updated_at = timestamp
+
+                    if metadata:
+                        duration = metadata["duration_seconds"]
+                        start, source_name, confidence = infer_start_time(path, mtime_dt, duration)
+                        end = start + timedelta(seconds=duration or 0)
+                        segment.start_time = start.isoformat(timespec="seconds")
+                        segment.end_time = end.isoformat(timespec="seconds")
+                        segment.duration_seconds = duration
+                        segment.time_source = source_name
+                        segment.time_confidence = confidence
+                        segment.container = metadata["container"]
+                        segment.video_codec = metadata["video_codec"]
+                        segment.audio_codec = metadata["audio_codec"]
+                        segment.width = metadata["width"]
+                        segment.height = metadata["height"]
+                        segment.fps = metadata["fps"]
+                        segment.playable = 1 if metadata["playable"] else 0
+                        segment.needs_transcode = 0 if metadata["playable"] else 1
+                        segment.scan_status = "indexed"
+                        segment.error_message = None
+                        job.indexed_files += 1
+                    else:
+                        segment.scan_status = "failed"
+                        segment.error_message = "ffprobe failed"
+                        job.failed_files += 1
+
+                    db.add(segment)
+                    batch_count += 1
+                    if batch_count >= BATCH_SIZE:
+                        db.commit()
+                        job.updated_at = now_iso()
+                        db.commit()
+                        batch_count = 0
+
+        # 最后一批提交
+        if batch_count > 0:
+            db.commit()
+
+        # 清理已删除的文件（用 set 操作代替 NOT IN）
+        stale_ids = [
+            seg.id for seg in existing_map.values()
+            if seg.path not in discovered_paths
+        ]
+        if stale_ids:
+            db.execute(delete(Thumbnail).where(Thumbnail.segment_id.in_(stale_ids)))
+            db.execute(delete(VideoSegment).where(VideoSegment.id.in_(stale_ids)))
             db.commit()
             logger.info(
                 "scan stale segments removed",
-                extra={
-                    "scan_job_id": job.id,
-                    "source_id": source.id,
-                    "removed_segments": len(stale_segment_ids),
-                },
+                extra={"scan_job_id": job.id, "source_id": source.id, "removed": len(stale_ids)},
             )
+
+        # 自动清理过期片段
+        cleanup_days = int(get_effective("auto_cleanup_days", 0))
+        if cleanup_days > 0:
+            cutoff_date = (datetime.now(timezone.utc) - timedelta(days=cleanup_days)).isoformat(timespec="seconds")
+            old_ids = list(
+                db.scalars(
+                    select(VideoSegment.id).where(
+                        VideoSegment.source_id == source.id,
+                        VideoSegment.end_time < cutoff_date,
+                        VideoSegment.scan_status == "indexed",
+                    )
+                )
+            )
+            if old_ids:
+                db.execute(delete(Thumbnail).where(Thumbnail.segment_id.in_(old_ids)))
+                db.execute(delete(VideoSegment).where(VideoSegment.id.in_(old_ids)))
+                db.commit()
+                logger.info(
+                    "auto cleanup removed old segments",
+                    extra={"scan_job_id": job.id, "source_id": source.id, "removed": len(old_ids), "cutoff_days": cleanup_days},
+                )
 
         job.status = "completed"
         job.finished_at = now_iso()

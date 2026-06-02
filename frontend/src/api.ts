@@ -78,7 +78,7 @@ export const api = {
     return request<{ items: Segment[]; total: number; limit: number; offset: number }>(`/api/segments?${query}`)
   },
   exports: () => request<{ items: ExportJob[]; total: number; limit: number; offset: number }>('/api/exports'),
-  createExport: (payload: { sourceId: string; startTime: string; endTime: string; mode: 'fast' | 'accurate' }) =>
+  createExport: (payload: { sourceId: string; startTime: string; endTime: string; mode: string; timelapseSpeed?: number }) =>
     request<{ exportId: string; status: string }>('/api/exports', {
       method: 'POST',
       body: JSON.stringify(payload),

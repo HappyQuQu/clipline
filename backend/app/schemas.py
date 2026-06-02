@@ -146,6 +146,7 @@ class ExportCreate(BaseModel):
     startTime: str
     endTime: str
     mode: str = "fast"
+    timelapseSpeed: int = 60
 
 
 class ExportCreateOut(BaseModel):

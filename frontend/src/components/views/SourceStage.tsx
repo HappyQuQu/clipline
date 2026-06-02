@@ -106,7 +106,7 @@ export function SourceStage({
             <span>选择一个目录后，系统会扫描其中的视频文件。</span>
           </div>
           <div className="sourceCreateForm">
-            <input className="field" placeholder="源名称，例如 车载记录仪" value={sourceName} onChange={(event) => onNameChange(event.target.value)} />
+            <input className="field" placeholder="名称（可选，留空自动生成）" value={sourceName} onChange={(event) => onNameChange(event.target.value)} />
             <PathPicker value={sourcePath} root={directoryRoot} nodes={directories} onChange={onPathChange} />
             <select value={sourceScanInterval} onChange={(event) => onIntervalChange(Number(event.target.value))}>
               <option value={0}>关闭定时扫描</option>

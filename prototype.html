@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clipline 原型 - 三列布局</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'SF Pro Display','Inter',sans-serif;background:#f4f6f8;color:#1f2933;height:100vh;overflow:hidden}
+.shell{display:grid;grid-template-columns:58px minmax(0,1fr);height:100vh}
+
+/* 左侧导航 */
+.nav{display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px 0;background:#fff;border-right:1px solid #e4e8ed}
+.nav-logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#34d3c8,#2f6df6);display:grid;place-items:center;color:#fff;font-weight:900;font-size:14px;margin-bottom:8px;position:relative}
+.nav-logo::after{content:'';position:absolute;right:2px;top:2px;width:7px;height:7px;border-radius:50%;background:#55c76a;border:2px solid #fff}
+.nav-btn{width:40px;height:40px;border:0;border-radius:8px;background:transparent;color:#7b8794;display:grid;place-items:center;cursor:pointer;font-size:16px}
+.nav-btn.active,.nav-btn:hover{background:#edf4ff;color:#2f6df6}
+.nav-spacer{flex:1}
+
+/* 主区域 */
+.main{display:flex;flex-direction:column;height:100vh;padding:18px;overflow:hidden}
+.top-bar{display:flex;align-items:center;justify-content:space-between;min-height:42px;margin-bottom:14px}
+.top-title{font-size:20px;font-weight:800}
+.top-meta{font-size:13px;color:#7b8794;margin-top:2px}
+.top-tools{display:flex;align-items:center;gap:10px}
+.top-tools select{height:36px;border:1px solid #dce3ea;border-radius:8px;background:#fff;padding:0 10px;font-size:13px;color:#1f2933;outline:0;min-width:160px}
+.top-refresh{width:36px;height:36px;border:0;border-radius:8px;background:#fff;color:#4b5563;box-shadow:inset 0 0 0 1px #e4e8ed;display:grid;place-items:center;cursor:pointer;font-size:16px}
+
+/* 工作区 */
+.workspace{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;border:1px solid #e4e8ed;border-radius:8px;background:#fff}
+
+/* 三列布局 */
+.three-col{display:grid;grid-template-columns:300px minmax(0,1fr);flex:1;min-height:0;overflow:hidden}
+.three-col.open{grid-template-columns:300px 360px minmax(0,1fr)}
+
+/* ── 时间轴列 ── */
+.timeline{display:flex;flex-direction:column;background:#fff;border-right:1px solid #e4e8ed;overflow:hidden}
+.tl-head{display:flex;flex-direction:column;gap:6px;padding:10px 10px 8px}
+.tl-play-row{display:flex;gap:6px;align-items:center}
+.tl-play-row button{min-width:34px;height:28px;border:0;border-radius:4px;background:#f1f4f7;color:#4b5563;font-size:12px;font-weight:800;cursor:pointer}
+.tl-play-row button:hover{background:#e4e8ed}
+.tl-clock{background:#f8fafc;color:#2563eb;border-radius:4px;padding:6px 8px;text-align:center;font-size:15px;font-weight:800}
+.tl-date-zoom{display:flex;flex-direction:column;gap:6px;padding:6px 8px 8px;border-top:1px solid #eef1f4;border-bottom:1px solid #eef1f4;background:#f8fafc}
+.tl-date{width:100%;height:30px;border:1px solid #dce3ea;border-radius:5px;background:#fff;color:#1f2933;padding:0 8px;font-size:12px;font-weight:700;outline:0;cursor:pointer}
+.tl-date-range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:4px;align-items:center}
+.tl-date-arrow{color:#9ca3af;font-size:13px;font-weight:800;text-align:center}
+.tl-zoom{display:flex;align-items:center;gap:6px}
+.tl-zoom span{color:#9ca3af;font-size:14px;font-weight:800;min-width:14px;text-align:center;user-select:none}
+.tl-zoom input[type="range"]{flex:1;height:6px;-webkit-appearance:none;background:#e4e8ed;border-radius:3px;outline:0;cursor:pointer}
+.tl-zoom input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#2f6df6;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2);cursor:pointer}
+.tl-canvas{flex:1;min-height:0;position:relative;overflow:hidden}
+.tl-canvas canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.tl-canvas canvas:active{cursor:grabbing}
+.tl-actions{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #e4e8ed;background:#f8fafc}
+.tl-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;border:0;background:transparent;color:#4b5563;cursor:pointer;font-size:11px;font-weight:600}
+.tl-actions button+button{border-left:1px solid #e4e8ed}
+.tl-actions button:nth-child(n+3){border-top:1px solid #e4e8ed}
+.tl-actions button:hover{background:#f3f7ff}
+.tl-actions .ico{font-size:15px}
+
+/* ── 管理面板列 ── */
+.manage{display:flex;flex-direction:column;background:#fff;border-right:1px solid #e4e8ed;overflow:hidden;min-width:0}
+.m-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e4e8ed;background:#f8fafc;flex-shrink:0}
+.m-header span{font-size:15px;font-weight:800}
+.m-close{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:#7b8794;cursor:pointer;display:grid;place-items:center;font-size:18px}
+.m-close:hover{background:#f1f4f7;color:#1f2933}
+.m-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.m-time-range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:center;overflow:hidden}
+.m-time-block{display:flex;flex-direction:column;gap:4px;min-width:0;overflow:hidden}
+.m-time-block label{font-size:12px;font-weight:700;color:#7b8794}
+.m-time-block input{width:100%;min-width:0;min-height:38px;border:1px solid #dce3ea;border-radius:8px;background:#f8fafc;color:#1f2933;padding:0 8px;font-size:13px;font-weight:700;outline:0}
+.m-time-block input:focus{border-color:#2f6df6;box-shadow:0 0 0 3px rgba(47,109,246,.1)}
+.m-time-block .sub{font-size:11px;color:#8c99a6}
+.m-arrow{font-size:18px;font-weight:800;color:#7b8794;margin-top:16px}
+.m-avail{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600}
+.m-avail.ok{background:#f0fdf4;color:#16a34a}
+.m-avail.empty{background:#fefce8;color:#ca8a04}
+.m-title{font-size:13px;font-weight:800}
+.m-ops{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.m-op{display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border:1px solid #e4e8ed;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#4b5563;transition:all .15s;user-select:none}
+.m-op:hover{border-color:#b0c4de;background:#f8fafc}
+.m-op.active{border-color:#2f6df6;background:#f3f7ff;color:#2f6df6}
+.m-op.danger.active{border-color:#ef4444;background:#fef2f2;color:#ef4444}
+.m-radio{width:18px;height:18px;border:2px solid #d1d5db;border-radius:50%;position:relative;flex-shrink:0}
+.m-op.active .m-radio{border-color:#2f6df6}
+.m-op.active .m-radio::after{content:'';position:absolute;top:3px;left:3px;width:8px;height:8px;border-radius:50%;background:#2f6df6}
+.m-op.danger.active .m-radio{border-color:#ef4444}
+.m-op.danger.active .m-radio::after{background:#ef4444}
+.m-warn{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:#fef2f2;color:#dc2626;font-size:12px;font-weight:600}
+.m-check{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:1px solid #e4e8ed;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:#4b5563}
+.m-check input{width:16px;height:16px;accent-color:#2f6df6}
+.m-check .hint{color:#8c99a6;font-size:12px;margin-left:auto}
+.m-tag{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:6px;background:#edf4ff;color:#2f6df6;font-size:12px;font-weight:700}
+.m-info{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:8px;background:#f8fafc;border:1px solid #e4e8ed}
+.m-info-row{display:flex;align-items:center;gap:8px;font-size:13px;color:#4b5563;font-weight:600}
+.m-footer{display:flex;gap:10px;padding:12px 16px;border-top:1px solid #e4e8ed;background:#f8fafc;flex-shrink:0}
+.m-action{flex:1;height:40px;border:0;border-radius:8px;background:#2f6df6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.m-action:hover{background:#1d5bd6}
+.m-action.delete{background:#ef4444}
+.m-action.delete:hover{background:#dc2626}
+.m-action:disabled{opacity:.5;cursor:not-allowed}
+.m-cancel{height:40px;padding:0 18px;border:1px solid #dce3ea;border-radius:8px;background:#fff;color:#4b5563;font-size:14px;font-weight:700;cursor:pointer}
+.m-cancel:hover{background:#f1f4f7}
+
+/* ── 视频列 ── */
+.viewer{position:relative;min-height:0;background:#05070a;display:flex;align-items:center;justify-content:center}
+.viewer-ph{color:#8c99a6;font-size:15px}
+.video-badge{position:absolute;left:16px;top:14px;padding:8px 12px;border-radius:7px;background:rgba(8,10,13,.72);color:#fff;font-size:13px;font-weight:700;backdrop-filter:blur(8px)}
+.floating-tools{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:6px;border-radius:8px;background:rgba(8,10,13,.6);backdrop-filter:blur(8px)}
+.floating-tools button{height:34px;border:0;border-radius:6px;background:transparent;color:#dce3ea;display:grid;place-items:center;cursor:pointer;font-size:16px;padding:0 10px}
+.floating-tools button:hover{background:rgba(255,255,255,.15);color:#fff}
+
+/* 片段列表 */
+.clips{padding:12px;border-top:1px solid #e4e8ed;max-height:180px;overflow:auto}
+.clips-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.clips-title{font-size:15px;font-weight:800}
+.clips-meta{font-size:12px;color:#7b8794}
+.clips-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
+.clip{height:60px;border-radius:5px;background:linear-gradient(135deg,rgba(47,109,246,.12),transparent 42%),linear-gradient(180deg,#263241,#111827);border:2px solid transparent;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;padding:8px;color:#dbeafe;font-size:11px;font-weight:700;position:relative;overflow:hidden}
+.clip.sel{border-color:#2f6df6}
+.clip .t{position:absolute;left:8px;top:8px;font-size:12px;font-weight:700}
+.clip .d{font-size:10px;color:#94a3b8}
+
+.toast{position:fixed;right:18px;bottom:18px;z-index:50;padding:12px 18px;border-radius:8px;background:#fff;border:1px solid #d8e7ff;box-shadow:0 18px 40px rgba(31,41,51,.14);font-size:13px;font-weight:600;opacity:0;transform:translateX(40px);transition:all .2s ease;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(0);pointer-events:auto}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="nav">
+    <div class="nav-logo">CP</div>
+    <button class="nav-btn active">▶</button>
+    <button class="nav-btn">▦</button>
+    <button class="nav-btn">CC</button>
+    <button class="nav-btn">◎</button>
+    <button class="nav-btn">↓</button>
+    <div class="nav-spacer"></div>
+    <button class="nav-btn">☰</button>
+    <button class="nav-btn">⚙</button>
+  </nav>
+  <main class="main">
+    <header class="top-bar">
+      <div><div class="top-title">门口摄像头</div><div class="top-meta">近 7 天 · 142 个片段 · 8520 秒</div></div>
+      <div class="top-tools">
+        <select><option>门口摄像头</option><option>客厅摄像头</option><option>行车记录仪</option></select>
+        <button class="top-refresh">↻</button>
+      </div>
+    </header>
+    <div class="workspace">
+      <div class="three-col" id="layout">
+
+        <!-- 时间轴 -->
+        <div class="timeline">
+          <div class="tl-head">
+            <div class="tl-play-row"><button id="playBtn">▶</button><button>1×</button></div>
+            <div class="tl-clock" id="clock">14:23:07</div>
+          </div>
+          <div class="tl-date-zoom">
+            <div class="tl-date-range"><input type="date" class="tl-date" value="2026-06-02" id="dateStart"><span class="tl-date-arrow">→</span><input type="date" class="tl-date" value="2026-06-02" id="dateEnd"></div>
+            <div class="tl-zoom"><span>−</span><input type="range" min="0" max="100" value="35" id="zoom"><span>+</span></div>
+          </div>
+          <div class="tl-canvas"><canvas id="cv"></canvas></div>
+          <div class="tl-actions">
+            <button onclick="prev()"><span class="ico">↑</span>上一个</button>
+            <button onclick="next()"><span class="ico">↓</span>下一个</button>
+            <button onclick="focus()"><span class="ico">⊕</span>定位</button>
+            <button onclick="toggleManage()" id="mBtn"><span class="ico">☰</span>管理</button>
+          </div>
+        </div>
+
+        <!-- 管理面板（条件显示） -->
+        <div class="manage" id="managePanel" style="display:none">
+          <div class="m-header"><span>管理片段</span><button class="m-close" onclick="toggleManage()">✕</button></div>
+          <div class="m-body">
+            <div class="m-time-range">
+              <div class="m-time-block">
+                <label>开始</label>
+                <input type="datetime-local" step="1" value="2026-06-02T14:23:07" id="mStart">
+                <span class="sub">2026年6月2日</span>
+              </div>
+              <div class="m-arrow">›</div>
+              <div class="m-time-block">
+                <label>结束</label>
+                <input type="datetime-local" step="1" value="2026-06-02T14:24:07" id="mEnd">
+                <span class="sub">2026年6月2日</span>
+              </div>
+            </div>
+            <div class="m-avail ok" id="mAvail">✓ 该范围内有 3 个片段</div>
+            <div>
+              <div class="m-title">操作</div>
+              <div class="m-ops" id="opList">
+                <div class="m-op active" data-op="download"><div class="m-radio"></div>⤓ 下载</div>
+                <div class="m-op" data-op="archive"><div class="m-radio"></div>☐ 归档</div>
+                <div class="m-op danger" data-op="delete"><div class="m-radio"></div>✕ 删除</div>
+              </div>
+            </div>
+            <div class="m-warn" id="delWarn" style="display:none">⚠ 此操作仅移除索引，原始文件保留在磁盘上</div>
+            <div>
+              <div class="m-title">配置</div>
+              <label class="m-check" style="margin-top:6px"><input type="checkbox"> 延时 <span class="hint">添加 3 秒延迟画面</span></label>
+            </div>
+            <div>
+              <div class="m-title">摄像头</div>
+              <div style="margin-top:6px"><span class="m-tag">门口摄像头</span></div>
+            </div>
+            <div class="m-info">
+              <div class="m-info-row">⏱ 时长：<span id="mDur">1分0秒</span></div>
+              <div class="m-info-row">💾 大小：<span id="mSize">15.4 MB</span></div>
+            </div>
+          </div>
+          <div class="m-footer">
+            <button class="m-action" id="mAction">⤓ 下载</button>
+            <button class="m-cancel" onclick="toggleManage()">取消</button>
+          </div>
+        </div>
+
+        <!-- 视频 -->
+        <div class="viewer">
+          <div class="video-badge" id="badge">14:23:07 | 门口摄像头</div>
+          <div class="floating-tools"><button>↻</button></div>
+          <div class="viewer-ph" id="ph">选择片段开始播放</div>
+        </div>
+
+      </div>
+      <div class="clips">
+        <div class="clips-head"><div><div class="clips-title">录像片段</div><div class="clips-meta">2 个断档</div></div></div>
+        <div class="clips-grid" id="grid"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const segs=[
+  {id:1,start:'09:10:00',end:'09:11:20',dur:'1:20'},{id:2,start:'09:15:30',end:'09:17:00',dur:'1:30'},
+  {id:3,start:'10:02:00',end:'10:03:30',dur:'1:30'},{id:4,start:'10:03:30',end:'10:05:00',dur:'1:30'},
+  {id:5,start:'11:20:00',end:'11:21:15',dur:'1:15'},{id:6,start:'12:45:00',end:'12:46:30',dur:'1:30'},
+  {id:7,start:'14:22:30',end:'14:24:00',dur:'1:30'},{id:8,start:'14:24:00',end:'14:25:15',dur:'1:15'},
+  {id:9,start:'14:26:00',end:'14:27:30',dur:'1:30'},{id:10,start:'14:27:30',end:'14:28:45',dur:'1:15'},
+  {id:11,start:'16:00:00',end:'16:01:20',dur:'1:20'},{id:12,start:'18:30:00',end:'18:31:40',dur:'1:40'},
+  {id:13,start:'20:00:00',end:'20:02:00',dur:'2:00'},{id:14,start:'22:15:00',end:'22:16:30',dur:'1:30'}
+];
+let selId=7,curOp='download',panelOpen=false;
+function ms(t){const[H,M,S]=t.split(':').map(Number);return H*36e5+M*6e4+S*1e3}
+function fmt(ms){return[Math.floor(ms/36e5)%24,Math.floor(ms%36e5/6e4),Math.floor(ms%6e4/1e3)].map(x=>String(x).padStart(2,'0')).join(':')}
+
+function renderGrid(){
+  document.getElementById('grid').innerHTML=segs.map(s=>
+    `<div class="clip${s.id===selId?' sel':''}" onclick="pick(${s.id})"><span class="t">${s.start.slice(0,5)}</span><span class="d">${s.dur}</span></div>`
+  ).join('');
+}
+renderGrid();
+
+function pick(id){
+  selId=id;const s=segs.find(x=>x.id===id);
+  if(s){document.getElementById('clock').textContent=s.start;document.getElementById('badge').textContent=s.start+' | 门口摄像头';document.getElementById('ph').textContent='正在播放 '+s.start+' – '+s.end}
+  renderGrid();draw();
+}
+function prev(){const i=segs.findIndex(s=>s.id===selId);if(i>0)pick(segs[i-1].id)}
+function next(){const i=segs.findIndex(s=>s.id===selId);if(i<segs.length-1)pick(segs[i+1].id)}
+function focus(){toast('已定位到当前播放位置')}
+
+function toggleManage(){
+  panelOpen=!panelOpen;
+  const layout=document.getElementById('layout');
+  const panel=document.getElementById('managePanel');
+  if(panelOpen){
+    layout.classList.add('open');panel.style.display='flex';
+    const s=segs.find(x=>x.id===selId);
+    if(s){document.getElementById('mStart').value='2026-06-02T'+s.start;document.getElementById('mEnd').value='2026-06-02T'+s.end}
+  }else{
+    layout.classList.remove('open');panel.style.display='none';
+  }
+  setTimeout(draw,50);
+}
+
+// 操作切换
+document.querySelectorAll('#opList .m-op').forEach(el=>{
+  el.addEventListener('click',function(){
+    document.querySelectorAll('#opList .m-op').forEach(e=>e.classList.remove('active'));
+    this.classList.add('active');curOp=this.dataset.op;
+    const btn=document.getElementById('mAction'),warn=document.getElementById('delWarn');
+    warn.style.display=curOp==='delete'?'':'none';
+    if(curOp==='download'){btn.textContent='⤓ 下载';btn.className='m-action'}
+    else if(curOp==='archive'){btn.textContent='☐ 归档';btn.className='m-action'}
+    else{btn.textContent='✕ 删除';btn.className='m-action delete'}
+  });
+});
+
+document.getElementById('mAction').addEventListener('click',function(){
+  if(curOp==='download')toast('导出任务已创建');
+  else if(curOp==='archive')toast('已归档 3 个片段');
+  else{if(!confirm('确认删除？\n仅移除索引，原始文件保留。'))return;toast('已移除索引')}
+  toggleManage();
+});
+
+// ── 绘制 ──
+function draw(){
+  const cv=document.getElementById('cv'),wp=cv.parentElement;
+  const w=wp.clientWidth,h=wp.clientHeight,dpr=devicePixelRatio||1;
+  cv.width=w*dpr;cv.height=h*dpr;cv.style.width=w+'px';cv.style.height=h+'px';
+  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const zv=+document.getElementById('zoom').value;
+  const span=Math.exp(Math.log(6e4)+(zv/100)*(Math.log(864e5)-Math.log(6e4)));
+  const sel=segs.find(s=>s.id===selId);
+  const ctr=sel?ms(sel.start):14*36e5;
+  const ws=ctr-span/2,we=ctr+span/2;
+  const lineX=Math.round(w/2),top=14,bot=h-14,thk=8;
+  function yF(t){return top+((t-ws)/(we-ws))*(bot-top)}
+  function cY(y){return Math.max(top,Math.min(bot,y))}
+
+  ctx.clearRect(0,0,w,h);
+
+  // 底线
+  ctx.strokeStyle='#d1d5db';ctx.lineWidth=2;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(lineX,top);ctx.lineTo(lineX,bot);ctx.stroke();
+
+  // 录像区间
+  ctx.lineCap='round';
+  segs.forEach(s=>{
+    const sMs=ms(s.start),eMs=ms(s.end);
+    if(eMs<ws||sMs>we)return;
+    const y1=cY(yF(sMs)),y2=cY(yF(eMs));
+    ctx.strokeStyle=s.id===selId?'#2563eb':'#3b82f6';
+    ctx.lineWidth=s.id===selId?thk+4:thk;
+    ctx.beginPath();ctx.moveTo(lineX,y1);ctx.lineTo(lineX,y2);ctx.stroke();
+  });
+
+  // 刻度（左右交替）
+  const ticks=Math.max(2,Math.min(12,Math.floor((bot-top)/56)));
+  ctx.font='10px Inter,system-ui,sans-serif';ctx.textBaseline='middle';ctx.lineWidth=1;
+  for(let i=0;i<=ticks;i++){
+    const y=top+((bot-top)/ticks)*i,t=ws+((we-ws)/ticks)*i;
+    ctx.strokeStyle='#c5c9d0';
+    ctx.beginPath();ctx.moveTo(lineX-4,y);ctx.lineTo(lineX+4,y);ctx.stroke();
+    ctx.fillStyle='#9ca3af';
+    ctx.textAlign=i%2===0?'right':'left';
+    ctx.fillText(fmt(t).slice(0,5),i%2===0?lineX-8:lineX+8,y);
+  }
+
+  // 播放指针
+  if(sel){
+    const y=yF(ms(sel.start));
+    ctx.fillStyle='#111827';ctx.beginPath();ctx.arc(lineX,y,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(lineX,y,3,0,Math.PI*2);ctx.fill();
+  }
+}
+
+// 滚轮缩放
+document.getElementById('cv').addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=e.currentTarget.getBoundingClientRect();
+  const ratio=(e.clientY-r.top)/r.height;
+  const sl=document.getElementById('zoom');
+  const nv=Math.min(100,Math.max(0,+sl.value+(e.deltaY>0?3:-3)));
+  sl.value=nv;draw();
+},{passive:false});
+
+// 点击选片段
+document.getElementById('cv').addEventListener('click',e=>{
+  const r=e.currentTarget.getBoundingClientRect();
+  const zv=+document.getElementById('zoom').value;
+  const span=Math.exp(Math.log(6e4)+(zv/100)*(Math.log(864e5)-Math.log(6e4)));
+  const sel=segs.find(s=>s.id===selId);
+  const ctr=sel?ms(sel.start):14*36e5;
+  const ws=ctr-span/2,we=ctr+span/2;
+  const ratio=(e.clientY-r.top-14)/(r.height-28);
+  const target=ws+ratio*(we-ws);
+  let best=null,bd=1e15;
+  segs.forEach(s=>{const d=Math.abs(ms(s.start)-target);if(d<bd){bd=d;best=s}});
+  if(best)pick(best.id);
+});
+
+document.getElementById('zoom').addEventListener('input',draw);
+document.getElementById('dateStart').addEventListener('change',function(){toast('已切换到 '+this.value);draw()});
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2500)}
+
+window.addEventListener('resize',draw);draw();
+</script>
+</body>
+</html>

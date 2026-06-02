@@ -122,22 +122,7 @@ export function TranscriptionPanel({
   const hasTranscriptions = transcriptions.length > 0
 
   if (!hasTranscriptions && !isProcessing && !isFailed) {
-    return (
-      <div className="transcriptionPanel">
-        <div className="transcriptionEmptyState">
-          <div className="transcriptionEmptyIcon">🎤</div>
-          <div className="transcriptionEmptyTitle">此片段尚未生成字幕</div>
-          <div className="transcriptionEmptyDesc">支持中文语音识别，约需 30 秒</div>
-          <button
-            className="transcriptionEmptyButton"
-            onClick={handleTranscribe}
-            disabled={isTranscribing}
-          >
-            {isTranscribing ? '创建中...' : '开始识别'}
-          </button>
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (

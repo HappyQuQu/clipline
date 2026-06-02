@@ -518,7 +518,7 @@ button:disabled {
 
 .workbenchLayout {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   flex: 1;
   overflow: hidden;
@@ -532,7 +532,7 @@ button:disabled {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   background: #ffffff;
 }
@@ -1861,31 +1861,38 @@ button:disabled {
 
 .viewerBand {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: 286px minmax(0, 1fr);
   gap: 10px;
-  flex: 0 0 100%;
+  flex: 1;
   min-height: 0;
   height: 100%;
+  padding: 10px;
+}
+
+.viewerBandWithManage {
+  grid-template-columns: 286px minmax(300px, 360px) minmax(0, 1fr);
 }
 
 .timeRail {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  border: 1px solid #262a31;
+  border: 1px solid #e4e8ed;
   border-radius: 8px;
-  background: #151515;
+  background: #ffffff;
   padding: 0;
 }
 
 .timelineHead {
   display: grid;
-  grid-template-columns: minmax(86px, auto) minmax(116px, 1fr) minmax(420px, 560px);
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  min-height: 58px;
-  padding: 8px 14px;
-  color: #b8bec8;
+  gap: 8px;
+  min-height: 50px;
+  padding: 8px 10px;
+  color: #4b5563;
   font-size: 13px;
   font-weight: 800;
 }
@@ -1899,12 +1906,19 @@ button:disabled {
 
 .timelineButtons button,
 .timelineActions button {
-  border: 0;
+  border: 1px solid #e4e8ed;
   border-radius: 4px;
-  background: #626262;
-  color: #ffffff;
+  background: #f8fafc;
+  color: #4b5563;
   font-size: 12px;
   font-weight: 800;
+}
+
+.timelineButtons button:hover,
+.timelineActions button:hover {
+  border-color: #8cb4ff;
+  background: #edf4ff;
+  color: #2f6df6;
 }
 
 .timelineButtons button {
@@ -1913,15 +1927,85 @@ button:disabled {
 }
 
 .timelineClock {
-  justify-self: center;
-  min-width: 116px;
-  max-width: 140px;
+  justify-self: end;
+  min-width: 104px;
+  max-width: 118px;
   border-radius: 4px;
   background: #f4f7fb;
   color: #1f9fd6;
-  padding: 8px 12px;
+  padding: 8px 10px;
   text-align: center;
-  font-size: 16px;
+  font-size: 14px;
+}
+
+.timelineDateZoom {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px 10px;
+  border-bottom: 1px solid #eef1f4;
+}
+
+.timelineDateRange {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.timelineDatePicker,
+.timelineDateDisplay {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #1f2933;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timelineDateArrow,
+.timelineZoomLabel {
+  color: #94a3b8;
+  text-align: center;
+  font-size: 12px;
+}
+
+.timelineZoomSlider {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 14px;
+  gap: 6px;
+  align-items: center;
+}
+
+.timelineZoomSlider input {
+  min-width: 0;
+  accent-color: #2f6df6;
+}
+
+.timelineRangeHint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #eef1f4;
+  background: #f8fafc;
+  color: #2f6df6;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.timelineRangeHint button {
+  min-height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: #edf4ff;
+  color: #2f6df6;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 .timelineExportTools {
@@ -1970,23 +2054,26 @@ button.exportRangeLabel:hover {
 }
 
 .timelineExportStatus {
-  border-top: 1px solid #282828;
-  background: #111418;
+  border-top: 1px solid #eef1f4;
+  background: #f8fafc;
   color: #94a3b8;
   padding: 6px 14px 0;
   font-size: 12px;
 }
 
 .recordingTimelineHost {
-  height: 94px;
+  position: relative;
+  flex: 1;
+  min-height: 0;
   padding: 0;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
 .recordingTimelineHost canvas {
   display: block;
   width: 100%;
-  height: 94px;
+  height: 100%;
   touch-action: none;
   overscroll-behavior: contain;
   cursor: grab;
@@ -1996,11 +2083,165 @@ button.exportRangeLabel:hover {
   cursor: grabbing;
 }
 
+.timelineRangeOverlay {
+  position: absolute;
+  left: 62px;
+  right: 14px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.timelineRangeBox {
+  position: absolute;
+  inset: 0;
+  border-right: 8px solid #858e99;
+  border-left: 8px solid #858e99;
+  background: rgb(47 109 246 / 8%);
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 14%);
+}
+
+.timelineRangeHandle {
+  position: absolute;
+  left: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(38px, auto) 1fr minmax(72px, auto);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: #858e99;
+  color: #ffffff;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 900;
+  pointer-events: auto;
+  cursor: ns-resize;
+  box-shadow: 0 8px 20px rgb(31 41 51 / 10%);
+}
+
+.timelineRangeHandle:hover,
+.timelineRangeHandle:focus-visible {
+  background: #737d89;
+}
+
+.timelineRangeHandle:focus-visible {
+  outline: 2px solid #8fb5ff;
+  outline-offset: 2px;
+}
+
+.timelineRangeHandle svg {
+  justify-self: center;
+  stroke-width: 2.6;
+}
+
+.timelineRangeHandle time {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.timelineRangeHandleEnd {
+  top: 0;
+  transform: translateY(-50%);
+}
+
+.timelineRangeHandleStart {
+  bottom: 0;
+  transform: translateY(50%);
+}
+
+.timelineRangeCurrent {
+  position: absolute;
+  left: 0;
+  right: 8px;
+  z-index: 5;
+  height: 3px;
+  transform: translateY(-50%);
+  background: #2f6df6;
+  pointer-events: none;
+}
+
+.timelineRangeCurrent span {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 78px;
+  border-radius: 7px;
+  background: #2f6df6;
+  color: #ffffff;
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 8px 18px rgb(47 109 246 / 28%);
+}
+
+.timelineThumbs {
+  position: absolute;
+  inset: 0 8px 0 62px;
+  pointer-events: none;
+}
+
+.timelineThumb {
+  position: absolute;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: min(154px, calc(100% - 2px));
+  height: 86px;
+  overflow: hidden;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  background: #10141b;
+  color: #dbeafe;
+  padding: 0;
+  pointer-events: auto;
+}
+
+.timelineThumb:hover,
+.timelineThumbActive {
+  border-color: #2f6df6;
+  box-shadow: 0 0 0 2px rgb(47 109 246 / 28%);
+}
+
+.timelineThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.timelineThumbPlaceholder {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(135deg, rgb(47 109 246 / 16%), transparent 45%),
+    linear-gradient(180deg, #263241, #111827);
+}
+
+.timelineThumbTime {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.timelineThumbDur {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .timelineActions {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  border-top: 1px solid #282828;
-  background: #181818;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  flex: 0 0 auto;
+  border-top: 1px solid #eef1f4;
+  background: #ffffff;
 }
 
 .timelineActions button {
@@ -2009,12 +2250,13 @@ button.exportRangeLabel:hover {
   place-items: center;
   min-height: 60px;
   border-radius: 0;
+  border: 0;
   background: transparent;
-  color: #d9dde4;
+  color: #4b5563;
 }
 
 .timelineActions button + button {
-  border-left: 1px solid #3a3a3a;
+  border-left: 1px solid #eef1f4;
 }
 
 .timelineActions span {
@@ -2029,6 +2271,322 @@ button.exportRangeLabel:hover {
   overflow: hidden;
   border-radius: 8px;
   background: #05070a;
+}
+
+.viewerRight {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewerResizeHandle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 0;
+  cursor: row-resize;
+}
+
+.viewerResizeHandle::before {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
+}
+
+.viewerResizeHandle span {
+  width: 56px;
+  height: 3px;
+  border-radius: 999px;
+  background: #c8d0d8;
+  transition: width 0.15s, background 0.15s;
+}
+
+.viewerResizeHandle:hover span,
+.viewerResizeHandle:focus-visible span {
+  width: 86px;
+  background: #2f6df6;
+}
+
+.viewerResizeHandle:focus-visible {
+  outline: 2px solid #8fb5ff;
+  outline-offset: 2px;
+}
+
+.isResizingPanels,
+.isResizingPanels * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
+.managePanelColumn {
+  container-type: inline-size;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #e4e8ed;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.managePanelHeader,
+.managePanelFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid #eef1f4;
+  color: #1f2933;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.managePanelFooter {
+  border-top: 1px solid #eef1f4;
+  border-bottom: 0;
+}
+
+.managePanelClose,
+.manageCancel {
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: #eef1f4;
+  color: #4b5563;
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.managePanelClose {
+  width: 34px;
+  padding: 0;
+}
+
+.managePanelBody {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.manageTimeRange {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.manageTimeBlock {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.manageTimeLabel,
+.manageTimeDate,
+.manageSectionTitle,
+.manageSpeedHint {
+  color: #7b8794;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.manageDateTimeInputs {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(94px, auto);
+  gap: 7px;
+  min-width: 0;
+}
+
+.manageDateInput,
+.manageTimeInput,
+.manageSpeedSelect {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #1f2933;
+  padding: 0 9px;
+  outline: 0;
+}
+
+.manageTimeInput {
+  font-variant-numeric: tabular-nums;
+}
+
+.manageTimeArrow {
+  color: #7b8794;
+  text-align: center;
+  font-size: 20px;
+}
+
+@media (max-width: 1180px) {
+  .manageTimeRange {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .manageTimeArrow {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .manageDateTimeInputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 760px) {
+  .manageTimeRange {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .manageTimeArrow {
+    display: none;
+  }
+}
+
+@container (max-width: 520px) {
+  .manageDateTimeInputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.manageAvailOk,
+.manageAvailEmpty,
+.manageInfoRow,
+.manageSuccess {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.manageAvailOk,
+.manageSuccess {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.manageAvailEmpty {
+  background: #fff7ed;
+  color: #b35416;
+}
+
+.manageSection,
+.manageInfo {
+  display: grid;
+  gap: 8px;
+}
+
+.manageOperations {
+  display: grid;
+  gap: 8px;
+}
+
+.manageOpItem {
+  display: grid;
+  grid-template-columns: 18px 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  border: 1px solid #e4e8ed;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #4b5563;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.manageOpItem input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.manageOpRadio {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #b7c0ca;
+  border-radius: 999px;
+}
+
+.manageOpActive {
+  border-color: #8cb4ff;
+  background: #edf4ff;
+  color: #2f6df6;
+}
+
+.manageOpActive .manageOpRadio {
+  border: 4px solid #2f6df6;
+}
+
+.manageTimelapseSpeed {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 88px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.manageSourceTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.manageSourceTag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #2f6df6;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.manageInfoRow {
+  background: #f8fafc;
+  color: #4b5563;
+}
+
+.manageActionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f6df6;
+  color: #ffffff;
+  padding: 0 14px;
+  font-weight: 900;
 }
 
 .viewerVideo {
@@ -2183,6 +2741,8 @@ button.exportRangeLabel:hover {
 
 .clipDock {
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: #ffffff;
   padding: 12px;
 }
@@ -2304,10 +2864,25 @@ button.exportRangeLabel:hover {
   gap: 6px;
 }
 
+.clipGridScroll {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.clipGridRow {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
 .clipCard {
   position: relative;
   overflow: hidden;
-  min-height: 132px;
+  height: 100%;
+  min-height: 0;
   border: 2px solid transparent;
   border-radius: 5px;
   background: #111827;
@@ -2326,7 +2901,7 @@ button.exportRangeLabel:hover {
   place-items: center;
   width: 100%;
   height: 100%;
-  min-height: 132px;
+  min-height: 0;
   background:
     linear-gradient(135deg, rgb(47 109 246 / 18%), transparent 42%),
     linear-gradient(180deg, #263241, #111827);
@@ -2942,6 +3517,7 @@ button.exportRangeLabel:hover {
 .emptyDock {
   display: grid;
   place-items: center;
+  width: 100%;
   min-height: 140px;
   color: #8c99a6;
   background: #f8fafc;

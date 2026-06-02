@@ -74,8 +74,13 @@ def create_export_job(db: Session, payload: ExportCreate, background_tasks: Back
         raise HTTPException(status_code=400, detail="startTime must be before endTime")
     if end - start > timedelta(minutes=int(get_effective("max_export_minutes", 30))):
         raise HTTPException(status_code=400, detail="Export range is too long")
-    if payload.mode not in {"fast", "accurate"}:
-        raise HTTPException(status_code=400, detail="mode must be fast or accurate")
+    if payload.mode not in {"fast", "accurate", "timelapse"}:
+        raise HTTPException(status_code=400, detail="mode must be fast, accurate, or timelapse")
+    # timelapse 模式把速度编码在 mode 里
+    mode_str = payload.mode
+    if payload.mode == "timelapse":
+        speed = max(2, min(3600, payload.timelapseSpeed))
+        mode_str = f"timelapse:{speed}"
 
     segments = indexed_segments_for_range(db, source.id, start, end)
     if not segments:
@@ -90,7 +95,7 @@ def create_export_job(db: Session, payload: ExportCreate, background_tasks: Back
         source_id=source.id,
         start_time=start.isoformat(),
         end_time=end.isoformat(),
-        mode=payload.mode,
+        mode=mode_str,
         status="queued",
         progress=0,
         has_gaps=1 if has_gaps else 0,
@@ -196,18 +201,34 @@ def run_export_job(export_id: str) -> None:
 
 
 def trim_segment(input_path: Path, output_path: Path, offset: float, duration: float, mode: str) -> None:
-    if mode == "fast":
+    # timelapse 模式：裁剪 + 变速一起做，避免最后处理超大文件
+    if mode.startswith("timelapse:"):
+        speed = int(mode.split(":")[1])
+        afilters = build_atempo_chain(speed)
         command = [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            str(offset),
-            "-i",
-            str(input_path),
-            "-t",
-            str(duration),
-            "-c",
-            "copy",
+            "ffmpeg", "-y",
+            "-ss", str(offset),
+            "-i", str(input_path),
+            "-t", str(duration),
+            "-filter:v", f"setpts=PTS/{speed}",
+            "-r", "30",
+        ]
+        if afilters:
+            command += ["-filter:a", afilters]
+        else:
+            command += ["-an"]
+        command += [
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-movflags", "+faststart",
+            str(output_path),
+        ]
+    elif mode == "fast":
+        command = [
+            "ffmpeg", "-y",
+            "-ss", str(offset),
+            "-i", str(input_path),
+            "-t", str(duration),
+            "-c", "copy",
             str(output_path),
         ]
     else:
@@ -236,43 +257,43 @@ def trim_segment(input_path: Path, output_path: Path, offset: float, duration: f
 
 
 def concat_segments(concat_file: Path, output_path: Path, mode: str) -> None:
+    # timelapse: 变速已在 trim_segment 完成，这里只做快速合并
+    if mode.startswith("timelapse:"):
+        mode = "fast"
     if mode == "fast":
         command = [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(concat_file),
-            "-c",
-            "copy",
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(concat_file),
+            "-c", "copy",
             str(output_path),
         ]
+        run_ffmpeg(command)
     else:
         command = [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(concat_file),
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "20",
-            "-c:a",
-            "aac",
-            "-movflags",
-            "+faststart",
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(concat_file),
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-c:a", "aac",
+            "-movflags", "+faststart",
             str(output_path),
         ]
-    run_ffmpeg(command)
+        run_ffmpeg(command)
+
+
+def build_atempo_chain(speed: int) -> str | None:
+    """构建 atempo 链。单个 atempo 范围 0.5~100，多个串联。"""
+    if speed <= 0:
+        return None
+    filters = []
+    remaining = speed
+    while remaining > 100:
+        filters.append("atempo=100.0")
+        remaining /= 100
+    if remaining > 1:
+        filters.append(f"atempo={remaining:.1f}")
+    return ",".join(filters) if filters else None
 
 
 def run_ffmpeg(command: list[str]) -> None:

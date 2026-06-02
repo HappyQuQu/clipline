@@ -37,6 +37,13 @@ ALLOWED_KEYS: set[str] = {
     "asr_audio_sample_rate",
     "asr_max_concurrent",
     "asr_timeout_seconds",
+    # 扫描优化
+    "idle_scan_enabled",
+    "idle_scan_start_hour",
+    "idle_scan_end_hour",
+    "scan_workers_per_source",
+    "global_ffprobe_concurrency",
+    "auto_cleanup_days",
 }
 
 # key → 类型校验
@@ -59,6 +66,12 @@ _KEY_TYPES: dict[str, type | tuple[type, ...]] = {
     "asr_audio_sample_rate": int,
     "asr_max_concurrent": int,
     "asr_timeout_seconds": int,
+    "idle_scan_enabled": bool,
+    "idle_scan_start_hour": int,
+    "idle_scan_end_hour": int,
+    "scan_workers_per_source": int,
+    "global_ffprobe_concurrency": int,
+    "auto_cleanup_days": int,
 }
 
 

@@ -190,7 +190,7 @@ export function ASRTab() {
       <div className="settingsSection">
         <div className="settingsSectionTitle">📥 模型管理</div>
         {modelsQuery.isLoading ? (
-          <div style={{ color: '#7b8794', fontSize: 13, padding: '12px 0' }}>加载中...</div>
+          <div style={{ color: '#7b8794', fontSize: 13, padding: '20px 20px' }}>加载中...</div>
         ) : (
           <div className="modelList">
             {displayModels.map((model) => (
@@ -198,6 +198,26 @@ export function ASRTab() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="settingsSection">
+        <div className="settingsSectionTitle">💡 引擎说明</div>
+        <div className="settingsKV">
+          <span>FunASR</span>
+          <strong>阿里达摩院开源的高性能语音识别引擎，推荐用于中文场景。</strong>
+        </div>
+        <div className="settingsKV">
+          <span>SenseVoice</span>
+          <strong>FunASR 的新一代模型，支持更多语言和情感识别。</strong>
+        </div>
+        <div className="settingsKV">
+          <span>Whisper</span>
+          <strong>OpenAI 开源的通用语音识别模型，多语言表现优秀。</strong>
+        </div>
+        <div className="settingsKV">
+          <span>热词</span>
+          <strong>添加特定词汇可提高识别准确率，用英文逗号分隔。</strong>
+        </div>
       </div>
     </div>
   )
