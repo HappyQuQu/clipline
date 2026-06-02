@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.settings_store import get_effective
 from app.db import SessionLocal
 from app.models import ScanJob, Source, Thumbnail, VideoSegment
 from app.services.common import make_id, now_iso
@@ -59,7 +60,8 @@ def run_scan_job(job_id: str) -> None:
         logger.info("scan job started", extra={"scan_job_id": job.id, "source_id": source.id})
 
         root = Path(source.path)
-        cutoff = datetime.now(timezone.utc).astimezone() - timedelta(seconds=settings.skip_recent_seconds)
+        skip_seconds = int(get_effective("skip_recent_seconds", 30))
+        cutoff = datetime.now(timezone.utc).astimezone() - timedelta(seconds=skip_seconds)
 
         paths = sorted(
             [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS],

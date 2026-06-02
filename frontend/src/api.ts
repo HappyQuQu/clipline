@@ -1,9 +1,12 @@
 import type {
+  ASRModelDownloadStatus,
+  ASRModelInfo,
   DirectoryNode,
   ExportJob,
   ScanJob,
   SearchResponse,
   Segment,
+  SettingsResponse,
   Source,
   SystemStatus,
   TimelineResponse,
@@ -135,15 +138,28 @@ export const api = {
   exportTranscription: (segmentId: string, format: 'srt' | 'txt' = 'srt') =>
     request<{ content: string }>(`/api/segments/${segmentId}/transcription/export?format=${format}`),
 
-  // ASR 设置
-  getAsrSettings: () =>
-    request<{ model: string; modelSize: string; device: string; language: string; autoTranscribe: boolean; hotwords: string }>(
-      '/api/settings/asr'
-    ),
+  // 全局设置
+  getSettings: () => request<SettingsResponse>('/api/settings'),
 
-  updateAsrSettings: (payload: Partial<{ model: string; modelSize: string; device: string; language: string; autoTranscribe: boolean; hotwords: string }>) =>
-    request<{ model: string; modelSize: string; device: string; language: string; autoTranscribe: boolean; hotwords: string }>(
-      '/api/settings/asr',
-      { method: 'PATCH', body: JSON.stringify(payload) }
-    ),
+  updateSettings: (payload: Record<string, unknown>) =>
+    request<SettingsResponse>('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+
+  // ASR 模型管理
+  getASRModels: () => request<{ models: ASRModelInfo[] }>('/api/settings/asr/models'),
+
+  downloadASRModel: (modelId: string) =>
+    request<{ status: string }>(`/api/settings/asr/models/${encodeURIComponent(modelId)}/download`, {
+      method: 'POST',
+    }),
+
+  getASRModelStatus: (modelId: string) =>
+    request<ASRModelDownloadStatus>(`/api/settings/asr/models/${encodeURIComponent(modelId)}/status`),
+
+  deleteASRModel: (modelId: string) =>
+    request<{ deleted: boolean }>(`/api/settings/asr/models/${encodeURIComponent(modelId)}`, {
+      method: 'DELETE',
+    }),
 }

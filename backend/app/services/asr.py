@@ -9,40 +9,54 @@ from pathlib import Path
 from typing import TypedDict
 
 from app.core.config import get_settings
+from app.core.settings_store import get_effective, update_settings
 
 logger = logging.getLogger(__name__)
 
-# 运行时 ASR 配置（内存存储，重启后恢复默认值）
-_asr_runtime_overrides: dict[str, str | bool] = {}
+# camelCase (前端) → snake_case (settings_store) 映射
+_ASR_KEY_MAP = {
+    "model": "asr_model",
+    "modelSize": "asr_model_size",
+    "device": "asr_device",
+    "language": "asr_language",
+    "autoTranscribe": "asr_auto_transcribe",
+    "hotwords": "asr_hotwords",
+    "audioSampleRate": "asr_audio_sample_rate",
+    "maxConcurrent": "asr_max_concurrent",
+    "timeoutSeconds": "asr_timeout_seconds",
+}
+_ASR_KEY_REVERSE = {v: k for k, v in _ASR_KEY_MAP.items()}
 
 
 def get_asr_config() -> dict:
-    """获取 ASR 配置（优先使用运行时配置）"""
-    settings = get_settings()
+    """获取 ASR 配置（从 settings_store 读取）"""
     return {
-        "model": _asr_runtime_overrides.get("model", settings.asr_model),
-        "model_size": _asr_runtime_overrides.get("model_size", settings.asr_model_size),
-        "device": _asr_runtime_overrides.get("device", settings.asr_device),
-        "language": _asr_runtime_overrides.get("language", settings.asr_language),
-        "auto_transcribe": _asr_runtime_overrides.get("auto_transcribe", settings.asr_auto_transcribe),
-        "hotwords": _asr_runtime_overrides.get("hotwords", settings.asr_hotwords),
-        "audio_sample_rate": _asr_runtime_overrides.get("audio_sample_rate", settings.asr_audio_sample_rate),
-        "max_concurrent": settings.asr_max_concurrent,
-        "timeout_seconds": settings.asr_timeout_seconds,
+        "model": get_effective("asr_model", "funasr"),
+        "modelSize": get_effective("asr_model_size", "medium"),
+        "device": get_effective("asr_device", "auto"),
+        "language": get_effective("asr_language", "zh"),
+        "autoTranscribe": get_effective("asr_auto_transcribe", False),
+        "hotwords": get_effective("asr_hotwords", ""),
+        "audioSampleRate": get_effective("asr_audio_sample_rate", 16000),
+        "maxConcurrent": get_effective("asr_max_concurrent", 2),
+        "timeoutSeconds": get_effective("asr_timeout_seconds", 600),
     }
 
 
 def update_asr_config(updates: dict) -> dict:
-    """更新运行时 ASR 配置"""
-    allowed_keys = {"model", "model_size", "device", "language", "auto_transcribe", "hotwords", "audio_sample_rate"}
+    """更新 ASR 配置（写入 settings_store）"""
+    store_updates = {}
     for key, value in updates.items():
-        if key in allowed_keys:
-            _asr_runtime_overrides[key] = value
+        store_key = _ASR_KEY_MAP.get(key)
+        if store_key:
+            store_updates[store_key] = value
+    if store_updates:
+        update_settings(store_updates)
 
-    # 如果更新了 max_concurrent，需要同步到 transcription 模块
-    if "max_concurrent" in updates:
+    # 如果更新了 maxConcurrent，需要同步到 transcription 模块
+    if "maxConcurrent" in updates:
         from app.services.transcription import set_max_concurrent_transcriptions
-        set_max_concurrent_transcriptions(int(updates["max_concurrent"]))
+        set_max_concurrent_transcriptions(int(updates["maxConcurrent"]))
 
     return get_asr_config()
 
@@ -84,7 +98,7 @@ class ASRService:
         """延迟加载 ASR 模型，支持重试"""
         config = self._get_runtime_asr_config()
         model_type = config["model"]
-        model_size = config["model_size"]
+        model_size = config["modelSize"]
         device = config["device"]
 
         # 如果模型类型或大小变了，需要重新加载
@@ -188,7 +202,7 @@ class ASRService:
         """FFmpeg 提取音频"""
         settings = get_settings()
         config = self._get_runtime_asr_config()
-        sample_rate = config.get("audio_sample_rate", 16000)
+        sample_rate = config.get("audioSampleRate", 16000)
 
         # 使用唯一标识符避免并发冲突
         unique_id = uuid.uuid4().hex[:8]
@@ -287,7 +301,7 @@ class ASRService:
 
     def _transcribe_whisper(self, model, audio_path: str) -> list[TranscriptionSegment]:
         """Whisper 识别"""
-        result = model.transcribe(audio_path, language=self.settings.asr_language)
+        result = model.transcribe(audio_path, language=get_effective("asr_language", "zh"))
 
         segments = []
         for segment in result.get("segments", []):

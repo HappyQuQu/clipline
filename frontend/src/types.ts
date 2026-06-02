@@ -147,3 +147,46 @@ export interface SearchResponse {
   limit: number
   offset: number
 }
+
+export interface SettingsResponse {
+  recordings: {
+    recordings_root: string
+    scan_interval_seconds: number
+    skip_recent_seconds: number
+    timezone: string
+  }
+  export: {
+    export_ttl_hours: number
+    max_export_minutes: number
+    max_concurrent_exports: number
+    thumbnail_mode: string
+  }
+  asr: {
+    model: string
+    modelSize: string
+    device: string
+    language: string
+    autoTranscribe: boolean
+    hotwords: string
+  }
+  logs: {
+    log_level: string
+    log_format: string
+    log_file: string
+  }
+}
+
+export interface ASRModelInfo {
+  id: string
+  engine: string
+  name: string
+  size_label: string
+  downloaded: boolean
+  size_bytes: number
+  cache_path: string | null
+}
+
+export interface ASRModelDownloadStatus {
+  status: 'idle' | 'downloading' | 'completed' | 'failed'
+  error: string | null
+}

@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.settings_store import get_effective
 from app.db import SessionLocal
 from app.models import ScanJob, Source
 from app.services.scanner import create_scan_job, run_scan_job
@@ -28,13 +29,13 @@ def _due_for_scan(source: Source, last_scan_at: str | None) -> bool:
     last_scan = _parse_time(last_scan_at)
     if last_scan is None:
         return True
-    now = datetime.now(ZoneInfo(get_settings().timezone))
+    now = datetime.now(ZoneInfo(get_effective("timezone", "Asia/Shanghai")))
     return now - last_scan >= timedelta(minutes=source.scan_interval_minutes)
 
 
 async def scheduled_scan_loop(stop_event: asyncio.Event) -> None:
-    interval_seconds = max(30, get_settings().scan_interval_seconds)
     while not stop_event.is_set():
+        interval_seconds = max(30, int(get_effective("scan_interval_seconds", 300)))
         try:
             with SessionLocal() as db:
                 sources = db.scalars(select(Source).where(Source.enabled == 1, Source.scan_interval_minutes > 0)).all()
@@ -65,5 +66,20 @@ async def scheduled_scan_loop(stop_event: asyncio.Event) -> None:
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+        except TimeoutError:
+            continue
+
+
+async def export_cleanup_loop(stop_event: asyncio.Event) -> None:
+    """定期清理过期的导出文件（每小时检查一次）。"""
+    while not stop_event.is_set():
+        try:
+            from app.services.exports import cleanup_expired_exports
+            cleanup_expired_exports()
+        except Exception:
+            logger.exception("export cleanup loop failed")
+
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=3600)
         except TimeoutError:
             continue

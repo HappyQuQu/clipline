@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.logging import RequestLoggingMiddleware, get_logger, setup_logging
 from app.api import router as api_router
 from app.db import init_db
-from app.services.scheduler import scheduled_scan_loop
+from app.services.scheduler import export_cleanup_loop, scheduled_scan_loop
 from app.services.transcription import set_max_concurrent_transcriptions
 
 setup_logging()
@@ -26,11 +26,14 @@ async def lifespan(app: FastAPI):
     init_db()
 
     # 初始化 ASR 并发控制
-    set_max_concurrent_transcriptions(settings.asr_max_concurrent)
-    logger.info(f"ASR max concurrent transcriptions: {settings.asr_max_concurrent}")
+    from app.core.settings_store import get_effective
+    max_concurrent = int(get_effective("asr_max_concurrent", 2))
+    set_max_concurrent_transcriptions(max_concurrent)
+    logger.info(f"ASR max concurrent transcriptions: {max_concurrent}")
 
     stop_event = asyncio.Event()
     scheduler_task = asyncio.create_task(scheduled_scan_loop(stop_event))
+    cleanup_task = asyncio.create_task(export_cleanup_loop(stop_event))
     logger.info(
         "clipline backend started",
         extra={
@@ -45,8 +48,13 @@ async def lifespan(app: FastAPI):
     finally:
         stop_event.set()
         scheduler_task.cancel()
+        cleanup_task.cancel()
         try:
             await scheduler_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await cleanup_task
         except asyncio.CancelledError:
             pass
     logger.info("clipline backend stopped")

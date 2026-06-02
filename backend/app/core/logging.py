@@ -142,6 +142,69 @@ def setup_logging() -> None:
     )
 
 
+def reconfigure_logging() -> None:
+    """运行时重新配置日志（读取 settings_store 中的覆盖值）。"""
+    from app.core.settings_store import get_effective
+
+    settings = get_settings()
+    settings.logs_path.mkdir(parents=True, exist_ok=True)
+    level = str(get_effective("log_level", settings.log_level)).upper()
+    fmt = str(get_effective("log_format", settings.log_format))
+    formatter_name = "json" if fmt.lower() == "json" else "text"
+
+    log_file = settings.resolved_log_file
+
+    logging.config.dictConfig(
+        {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "filters": {
+                "request_id": {
+                    "()": "app.core.logging.RequestIdFilter",
+                }
+            },
+            "formatters": {
+                "text": {
+                    "()": "app.core.logging.ExtraTextFormatter",
+                    "format": "%(asctime)s %(levelname)s [%(request_id)s] %(name)s: %(message)s",
+                },
+                "json": {
+                    "()": "app.core.logging.JsonFormatter",
+                },
+            },
+            "handlers": {
+                "console": {
+                    "class": "logging.StreamHandler",
+                    "level": level,
+                    "formatter": formatter_name,
+                    "filters": ["request_id"],
+                },
+                "file": {
+                    "class": "logging.handlers.TimedRotatingFileHandler",
+                    "level": level,
+                    "formatter": formatter_name,
+                    "filters": ["request_id"],
+                    "filename": str(log_file),
+                    "when": "midnight",
+                    "interval": 1,
+                    "backupCount": 30,
+                    "encoding": "utf-8",
+                },
+            },
+            "root": {
+                "level": level,
+                "handlers": ["console", "file"],
+            },
+            "loggers": {
+                "uvicorn.access": {
+                    "level": "WARNING",
+                    "propagate": True,
+                },
+            },
+        }
+    )
+
+
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
