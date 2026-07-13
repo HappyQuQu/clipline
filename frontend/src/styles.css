@@ -12,6 +12,8 @@
 
 body {
   margin: 0;
+  min-width: 320px;
+  background: #f4f6f8;
 }
 
 button,
@@ -29,6 +31,13 @@ button:disabled {
   opacity: 0.55;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #7eabff;
+  outline-offset: 2px;
+}
+
 .protectShell {
   display: grid;
   grid-template-columns: 58px minmax(0, 1fr);
@@ -41,11 +50,14 @@ button:disabled {
 }
 
 .rail {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  padding: 20px 0;
+  height: 100dvh;
+  padding: 14px 0;
   border-right: 1px solid #e4e8ed;
   background: #ffffff;
 }
@@ -99,12 +111,18 @@ button:disabled {
   border-radius: 8px;
   background: transparent;
   color: #7b8794;
+  transition: background 150ms ease, color 150ms ease;
 }
 
 .railButton.active,
 .railButton:hover {
   background: #edf4ff;
   color: #2f6df6;
+}
+
+.railButton:focus-visible {
+  outline: 2px solid #8fb5ff;
+  outline-offset: 2px;
 }
 
 .railSpacer {
@@ -442,8 +460,8 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 100vh;
-  padding: 18px;
+  height: 100dvh;
+  padding: 14px 16px 16px;
   overflow: hidden;
 }
 
@@ -452,8 +470,8 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 42px;
-  margin-bottom: 14px;
+  min-height: 46px;
+  margin-bottom: 10px;
 }
 
 .stageTools {
@@ -468,9 +486,49 @@ button:disabled {
   background: #ffffff;
 }
 
+.headerSearchButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4b5563;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.headerSearchButton:hover,
+.headerSearchButton:focus-visible,
+.headerSearchButton[aria-pressed="true"] {
+  border-color: #2f6df6;
+  background: #f3f7ff;
+  color: #2f6df6;
+  outline: 0;
+}
+
+.headerSearchButton:focus-visible {
+  box-shadow: 0 0 0 3px rgb(47 109 246 / 10%);
+}
+
+.headerSearchButton kbd {
+  border: 1px solid #dce3ea;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #7b8794;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 800;
+}
+
 .stageTitle {
   color: #1f2933;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
 }
 
@@ -522,9 +580,7 @@ button:disabled {
   min-height: 0;
   flex: 1;
   overflow: hidden;
-  border: 1px solid #e4e8ed;
-  border-radius: 8px;
-  background: #ffffff;
+  background: transparent;
 }
 
 .workbenchContent {
@@ -534,7 +590,11 @@ button:disabled {
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: contain;
-  background: #ffffff;
+  background: transparent;
+}
+
+.mobileNav {
+  display: none;
 }
 
 .sourceManageGrid {
@@ -1496,6 +1556,9 @@ button:disabled {
 }
 
 .settingsSectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   color: #1f2933;
   font-size: 14px;
   font-weight: 900;
@@ -1861,16 +1924,16 @@ button:disabled {
 
 .viewerBand {
   display: grid;
-  grid-template-columns: 286px minmax(0, 1fr);
+  grid-template-columns: 258px minmax(0, 1fr);
   gap: 10px;
   flex: 1;
   min-height: 0;
   height: 100%;
-  padding: 10px;
+  padding: 0;
 }
 
 .viewerBandWithManage {
-  grid-template-columns: 286px minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: 258px minmax(300px, 340px) minmax(0, 1fr);
 }
 
 .timeRail {
@@ -1880,68 +1943,75 @@ button:disabled {
   min-height: 0;
   overflow: hidden;
   border: 1px solid #e4e8ed;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #ffffff;
   padding: 0;
 }
 
 .timelineHead {
   display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  min-height: 50px;
-  padding: 8px 10px;
+  gap: 10px;
+  min-height: 56px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #eef1f4;
   color: #4b5563;
   font-size: 13px;
   font-weight: 800;
 }
 
-.timelineButtons {
+.timelineTitle {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.timelineButtons button,
-.timelineActions button {
-  border: 1px solid #e4e8ed;
-  border-radius: 4px;
-  background: #f8fafc;
-  color: #4b5563;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.timelineButtons button:hover,
-.timelineActions button:hover {
-  border-color: #8cb4ff;
+.timelineTitleIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 6px;
   background: #edf4ff;
   color: #2f6df6;
 }
 
-.timelineButtons button {
-  min-width: 38px;
-  min-height: 30px;
+.timelineTitle > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.timelineTitle strong {
+  color: #1f2933;
+  font-size: 13px;
+}
+
+.timelineTitle small {
+  margin-top: 2px;
+  color: #7b8794;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .timelineClock {
-  justify-self: end;
-  min-width: 104px;
-  max-width: 118px;
+  min-width: 82px;
   border-radius: 4px;
-  background: #f4f7fb;
-  color: #1f9fd6;
-  padding: 8px 10px;
+  background: #f1f5f9;
+  color: #2563eb;
+  padding: 7px 8px;
   text-align: center;
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .timelineDateZoom {
   display: grid;
   gap: 8px;
-  padding: 0 10px 10px;
+  padding: 10px;
   border-bottom: 1px solid #eef1f4;
 }
 
@@ -1975,7 +2045,7 @@ button:disabled {
 
 .timelineZoomSlider {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 14px;
+  grid-template-columns: 16px minmax(0, 1fr) 16px;
   gap: 6px;
   align-items: center;
 }
@@ -1983,6 +2053,10 @@ button:disabled {
 .timelineZoomSlider input {
   min-width: 0;
   accent-color: #2f6df6;
+}
+
+.timelineZoomLabel {
+  color: #7b8794;
 }
 
 .timelineRangeHint {
@@ -2248,11 +2322,16 @@ button.exportRangeLabel:hover {
   display: grid;
   gap: 4px;
   place-items: center;
-  min-height: 60px;
+  min-height: 52px;
   border-radius: 0;
   border: 0;
   background: transparent;
   color: #4b5563;
+}
+
+.timelineActions button:hover {
+  background: #f3f7ff;
+  color: #2f6df6;
 }
 
 .timelineActions button + button {
@@ -2266,16 +2345,18 @@ button.exportRangeLabel:hover {
 
 .viewer {
   position: relative;
+  isolation: isolate;
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #05070a;
+  box-shadow: 0 0 0 1px #1b222c;
 }
 
 .viewerRight {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -2590,78 +2671,298 @@ button.exportRangeLabel:hover {
 }
 
 .viewerVideo {
+  display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
   object-fit: contain;
   background: #05070a;
+  cursor: pointer;
 }
 
 .viewerEmpty {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   height: 100%;
   min-height: 0;
-  color: #8c99a6;
+  color: #9aa6b2;
+  text-align: center;
 }
 
-.videoBadge,
-.floatingTools,
-.zoomBadge {
+.viewerEmptyIcon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border: 1px solid #2b3440;
+  border-radius: 8px;
+  background: #151b23;
+  color: #7e8a97;
+}
+
+.viewerEmpty strong {
+  color: #edf2f7;
+  font-size: 15px;
+}
+
+.viewerEmpty > span:last-of-type {
+  font-size: 12px;
+}
+
+.viewerEmpty button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  margin-top: 8px;
+  border: 1px solid #344151;
+  border-radius: 6px;
+  background: #1c2530;
+  color: #e5ecf3;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.videoTopBar {
   position: absolute;
-  border-radius: 7px;
-  background: rgb(8 10 13 / 72%);
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.videoIdentity,
+.videoActions {
+  pointer-events: auto;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 6px;
+  background: rgb(8 11 15 / 78%);
+  backdrop-filter: blur(8px);
+}
+
+.videoIdentity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 7px 10px 7px 7px;
   color: #ffffff;
 }
 
-.videoBadge {
-  left: 16px;
-  top: 14px;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  backdrop-filter: blur(8px);
-}
-
-.floatingTools {
-  top: 12px;
-  left: 50%;
-  display: flex;
-  gap: 4px;
-  padding: 6px;
-  transform: translateX(-50%);
-  border-radius: 8px;
-  background: rgb(8 10 13 / 60%);
-  backdrop-filter: blur(8px);
-}
-
-.floatingTools button {
+.videoIdentityIcon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #dce3ea;
-  transition: all 0.15s;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 10%);
+  color: #a9c6ff;
 }
 
-.floatingTools button:hover {
+.videoIdentity > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.videoIdentity strong,
+.videoIdentity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videoIdentity strong {
+  max-width: 220px;
+  font-size: 12px;
+}
+
+.videoIdentity small {
+  margin-top: 2px;
+  color: #aeb8c3;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.videoActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+}
+
+.videoActions button,
+.videoControlRow button {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  place-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #d4dde7;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.videoActions button:hover,
+.videoControlRow button:hover {
   background: rgb(255 255 255 / 15%);
   color: #ffffff;
 }
 
-.floatingTools button:active {
-  transform: scale(0.95);
+.videoActions .videoExportAction {
+  width: auto;
+  gap: 6px;
+  margin-left: 2px;
+  background: #2f6df6;
+  color: #ffffff;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
-.floatingToolTranscribe {
-  width: auto !important;
-  padding: 0 10px !important;
-  gap: 4px !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
+.videoActions .videoExportAction:hover {
+  background: #245fd9;
+}
+
+.videoCenterPlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 50%;
+  background: rgb(8 11 15 / 76%);
+  color: #ffffff;
+  padding-left: 4px;
+  backdrop-filter: blur(8px);
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.videoCenterPlay:hover {
+  border-color: rgb(255 255 255 / 34%);
+  background: rgb(22 29 38 / 88%);
+}
+
+.videoControls {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  display: grid;
+  gap: 8px;
+  background: rgb(5 7 10 / 88%);
+  padding: 10px 13px 9px;
+  color: #ffffff;
+  backdrop-filter: blur(8px);
+}
+
+.videoSeek {
+  width: 100%;
+  height: 4px;
+  margin: 0;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(to right, #3b82f6 0 var(--seek-progress), rgb(255 255 255 / 28%) var(--seek-progress) 100%);
+  cursor: pointer;
+}
+
+.videoSeek::-webkit-slider-thumb,
+.videoVolume::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  appearance: none;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #3b82f6;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+}
+
+.videoSeek::-moz-range-thumb,
+.videoVolume::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+
+.videoControlRow,
+.videoControlGroup {
+  display: flex;
+  align-items: center;
+}
+
+.videoControlRow {
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.videoControlGroup {
+  gap: 3px;
+  min-width: 0;
+}
+
+.videoControlGroupEnd {
+  justify-content: flex-end;
+}
+
+.videoTime {
+  margin-left: 7px;
+  color: #e4ebf3;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.videoTime span {
+  color: #7f8a96;
+}
+
+.videoSkipLabel {
+  position: absolute;
+  top: 12px;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.videoControlRow .videoRateButton {
+  width: auto;
+  min-width: 38px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.videoVolume {
+  width: 68px;
+  height: 3px;
+  appearance: none;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 30%);
+  cursor: pointer;
 }
 
 .playbackBar {
@@ -2740,11 +3041,15 @@ button.exportRangeLabel:hover {
 }
 
 .clipDock {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border: 1px solid #e1e6ec;
+  border-radius: 6px;
   background: #ffffff;
-  padding: 12px;
+  padding: 9px;
 }
 
 .fullDock {
@@ -2827,7 +3132,33 @@ button.exportRangeLabel:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  min-height: 34px;
+  margin-bottom: 7px;
+  padding: 0 2px;
+}
+
+.dockActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.dockSizeButton {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #667381;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.dockSizeButton:hover {
+  border-color: #8cb4ff;
+  background: #edf4ff;
+  color: #2f6df6;
 }
 
 .pageFilterBar {
@@ -2849,7 +3180,7 @@ button.exportRangeLabel:hover {
 
 .dockTitle {
   color: #1f2933;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -2870,11 +3201,13 @@ button.exportRangeLabel:hover {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #c8d0d8 transparent;
 }
 
 .clipGridRow {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -2884,15 +3217,21 @@ button.exportRangeLabel:hover {
   height: 100%;
   min-height: 0;
   border: 2px solid transparent;
-  border-radius: 5px;
+  border-radius: 6px;
   background: #111827;
   padding: 0;
   content-visibility: auto;
   contain-intrinsic-size: 132px 210px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.clipCard:hover {
+  border-color: #91a2b4;
 }
 
 .clipCard.selected {
   border-color: #2f6df6;
+  box-shadow: 0 0 0 1px #2f6df6;
 }
 
 .clipPoster {
@@ -2902,9 +3241,7 @@ button.exportRangeLabel:hover {
   width: 100%;
   height: 100%;
   min-height: 0;
-  background:
-    linear-gradient(135deg, rgb(47 109 246 / 18%), transparent 42%),
-    linear-gradient(180deg, #263241, #111827);
+  background: #151c26;
   color: #dbeafe;
 }
 
@@ -2920,6 +3257,13 @@ button.exportRangeLabel:hover {
   position: relative;
   z-index: 1;
   filter: drop-shadow(0 1px 3px rgb(0 0 0 / 50%));
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.clipCard:hover .clipPoster > svg,
+.clipCard.selected .clipPoster > svg {
+  opacity: 1;
 }
 
 .clipGridMore {
@@ -2940,7 +3284,7 @@ button.exportRangeLabel:hover {
 .confidence {
   position: absolute;
   border-radius: 5px;
-  background: rgb(17 24 39 / 70%);
+  background: rgb(8 11 15 / 72%);
   color: #ffffff;
   font-size: 12px;
 }
@@ -2948,65 +3292,65 @@ button.exportRangeLabel:hover {
 .clipLabel {
   left: 7px;
   top: 7px;
+  max-width: calc(100% - 60px);
   padding: 5px 7px;
   text-align: left;
+  line-height: 1.35;
 }
 
 .confidence {
   right: 7px;
-  bottom: 7px;
+  top: 7px;
   padding: 4px 6px;
 }
 
-/* 卡片字幕状态条 */
 .clipSubtitleBar {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 7px;
+  left: 7px;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  padding: 4px 8px;
+  min-height: 24px;
+  border-radius: 5px;
+  padding: 0 7px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   backdrop-filter: blur(4px);
-  transition: all 0.15s;
-}
-
-.clipSubtitleBar.none {
-  background: rgb(107 114 128 / 50%);
-  color: rgb(209 213 219 / 80%);
 }
 
 .clipSubtitleBar.completed {
-  background: rgb(34 197 94 / 70%);
+  background: rgb(20 120 76 / 78%);
   color: #ffffff;
 }
 
 .clipSubtitleBar.processing {
-  background: rgb(59 130 246 / 70%);
+  background: rgb(37 99 235 / 82%);
   color: #ffffff;
 }
 
 .clipSubtitleBar.pending {
-  background: rgb(156 163 175 / 70%);
+  background: rgb(75 85 99 / 82%);
   color: #ffffff;
 }
 
 .clipSubtitleBar.failed {
-  background: rgb(239 68 68 / 70%);
+  background: rgb(190 49 49 / 82%);
   color: #ffffff;
 }
 
 /* 语音识别面板 */
 .transcriptionPanel {
+  flex: 0 0 auto;
   background: #ffffff;
   border: 1px solid #e4e8ed;
-  border-radius: 10px;
-  margin: 10px 0;
+  border-radius: 6px;
+  margin-top: 8px;
   overflow: hidden;
+}
+
+.transcriptionPanelCompact .transcriptionPanelHeader {
+  border-bottom: 0;
 }
 
 /* 空状态 */
@@ -3077,6 +3421,9 @@ button.exportRangeLabel:hover {
 }
 
 .transcriptionProcessingTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 15px;
   font-weight: 800;
   color: #1f2933;
@@ -3102,6 +3449,9 @@ button.exportRangeLabel:hover {
 }
 
 .transcriptionProcessingStage {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 14px;
   font-weight: 600;
   color: #2f6df6;
@@ -3156,8 +3506,14 @@ button.exportRangeLabel:hover {
 }
 
 .transcriptionFailedIcon {
-  font-size: 36px;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
   margin-bottom: 12px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #c24124;
 }
 
 .transcriptionFailedText {
@@ -3202,6 +3558,9 @@ button.exportRangeLabel:hover {
 }
 
 .transcriptionPanelTitle > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 15px;
   font-weight: 800;
   color: #1f2933;
@@ -3272,8 +3631,12 @@ button.exportRangeLabel:hover {
 .transcriptionPanelItem {
   display: flex;
   gap: 12px;
+  width: 100%;
+  border: 0;
   padding: 10px 12px;
   border-radius: 6px;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
   transition: all 0.15s;
   border-left: 3px solid transparent;
@@ -3801,7 +4164,7 @@ button.exportRangeLabel:hover {
 }
 
 .searchTitle {
-  flex: 1;
+  flex: 0 0 auto;
   font-size: 16px;
   font-weight: 700;
   color: #1f2933;
@@ -3818,6 +4181,76 @@ button.exportRangeLabel:hover {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.searchQueryForm {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  min-height: 40px;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 0 8px 0 12px;
+  color: #7b8794;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.searchQueryForm:focus-within {
+  border-color: #2f6df6;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(47 109 246 / 10%);
+}
+
+.searchStageInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1f2933;
+  font-size: 14px;
+}
+
+.searchStageInput::placeholder {
+  color: #7b8794;
+}
+
+.searchInlineClear {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #7b8794;
+  padding: 0;
+  cursor: pointer;
+}
+
+.searchInlineClear:hover {
+  background: #e4e8ed;
+  color: #4b5563;
+}
+
+.searchSubmit {
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: #2f6df6;
+  color: #ffffff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.searchSubmit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .searchFilters select,
@@ -4034,6 +4467,36 @@ button.exportRangeLabel:hover {
 .searchEmptySuggestions li {
   font-size: 13px;
   margin-bottom: 4px;
+}
+
+.searchHistoryChips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.searchHistoryChips button {
+  min-height: 30px;
+  border: 1px solid #dce3ea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #4b5563;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.searchHistoryChips button:hover {
+  border-color: #2f6df6;
+  background: #f3f7ff;
+  color: #2f6df6;
+}
+
+.searchHistoryChips .searchHistoryClearChip {
+  color: #7b8794;
 }
 
 /* 实时字幕 */
@@ -4301,6 +4764,10 @@ button.exportRangeLabel:hover {
     grid-template-columns: 1fr;
   }
 
+  .viewerBandWithManage {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  }
+
   .timeRail {
     display: none;
   }
@@ -4349,13 +4816,59 @@ button.exportRangeLabel:hover {
     display: none;
   }
 
+  .mobileNav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    min-height: 64px;
+    padding: 5px 4px max(5px, env(safe-area-inset-bottom));
+    border-top: 1px solid #dce3ea;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 -8px 24px rgb(31 41 51 / 8%);
+    backdrop-filter: blur(12px);
+  }
+
+  .mobileNavButton {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 3px;
+    min-width: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #7b8794;
+    padding: 4px 2px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .mobileNavButton span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobileNavButton.active {
+    background: #edf4ff;
+    color: #2f6df6;
+  }
+
   .controlPane {
     border-right: 0;
     border-bottom: 1px solid #e4e8ed;
   }
 
   .stage {
-    padding: 12px;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+    padding: 12px 12px 80px;
   }
 
   .stageTop {
@@ -4368,10 +4881,75 @@ button.exportRangeLabel:hover {
     width: 100%;
   }
 
+  .stageTools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 38px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .headerSearchButton {
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .stageTools > .refreshButton {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .stageTools .selectTrigger {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-bottom: 0;
+  }
+
+  .searchHeader,
+  .searchFilters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .searchQueryForm {
+    width: 100%;
+    min-width: 0;
+  }
+
   .viewer,
   .viewerVideo,
   .viewerEmpty {
     min-height: 300px;
+  }
+
+  .workbenchLayout,
+  .workbenchContent {
+    flex: none;
+    overflow: visible;
+  }
+
+  .viewerBand,
+  .viewerBandWithManage {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .viewerRight {
+    grid-template-rows: minmax(320px, 54vh) 0 minmax(220px, 42vh) !important;
+    overflow: visible;
+  }
+
+  .viewerResizeHandle {
+    display: none;
+  }
+
+  .clipDock {
+    min-height: 220px;
+  }
+
+  .videoVolume {
+    display: none;
   }
 
   .settingsGrid,
@@ -4420,5 +4998,82 @@ button.exportRangeLabel:hover {
   .sourceState,
   .sourceScan {
     grid-column: 2;
+  }
+}
+
+@media (max-width: 520px) {
+  .stageTitle {
+    font-size: 17px;
+  }
+
+  .stageMeta {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .videoTopBar {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    gap: 6px;
+  }
+
+  .videoIdentity {
+    max-width: 150px;
+  }
+
+  .videoIdentity strong {
+    max-width: 100px;
+  }
+
+  .videoActions .videoExportAction {
+    width: 32px;
+    padding: 0;
+  }
+
+  .videoExportAction span {
+    display: none;
+  }
+
+  .videoControls {
+    padding: 9px 8px 7px;
+  }
+
+  .videoTime {
+    margin-left: 3px;
+    font-size: 11px;
+  }
+
+  .videoControlRow button {
+    width: 30px;
+    height: 30px;
+  }
+
+  .transcriptionPanelHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .transcriptionPanelActions {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .transcriptionPanelActions button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

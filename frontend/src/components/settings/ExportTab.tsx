@@ -1,3 +1,4 @@
+import { Archive, CircleHelp } from 'lucide-react'
 import { useSettings } from './useSettings'
 
 export function ExportTab() {
@@ -18,7 +19,7 @@ export function ExportTab() {
   return (
     <div className="settingsSections">
       <div className="settingsSection">
-        <div className="settingsSectionTitle">📦 导出配置</div>
+        <div className="settingsSectionTitle"><Archive size={16} />导出配置</div>
         <div className="settingsKV">
           <span>缓存保留 (小时)</span>
           <input
@@ -67,7 +68,7 @@ export function ExportTab() {
       </div>
 
       <div className="settingsSection">
-        <div className="settingsSectionTitle">💡 参数说明</div>
+        <div className="settingsSectionTitle"><CircleHelp size={16} />参数说明</div>
         <div className="settingsKV">
           <span>缓存保留</span>
           <strong>导出文件在此时间后自动清理。设为 0 则不自动清理。</strong>

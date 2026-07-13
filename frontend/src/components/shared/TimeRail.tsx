@@ -1,7 +1,7 @@
-import { ChevronDown, ChevronUp, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clock3, LocateFixed, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DisplaySegment } from '../../utils'
-import { formatPlaybackRate, formatTime, playbackRates } from '../../utils'
+import { formatTime } from '../../utils'
 
 const MIN_SPAN = 60_000
 const MAX_SPAN = 24 * 60 * 60_000
@@ -28,11 +28,9 @@ export function TimeRail({
   segments,
   selectedId,
   playbackTimeMs,
-  playbackRate,
   isPlaying,
   manageOpen,
   onSelect,
-  onPlaybackRateChange,
   onManage,
   onDateStartChange,
   onDateEndChange,
@@ -43,12 +41,9 @@ export function TimeRail({
   segments: DisplaySegment[]
   selectedId?: string
   playbackTimeMs: number | null
-  playbackRate: number
   isPlaying: boolean
   manageOpen?: boolean
   onSelect: (segment: DisplaySegment) => void
-  onPlaybackRateChange: (rate: number) => void
-  onTogglePlayback: () => void
   onManage?: () => void
   onDateStartChange?: (date: string) => void
   onDateEndChange?: (date: string) => void
@@ -534,20 +529,19 @@ export function TimeRail({
     const span = DEFAULT_SPAN
     setWindowRange(rangeAroundFocus(center, sEnd, span))
   }
-  function cycleRate() {
-    const idx = playbackRates.findIndex((r) => r === playbackRate)
-    onPlaybackRateChange(playbackRates[(idx + 1) % playbackRates.length] ?? 1)
-  }
-
   return (
     <aside className="timeRail">
       <div className="timelineHead">
-        <div className="timelineButtons">
-          <button title="倍速" onClick={cycleRate}>{formatPlaybackRate(playbackRate)}</button>
+        <div className="timelineTitle">
+          <span className="timelineTitleIcon"><Clock3 size={16} /></span>
+          <span>
+            <strong>时间轴</strong>
+            <small>{orderedSegments.length} 个片段</small>
+          </span>
         </div>
-        <div className="timelineClock">
+        <time className="timelineClock">
           {currentTimeMs !== null ? formatTime(new Date(currentTimeMs).toISOString()) : '--:--:--'}
-        </div>
+        </time>
       </div>
 
       <div className="timelineDateZoom">
@@ -567,10 +561,10 @@ export function TimeRail({
           )}
         </div>
         <div className="timelineZoomSlider">
-          <span className="timelineZoomLabel">−</span>
+          <ZoomIn className="timelineZoomLabel" size={14} />
           <input type="range" min={0} max={100} value={zoomValue}
             onChange={(e) => handleZoomChange(Number(e.target.value))} />
-          <span className="timelineZoomLabel">+</span>
+          <ZoomOut className="timelineZoomLabel" size={14} />
         </div>
       </div>
 
@@ -657,7 +651,7 @@ export function TimeRail({
       <div className="timelineActions">
         <button onClick={() => selectRelative(-1)}><ChevronUp size={16} /><span>上一个</span></button>
         <button onClick={() => selectRelative(1)}><ChevronDown size={16} /><span>下一个</span></button>
-        <button onClick={focusCurrent} disabled={!selectedSegment}><RefreshCw size={16} /><span>定位</span></button>
+        <button onClick={focusCurrent} disabled={!selectedSegment}><LocateFixed size={16} /><span>定位</span></button>
         <button onClick={() => onManage?.()}>
           <SlidersHorizontal size={16} /><span>管理</span>
         </button>

@@ -1,21 +1,19 @@
-import { BarChart3, BookOpen, Camera, Clock, Download, Info, Mic, Settings as SettingsIcon } from 'lucide-react'
+import { BarChart3, Camera, Download, Info, Mic, Settings as SettingsIcon } from 'lucide-react'
 import { useState } from 'react'
 import type { Source, SystemStatus } from '../../types'
 import { AboutTab } from './AboutTab'
 import { ASRTab } from './ASRTab'
 import { ExportTab } from './ExportTab'
-import { LogsTab } from './LogsTab'
 import { OverviewTab } from './OverviewTab'
 import { RecordingsTab } from './RecordingsTab'
 
-type SettingsTab = 'overview' | 'recordings' | 'export' | 'asr' | 'logs' | 'about'
+type SettingsTab = 'overview' | 'recordings' | 'export' | 'asr' | 'about'
 
 const TABS: { key: SettingsTab; label: string; icon: typeof SettingsIcon; desc: string }[] = [
   { key: 'overview', label: '概览', icon: BarChart3, desc: '系统状态和缓存' },
   { key: 'recordings', label: '录像源', icon: Camera, desc: '扫描和录制配置' },
   { key: 'export', label: '导出', icon: Download, desc: '导出策略和缓存' },
   { key: 'asr', label: '语音识别', icon: Mic, desc: '识别引擎和模型' },
-  { key: 'logs', label: '日志', icon: Clock, desc: '运行日志查看' },
   { key: 'about', label: '关于', icon: Info, desc: '版本和系统信息' },
 ]
 
@@ -69,7 +67,6 @@ export function SettingsPage({
           {activeTab === 'recordings' && <RecordingsTab />}
           {activeTab === 'export' && <ExportTab />}
           {activeTab === 'asr' && <ASRTab />}
-          {activeTab === 'logs' && <LogsTab />}
           {activeTab === 'about' && <AboutTab />}
         </div>
       </main>

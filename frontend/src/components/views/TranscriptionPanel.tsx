@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { AudioLines, Captions, CircleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import type { Transcription } from '../../types'
@@ -89,11 +90,11 @@ export function TranscriptionPanel({
   }
 
   function getStageText(stage: string, progress: number) {
-    if (progress < 0.1) return '🎵 正在提取音频...'
-    if (stage === 'extracting_audio') return '🎵 正在提取音频...'
-    if (stage === 'transcribing' || progress < 0.85) return '🗣️ 正在识别语音...'
-    if (stage === 'saving') return '📝 正在生成字幕...'
-    return '🗣️ 正在识别语音...'
+    if (progress < 0.1) return '正在提取音频...'
+    if (stage === 'extracting_audio') return '正在提取音频...'
+    if (stage === 'transcribing' || progress < 0.85) return '正在识别语音...'
+    if (stage === 'saving') return '正在生成字幕...'
+    return '正在识别语音...'
   }
 
   function formatElapsed(seconds: number) {
@@ -126,11 +127,11 @@ export function TranscriptionPanel({
   }
 
   return (
-    <div className="transcriptionPanel">
+    <div className={`transcriptionPanel${hasTranscriptions && mode === 'overlay' && !isProcessing && !isFailed ? ' transcriptionPanelCompact' : ''}`}>
       {isProcessing && (
         <div className="transcriptionProcessing">
           <div className="transcriptionProcessingHeader">
-            <span className="transcriptionProcessingTitle">🎤 语音识别</span>
+            <span className="transcriptionProcessingTitle"><AudioLines size={17} />语音识别</span>
             <button
               className="transcriptionCancelButton"
               onClick={() => onNotify('暂不支持取消，请等待完成')}
@@ -139,6 +140,7 @@ export function TranscriptionPanel({
             </button>
           </div>
           <div className="transcriptionProcessingStage">
+            <AudioLines size={16} />
             {getStageText(jobStatus.stage, jobStatus.progress)}
           </div>
           <div className="transcriptionProgressBar">
@@ -161,7 +163,7 @@ export function TranscriptionPanel({
 
       {isFailed && (
         <div className="transcriptionFailed">
-          <div className="transcriptionFailedIcon">❌</div>
+          <div className="transcriptionFailedIcon"><CircleAlert size={30} /></div>
           <div className="transcriptionFailedText">{jobStatus.errorMessage || '识别失败，请重试'}</div>
           <button className="transcriptionRetryButton" onClick={handleTranscribe}>
             重新识别
@@ -173,7 +175,7 @@ export function TranscriptionPanel({
         <>
           <div className="transcriptionPanelHeader">
             <div className="transcriptionPanelTitle">
-              <span>🎤 字幕 · {transcriptions.length} 条</span>
+              <span><Captions size={17} />字幕 · {transcriptions.length} 条</span>
             </div>
             <div className="transcriptionPanelActions">
               <button
@@ -205,18 +207,21 @@ export function TranscriptionPanel({
               </button>
             </div>
           </div>
-          <div className="transcriptionPanelList" ref={listRef}>
-            {transcriptions.map((t) => (
-              <div
-                key={t.id}
-                className={`transcriptionPanelItem ${currentTime >= t.startTime && currentTime <= t.endTime ? 'active' : ''}`}
-                onClick={() => onSelect(t.startTime)}
-              >
-                <span className="transcriptionPanelItemTime">{formatTranscriptionTime(t.startTime)}</span>
-                <span className="transcriptionPanelItemText">{t.text}</span>
-              </div>
-            ))}
-          </div>
+          {mode === 'list' && (
+            <div className="transcriptionPanelList" ref={listRef}>
+              {transcriptions.map((t) => (
+                <button
+                  type="button"
+                  key={t.id}
+                  className={`transcriptionPanelItem ${currentTime >= t.startTime && currentTime <= t.endTime ? 'active' : ''}`}
+                  onClick={() => onSelect(t.startTime)}
+                >
+                  <span className="transcriptionPanelItemTime">{formatTranscriptionTime(t.startTime)}</span>
+                  <span className="transcriptionPanelItemText">{t.text}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

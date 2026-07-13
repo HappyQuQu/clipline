@@ -15,6 +15,106 @@
 
 ## 进度记录
 
+### 2026-07-11 14:11 CST
+
+完成事项：
+
+- 完成 UI 优化 P2 回看工作台第一版。
+- 新增独立 `PlaybackViewer`，统一播放/暂停、前后 10 秒、进度、倍速、音量、全屏、扫描、识别和导出操作。
+- 新增空格播放/暂停、左右方向键快退/快进 10 秒的键盘操作。
+- 播放器、左侧时间轴和底部单排片段带重排，播放器成为第一视觉中心。
+- 片段区默认高度降为一排缩略图，支持拖拽调整、双击复位和按钮收起/展开。
+- 修复片段区标题与滚动内容高度叠加导致的溢出问题。
+- 历史录像源在默认最近 7 天没有片段时，首次打开会自动定位到该源最新录像日期范围。
+- 移动端新增回看、智能检索、源、导出任务、设置五项底部导航，修复窄屏无主导航的问题。
+- 片段右键菜单、识别状态和设置页功能图标全部改为 lucide，删除已退出主流程的旧批量操作和字幕任务组件。
+- 修复 Radix SourceSelect 从非受控切换到受控产生的浏览器警告。
+- 播放状态与片段自动播放意图分离，避免旧视频暂停事件覆盖新片段状态。
+- 同步更新 `docs/UI_FLOW.md` 和 `docs/UI_OPTIMIZATION_PLAN.md`。
+
+验证结果：
+
+- `npm run build` 通过，生成 `/assets/index-BJwS79RR.js` 与 `/assets/index-CRucgiqY.css`。
+- 本地 FastAPI 服务启动成功，`GET /api/health` 返回 `{"ok":true}`。
+- 使用临时录像源扫描仓库测试视频：3/3 文件入库、0 错误；视频元素达到 `readyState=4`，5 秒 H.264 片段正确加载；测试源随后已删除，测试文件时间戳已恢复。
+- 浏览器在 1440x900、1024x768、390x844 三档完成响应式检查，均无横向溢出或工具栏重叠。
+- 1024px 下播放器高度 445px、片段区 210px；390px 下底部主导航可见，播放器顶部身份区与操作区无重叠。
+- 实际点击验证移动端“源 -> 回放”导航切换，以及播放器 1x -> 1.5x 倍速切换。
+- 最终浏览器回归渲染 20 个虚拟化片段卡片，所有可见按钮均有可访问名称，控制台无 warning/error。
+- `rg` 检查前端源码和构建产物无日志 UI 引用；前端源码无 emoji 功能图标。
+- `git diff --check` 通过。
+- `docker compose build` 仍在拉取 `python:3.12-slim` / `node:24-slim` metadata 时失败，本次错误为 `DeadlineExceeded: context deadline exceeded`。
+
+遗留问题：
+
+- Docker 镜像构建仍受 Docker Hub 网络影响，尚未完成容器内回归。
+- 浏览器自动化环境未稳定观察到媒体开始播放状态，但真实视频资源、metadata、控制事件和失败反馈链路均已加载；建议在用户浏览器进行一次声音/全屏人工验收。
+- P3 智能检索结果定位体验和 P4 录像源表格/抽屉改造尚未开始。
+
+下一步建议：
+
+- 网络恢复后重跑 `docker compose build && docker compose up -d --force-recreate`，再检查容器内 `/api/health` 和真实视频播放。
+- 继续执行 P3：整理智能检索结果列表、预览定位和空/错/加载状态。
+
+### 2026-07-11 11:29 CST
+
+完成事项：
+
+- 完成 UI 优化 P1 信息架构清理第一版。
+- 前端主导航收敛为：录像回放、智能检索、录像源、导出任务、设置。
+- 移除普通 UI 的日志入口、日志视图组件和设置页日志 tab。
+- 设置概览页不再展示日志文件路径。
+- 顶部常驻搜索输入框改为智能检索按钮，保留 `Ctrl/Cmd + K` 快捷键。
+- 智能检索页新增搜索输入框、清除按钮、提交按钮和搜索历史快捷入口。
+- 删除前端未使用的日志视图文件。
+- 同步更新 `docs/UI_FLOW.md` 和 `docs/UI_OPTIMIZATION_PLAN.md`。
+
+验证结果：
+
+- `npm run build` 通过，生成 `/assets/index-t464MbAd.js` 与 `/assets/index-BqFiC29g.css`。
+- `rg "日志|LogsStage|LogsTab|activeView === 'logs'|key: 'logs'" frontend/src frontend/dist` 无匹配结果。
+- `rg "片段墙|字幕任务" frontend/src/App.tsx frontend/dist/assets/index-*.js` 无匹配结果。
+- `npm ls @tanstack/react-virtual` 确认本地依赖可用。
+- `docker compose build` 重试两次均失败在 Docker Hub 基础镜像 metadata 获取阶段：`node:24-slim` 和 `python:3.12-slim` 返回 EOF。
+- 当前本机没有 `node:24-slim`、`python:3.12-slim` 基础镜像缓存，且 `docker compose ps` 显示没有运行中的服务。
+
+遗留问题：
+
+- Docker 验证受外部网络影响未完成，本轮只完成前端构建验证。
+- P2 回看工作台视觉重做尚未开始。
+- 片段卡片右键菜单和部分识别状态仍有 emoji，需要在 P5 视觉 token 和组件整理阶段处理。
+
+下一步建议：
+
+- 等 Docker Hub 网络恢复后重跑 `docker compose build && docker compose up -d --force-recreate`。
+- 继续执行 P2：重做回看工作台，优先放大播放器、梳理时间线和片段墙布局。
+
+### 2026-07-11 00:08 CST
+
+完成事项：
+
+- 结合上一轮 UI 分析，新增 `docs/UI_OPTIMIZATION_PLAN.md`。
+- 明确不采用完整 Neumorphism，改为 UniFi-inspired Soft Utility UI 方向。
+- 梳理目标信息架构：回看、智能检索、录像源、导出、设置。
+- 明确普通 UI 不显示日志，日志只保留为后端诊断能力。
+- 制定 P0-P5 阶段化落地计划和验收清单。
+
+验证结果：
+
+- 已检查当前前端入口，确认主导航和设置页仍存在日志入口，后续实现阶段需要移除。
+- 已检查当前片段卡片存在 emoji 状态/菜单图标，后续实现阶段需要替换为 lucide 图标。
+- 本轮仅新增和更新文档，未运行前端构建或 Docker 重建。
+
+遗留问题：
+
+- 方案尚未进入代码实现。
+- `docs/UI_FLOW.md` 仍是旧版流程，需要在 UI 实施时同步修订。
+
+下一步建议：
+
+- 先执行 P1 信息架构清理，移除普通 UI 的日志入口并收敛主导航。
+- 然后执行 P2 回看工作台重做，优先解决播放器、时间线和片段墙的主体验。
+
 ### 2026-05-24 21:54 CST
 
 完成事项：

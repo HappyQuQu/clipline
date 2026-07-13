@@ -1,3 +1,5 @@
+import { PanelsTopLeft } from 'lucide-react'
+
 export function AboutTab() {
   return (
     <div className="settingsSections">
@@ -22,7 +24,7 @@ export function AboutTab() {
       </div>
 
       <div className="settingsSection">
-        <div className="settingsSectionTitle">🚀 项目简介</div>
+        <div className="settingsSectionTitle"><PanelsTopLeft size={16} />项目简介</div>
         <div className="settingsKV">
           <span>功能</span>
           <strong>自动扫描、时间轴浏览、智能导出、语音识别。</strong>

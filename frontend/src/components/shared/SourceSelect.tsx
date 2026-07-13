@@ -12,7 +12,7 @@ export function SourceSelect({
   onChange: (value: string) => void
 }) {
   return (
-    <Select.Root value={value || undefined} onValueChange={onChange} disabled={!sources.length}>
+    <Select.Root value={value} onValueChange={onChange} disabled={!sources.length}>
       <Select.Trigger className="selectTrigger" aria-label="选择源">
         <Camera size={16} />
         <Select.Value placeholder="选择源" />

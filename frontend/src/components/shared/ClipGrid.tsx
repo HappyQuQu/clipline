@@ -1,14 +1,24 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Check, Play, RotateCw, X } from 'lucide-react'
+import {
+  Check,
+  CircleAlert,
+  Clock3,
+  ExternalLink,
+  LoaderCircle,
+  Mic,
+  Play,
+  RotateCw,
+  X,
+} from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api'
 import type { DisplaySegment } from '../../utils'
 import { formatClipDateTime } from '../../utils'
 
-const CARD_TARGET_WIDTH = 260
-const CARD_MIN_HEIGHT = 128
-const CARD_MAX_HEIGHT = 168
-const GRID_GAP = 6
+const CARD_TARGET_WIDTH = 210
+const CARD_MIN_HEIGHT = 116
+const CARD_MAX_HEIGHT = 148
+const GRID_GAP = 8
 
 function ClipContextMenu({
   x, y, segment, transcriptionStatus, onTranscribe, onClose,
@@ -30,19 +40,23 @@ function ClipContextMenu({
   const isFailed = transcriptionStatus === 'failed'
 
   return (
-    <div ref={menuRef} className="clipContextMenu" style={{ left: x, top: y }}>
+    <div
+      ref={menuRef}
+      className="clipContextMenu"
+      style={{ left: Math.min(x, window.innerWidth - 220), top: Math.min(y, window.innerHeight - 132) }}
+    >
       {!isCompleted && !isProcessing && (
-        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>🎤 开始识别</button>
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><Mic size={16} />开始识别</button>
       )}
-      {isProcessing && <button disabled>⏳ 识别中...</button>}
+      {isProcessing && <button disabled><LoaderCircle size={16} className="spin" />识别中...</button>}
       {isCompleted && (
-        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>🔄 重新识别</button>
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><RotateCw size={16} />重新识别</button>
       )}
       {isFailed && (
-        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}>❌ 重新识别</button>
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><CircleAlert size={16} />重新识别</button>
       )}
       <button onClick={() => { window.open(`/api/segments/${segment.id}/stream`, '_blank'); onClose() }}>
-        📹 在新窗口播放
+        <ExternalLink size={16} />在新窗口播放
       </button>
     </div>
   )
@@ -186,7 +200,14 @@ export function ClipGrid({
                         onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, segment }) }}
                       >
                         <div className="clipPoster">
-                          {segment.thumbnailUrl && <img src={segment.thumbnailUrl} loading="lazy" decoding="async" alt="" />}
+                          {segment.thumbnailUrl && (
+                            <img
+                              src={segment.thumbnailUrl}
+                              loading="lazy"
+                              decoding="async"
+                              alt={`${sourceNames?.get(segment.sourceId) ?? sourceName} ${formatClipDateTime(segment.startTime)}`}
+                            />
+                          )}
                           <Play size={22} />
                         </div>
                         <span className="clipLabel">
@@ -195,13 +216,12 @@ export function ClipGrid({
                           {formatClipDateTime(segment.startTime)}
                         </span>
                         <span className="confidence">{segment.playable ? '可播放' : '转码'}</span>
-                        <div className={`clipSubtitleBar ${tStatus || 'none'}`}>
+                        {tStatus && tStatus !== 'none' && <div className={`clipSubtitleBar ${tStatus}`}>
                           {tStatus === 'completed' && <><Check size={12} /> 已识别</>}
                           {tStatus === 'processing' && <><RotateCw size={12} className="spin" /> 识别中</>}
-                          {tStatus === 'pending' && <>⏳ 等待中</>}
+                          {tStatus === 'pending' && <><Clock3 size={12} /> 等待中</>}
                           {tStatus === 'failed' && <><X size={12} /> 失败</>}
-                          {(!tStatus || tStatus === 'none') && <>未识别</>}
-                        </div>
+                        </div>}
                       </button>
                     )
                   })}

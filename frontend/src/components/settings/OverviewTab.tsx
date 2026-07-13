@@ -46,10 +46,6 @@ export function OverviewTab({
             <span>录像根路径</span>
             <strong>{status?.recordingsRoot.path ?? '-'}</strong>
           </div>
-          <div className="settingsKV">
-            <span>日志文件</span>
-            <strong>{status?.logging.file ?? '-'}</strong>
-          </div>
         </div>
 
         <div className="settingsSection">

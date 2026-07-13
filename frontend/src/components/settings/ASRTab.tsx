@@ -1,6 +1,6 @@
 import * as Switch from '@radix-ui/react-switch'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, Loader2, Trash2 } from 'lucide-react'
+import { AudioLines, Download, Lightbulb, Loader2, PackageOpen, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import type { ASRModelInfo } from '../../types'
@@ -112,7 +112,7 @@ export function ASRTab() {
   return (
     <div className="settingsSections">
       <div className="settingsSection">
-        <div className="settingsSectionTitle">🎤 识别配置</div>
+        <div className="settingsSectionTitle"><AudioLines size={16} />识别配置</div>
         <div className="settingsKV">
           <span>识别引擎</span>
           <select
@@ -188,7 +188,7 @@ export function ASRTab() {
       </div>
 
       <div className="settingsSection">
-        <div className="settingsSectionTitle">📥 模型管理</div>
+        <div className="settingsSectionTitle"><PackageOpen size={16} />模型管理</div>
         {modelsQuery.isLoading ? (
           <div style={{ color: '#7b8794', fontSize: 13, padding: '20px 20px' }}>加载中...</div>
         ) : (
@@ -201,7 +201,7 @@ export function ASRTab() {
       </div>
 
       <div className="settingsSection">
-        <div className="settingsSectionTitle">💡 引擎说明</div>
+        <div className="settingsSectionTitle"><Lightbulb size={16} />引擎说明</div>
         <div className="settingsKV">
           <span>FunASR</span>
           <strong>阿里达摩院开源的高性能语音识别引擎，推荐用于中文场景。</strong>

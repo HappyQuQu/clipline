@@ -1,3 +1,4 @@
+import { FolderCog, ScanSearch } from 'lucide-react'
 import { useSettings } from './useSettings'
 
 export function RecordingsTab() {
@@ -24,7 +25,7 @@ export function RecordingsTab() {
   return (
     <div className="settingsSections">
       <div className="settingsSection">
-        <div className="settingsSectionTitle">📁 录制源配置</div>
+        <div className="settingsSectionTitle"><FolderCog size={16} />录制源配置</div>
         <div className="settingsKV">
           <span>录像根路径</span>
           <strong>{rec?.recordings_root ?? '-'}</strong>
@@ -73,7 +74,7 @@ export function RecordingsTab() {
       </div>
 
       <div className="settingsSection">
-        <div className="settingsSectionTitle">🔍 扫描性能</div>
+        <div className="settingsSectionTitle"><ScanSearch size={16} />扫描性能</div>
         <div className="settingsKV">
           <span>全局 ffprobe 并发</span>
           <input
