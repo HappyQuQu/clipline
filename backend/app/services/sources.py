@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -9,10 +11,33 @@ from app.models import ScanJob, Source, VideoSegment
 from app.schemas import SourceCreate, SourceOut, SourceUpdate
 from app.services.common import bool_int, make_id, now_iso
 from app.services.paths import validate_source_path
+from app.services.playback_proxy import remove_playback_proxies
 from app.services.scanner import create_scan_job, run_scan_job
 
 logger = get_logger(__name__)
 ACTIVE_SCAN_STATUSES = ("queued", "running")
+DEFAULT_DETECT_LABELS = ["person", "cat", "dog", "vehicle", "phone"]
+
+
+def _parse_detect_labels(value: str | None) -> list[str]:
+    if not value:
+        return DEFAULT_DETECT_LABELS.copy()
+    try:
+        labels = json.loads(value)
+    except json.JSONDecodeError:
+        return DEFAULT_DETECT_LABELS.copy()
+    if not isinstance(labels, list):
+        return DEFAULT_DETECT_LABELS.copy()
+    return [str(label) for label in labels if str(label).strip()]
+
+
+def _dump_detect_labels(labels: list[str]) -> str:
+    cleaned = []
+    for label in labels:
+        value = str(label).strip()
+        if value and value not in cleaned:
+            cleaned.append(value)
+    return json.dumps(cleaned or DEFAULT_DETECT_LABELS, ensure_ascii=False)
 
 
 def source_to_out(db: Session, source: Source) -> SourceOut:
@@ -38,6 +63,13 @@ def source_to_out(db: Session, source: Source) -> SourceOut:
         createdAt=source.created_at,
         updatedAt=source.updated_at,
         scanIntervalMinutes=source.scan_interval_minutes,
+        autoTranscribe=bool(source.auto_transcribe),
+        autoDetect=bool(source.auto_detect),
+        recognitionTrigger=source.recognition_trigger,
+        recognitionPriority=source.recognition_priority,
+        transcribeLanguage=source.transcribe_language,
+        detectLabels=_parse_detect_labels(source.detect_labels),
+        detectConfidence=source.detect_confidence,
         lastScanAt=last_scan,
         segmentCount=segment_count or 0,
         failedCount=failed_count or 0,
@@ -63,6 +95,13 @@ def create_source(db: Session, payload: SourceCreate, background_tasks: Backgrou
         path=str(path),
         enabled=1,
         scan_interval_minutes=payload.scanIntervalMinutes,
+        auto_transcribe=bool_int(payload.autoTranscribe),
+        auto_detect=bool_int(payload.autoDetect),
+        recognition_trigger=payload.recognitionTrigger,
+        recognition_priority=payload.recognitionPriority,
+        transcribe_language=payload.transcribeLanguage,
+        detect_labels=_dump_detect_labels(payload.detectLabels),
+        detect_confidence=payload.detectConfidence,
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -97,6 +136,20 @@ def update_source(db: Session, source_id: str, payload: SourceUpdate) -> Source:
         source.enabled = bool_int(payload.enabled)
     if payload.scanIntervalMinutes is not None:
         source.scan_interval_minutes = payload.scanIntervalMinutes
+    if payload.autoTranscribe is not None:
+        source.auto_transcribe = bool_int(payload.autoTranscribe)
+    if payload.autoDetect is not None:
+        source.auto_detect = bool_int(payload.autoDetect)
+    if payload.recognitionTrigger is not None:
+        source.recognition_trigger = payload.recognitionTrigger
+    if payload.recognitionPriority is not None:
+        source.recognition_priority = payload.recognitionPriority
+    if payload.transcribeLanguage is not None:
+        source.transcribe_language = payload.transcribeLanguage
+    if payload.detectLabels is not None:
+        source.detect_labels = _dump_detect_labels(payload.detectLabels)
+    if payload.detectConfidence is not None:
+        source.detect_confidence = payload.detectConfidence
     source.updated_at = now_iso()
     db.commit()
     db.refresh(source)
@@ -146,8 +199,8 @@ def delete_source(db: Session, source_id: str) -> None:
         raise HTTPException(status_code=409, detail="无法删除：有正在进行的扫描任务")
 
     # 删除关联的片段
-    segment_count = db.scalar(
-        select(func.count()).select_from(VideoSegment).where(VideoSegment.source_id == source.id)
+    segment_ids = list(
+        db.scalars(select(VideoSegment.id).where(VideoSegment.source_id == source.id))
     )
     db.execute(
         delete(VideoSegment).where(VideoSegment.source_id == source.id)
@@ -161,8 +214,14 @@ def delete_source(db: Session, source_id: str) -> None:
     # 删除录像源
     db.delete(source)
     db.commit()
+    proxies_deleted = remove_playback_proxies(segment_ids)
 
     logger.info(
         "source deleted",
-        extra={"source_id": source_id, "source_name": source.name, "segments_deleted": segment_count},
+        extra={
+            "source_id": source_id,
+            "source_name": source.name,
+            "segments_deleted": len(segment_ids),
+            "playback_proxies_deleted": proxies_deleted,
+        },
     )

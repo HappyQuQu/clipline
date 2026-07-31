@@ -6,6 +6,13 @@ export interface Source {
   createdAt: string
   updatedAt: string
   scanIntervalMinutes: number
+  autoTranscribe: boolean
+  autoDetect: boolean
+  recognitionTrigger: 'manual' | 'new_segments'
+  recognitionPriority: 'low' | 'normal' | 'high'
+  transcribeLanguage: 'global' | 'auto' | 'zh' | 'en'
+  detectLabels: string[]
+  detectConfidence: number
   lastScanAt?: string | null
   segmentCount: number
   failedCount: number
@@ -107,6 +114,15 @@ export interface SystemStatus {
   database: { available: boolean; path: string }
   logging: { level: string; format: string; file: string }
   recordingsRoot: { path: string; readable: boolean }
+  paths?: {
+    data: string
+    models: string
+    vision?: string
+    modelscope: string
+    whisper: string
+    huggingface: string
+    torch: string
+  }
   cache: { thumbnailBytes: number; exportBytes: number }
   sources: Source[]
 }
@@ -132,6 +148,48 @@ export interface TranscriptionJob {
   updatedAt: string
 }
 
+export interface VisionDetection {
+  id: string
+  segmentId: string
+  sourceId: string
+  label: string
+  labelName: string
+  confidence: number
+  startTime: number
+  endTime: number
+  frameTime: number
+  bbox?: number[] | null
+  model: string
+  createdAt: string
+  segmentStartTime?: string | null
+}
+
+export interface VisionJob {
+  id: string
+  segmentId: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  stage: string
+  progress: number
+  model: string
+  labels: string[]
+  confidenceThreshold: number
+  sampleIntervalSeconds: number
+  imageSize: number
+  detectionsCount: number
+  errorMessage?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface VisionStatus {
+  status: string
+  stage?: string
+  progress: number
+  jobId?: string
+  errorMessage?: string | null
+  detectionsCount?: number
+}
+
 export interface SearchResult {
   transcription: Transcription
   segmentId: string
@@ -154,6 +212,7 @@ export interface SettingsResponse {
     scan_interval_seconds: number
     skip_recent_seconds: number
     timezone: string
+    scan_workers_per_source?: number
     global_ffprobe_concurrency?: number
     auto_cleanup_days?: number
     idle_scan_enabled?: boolean
@@ -173,11 +232,38 @@ export interface SettingsResponse {
     language: string
     autoTranscribe: boolean
     hotwords: string
+    audioSampleRate?: number
+    maxConcurrent?: number
+    timeoutSeconds?: number
+  }
+  vision?: {
+    model: string
+    device: string
+    maxConcurrent: number
+    sampleIntervalSeconds: number
+    imageSize: number
+    confidence: number
+    maxAutoJobsPerScan: number
+    modelStatus: {
+      model: string
+      path: string
+      available: boolean
+      device: string
+    }
   }
   logs: {
     log_level: string
     log_format: string
     log_file: string
+  }
+  paths?: {
+    data: string
+    models: string
+    vision?: string
+    modelscope: string
+    whisper: string
+    huggingface: string
+    torch: string
   }
 }
 

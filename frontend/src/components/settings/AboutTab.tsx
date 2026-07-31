@@ -1,43 +1,17 @@
-import { PanelsTopLeft } from 'lucide-react'
+import { BookOpen, Code, HardDrives, Info } from '@phosphor-icons/react'
+import type { SystemStatus } from '../../types'
 
-export function AboutTab() {
+export function AboutTab({ status }: { status: SystemStatus | null }) {
   return (
-    <div className="settingsSections">
-      <div className="settingsSection">
-        <div className="settingsSectionTitle">关于 Clipline</div>
-        <div className="settingsKV">
-          <span>版本</span>
-          <strong>0.1.0</strong>
-        </div>
-        <div className="settingsKV">
-          <span>项目</span>
-          <strong>行车记录仪 / 安防录像 / NAS 备份的工作站</strong>
-        </div>
-        <div className="settingsKV">
-          <span>技术栈</span>
-          <strong>React + FastAPI + FFmpeg + SQLite</strong>
-        </div>
-        <div className="settingsKV">
-          <span>部署</span>
-          <strong>Docker Compose</strong>
-        </div>
-      </div>
-
-      <div className="settingsSection">
-        <div className="settingsSectionTitle"><PanelsTopLeft size={16} />项目简介</div>
-        <div className="settingsKV">
-          <span>功能</span>
-          <strong>自动扫描、时间轴浏览、智能导出、语音识别。</strong>
-        </div>
-        <div className="settingsKV">
-          <span>优势</span>
-          <strong>高性能、低资源占用、易于扩展。</strong>
-        </div>
-        <div className="settingsKV">
-          <span>适用场景</span>
-          <strong>行车记录仪、安防监控、NAS 存储管理。</strong>
-        </div>
-      </div>
+    <div className="redesignAboutLayout">
+      <section className="aboutProductCard"><img src="/clipline-logo.svg" alt="Clipline" /><div><h2>Clipline</h2><p>本地视频片段的扫描、回放、识别和导出工作台。</p><span>版本 {status?.version ?? '0.1.0'}</span></div></section>
+      <section className="settingsSection aboutRuntime"><div className="settingsSectionTitle">运行环境</div><div className="settingsKV"><span>前端</span><strong>React · Vite</strong></div><div className="settingsKV"><span>后端</span><strong>FastAPI · Python</strong></div><div className="settingsKV"><span>数据库</span><strong>{status?.database.available ? 'SQLite · 可用' : 'SQLite · 未连接'}</strong></div><div className="settingsKV"><span>媒体工具</span><strong>FFmpeg {status?.ffmpeg.available ? '可用' : '不可用'} · ffprobe {status?.ffprobe.available ? '可用' : '不可用'}</strong></div></section>
+      <section className="aboutLinksCard">
+        <a href="https://github.com/HappyQuQu/clipline" target="_blank" rel="noreferrer"><Code size={17} />项目仓库</a>
+        <a href="https://github.com/HappyQuQu/clipline/blob/main/docs/API_AND_DB.md" target="_blank" rel="noreferrer"><BookOpen size={17} />接口与数据文档</a>
+        <span><Info size={17} />当前仓库未声明独立许可证</span>
+        <span><HardDrives size={17} />数据默认保存在本地服务目录</span>
+      </section>
     </div>
   )
 }

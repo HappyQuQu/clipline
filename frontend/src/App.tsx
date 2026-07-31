@@ -1,16 +1,27 @@
 import * as Toast from '@radix-ui/react-toast'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Pulse as Activity,
+  Archive as ArchiveIcon,
+  ArrowClockwise as RefreshCw,
+  Bell,
   Camera,
-  CameraOff,
-  Download,
-  PanelBottomClose,
-  PanelBottomOpen,
+  CaretDown,
+  ClockCounterClockwise as History,
+  DownloadSimple as Download,
+  FileText as FileTextIcon,
+  Gear as GearIcon,
+  ListChecks,
+  MagnifyingGlass,
+  Microphone as Mic,
+  Pause,
   Play,
-  RefreshCw,
-  Search,
-  Settings,
-} from 'lucide-react'
+  Play as PlayIcon,
+  Star,
+  SlidersHorizontal,
+  VideoCamera,
+  X,
+} from '@phosphor-icons/react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -20,84 +31,133 @@ import {
   useState,
 } from 'react'
 import { api } from './api'
-import { ClipGrid } from './components/shared/ClipGrid'
-import { FailurePill } from './components/shared/FailurePill'
 import { ManagePanel } from './components/shared/ManagePanel'
-import { SourceSelect } from './components/shared/SourceSelect'
 import { TimeRail } from './components/shared/TimeRail'
-import { SettingsPage } from './components/settings/SettingsPage'
-import { ExportStage } from './components/views/ExportStage'
-import { PlaybackViewer } from './components/views/PlaybackViewer'
-import { SearchStage } from './components/views/SearchStage'
+import { useDialogFocus } from './components/shared/useDialogFocus'
+import { SETTINGS_TABS, SettingsPage, type SettingsTab } from './components/settings/SettingsPage'
+import { ClipLibraryView } from './components/views/ClipLibraryView'
+import { LogsStage } from './components/views/LogsStage'
+import { PlaybackClipStrip } from './components/views/PlaybackClipStrip'
 import { SourceStage } from './components/views/SourceStage'
+import { SubtitleOverlay } from './components/views/SubtitleOverlay'
+import { TaskCenterView } from './components/views/TaskCenterView'
 import { TranscriptionPanel } from './components/views/TranscriptionPanel'
 import type {
+  DirectoryNode,
   ExportJob,
+  ScanJob,
   SearchResponse as SearchResponseType,
+  Segment,
   Source,
   SystemStatus,
   Transcription,
+  TranscriptionJob,
 } from './types'
 import {
   type DisplaySegment,
-  formatDuration,
-  formatRangeLabel,
+  formatBytes,
+  formatClipDateTime,
+  formatTime,
   getDefaultRange,
+  playbackRates,
   queryMessage,
   searchHistoryStorageKey,
   segmentDate,
   selectedSourceStorageKey,
   today,
+  toLocalDateTimeInput,
   toDisplaySegment,
   toIsoWithOffset,
-  toLocalDateTimeInput,
   toLocalInputValue,
 } from './utils'
 
-type ViewKey = 'playback' | 'search' | 'sources' | 'exports' | 'settings'
+type ViewKey = 'playback' | 'clips' | 'tasks' | 'manage'
+type ManageSection = 'sources' | 'logs' | 'settings'
+type ThemeMode = 'light' | 'dark'
 
-const primaryNavItems: Array<{ key: ViewKey; label: string; icon: typeof Play }> = [
-  { key: 'playback', label: '录像回放', icon: Play },
-  { key: 'search', label: '智能检索', icon: Search },
-  { key: 'sources', label: '录像源', icon: Camera },
-  { key: 'exports', label: '导出任务', icon: Download },
+const navItems = [
+  { key: 'playback' as const, label: '回看', icon: PlayIcon },
+  { key: 'clips' as const, label: '片段库', icon: ArchiveIcon },
+  { key: 'tasks' as const, label: '任务', icon: ListChecks },
+  { key: 'manage' as const, label: '管理', icon: GearIcon },
 ]
-
-const utilityNavItems: Array<{ key: ViewKey; label: string; icon: typeof Play }> = [
-  { key: 'settings', label: '设置', icon: Settings },
-]
-
-const mobileNavItems = [...primaryNavItems, ...utilityNavItems]
 
 const viewTitles: Record<ViewKey, string> = {
-  playback: '录像回放',
-  search: '智能检索',
-  sources: '录像源',
-  exports: '导出任务',
-  settings: '设置',
+  playback: '回看',
+  clips: '片段库',
+  tasks: '任务',
+  manage: '管理',
 }
 
-const clipDockHeightStorageKey = 'clipline.clipDockHeight.v2'
-const defaultClipDockHeight = 210
-const minClipDockHeight = 148
-const minViewerHeight = 320
+const clipDockHeightStorageKey = 'clipline.clipDockHeight'
+const activeViewStorageKey = 'clipline.activeView'
+const themeStorageKey = 'clipline.theme'
+const defaultClipDockHeight = 300
+const minClipDockHeight = 150
+const minViewerHeight = 240
+
+function readInitialTheme(): ThemeMode {
+  return 'light'
+}
+
+function readInitialView(): ViewKey {
+  const saved = localStorage.getItem(activeViewStorageKey)
+  if (saved === 'subtitles' || saved === 'exports') return 'tasks'
+  if (saved === 'sources' || saved === 'logs' || saved === 'settings') return 'manage'
+  if (saved === 'search') return 'playback'
+  return saved && saved in viewTitles ? (saved as ViewKey) : 'playback'
+}
+
+function readInitialManageSection(): ManageSection {
+  const saved = localStorage.getItem(activeViewStorageKey)
+  return saved === 'logs' || saved === 'settings' ? saved : 'sources'
+}
+
+function searchResultClock(result: SearchResponseType['items'][0]) {
+  if (!result.segmentStartTime) {
+    const seconds = Math.max(0, Math.floor(result.transcription.startTime))
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+  }
+  const value = new Date(result.segmentStartTime).getTime() + result.transcription.startTime * 1000
+  return new Date(value).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function searchResultSegmentLabel(result: SearchResponseType['items'][0]) {
+  if (!result.segmentStartTime) return `${result.sourceName} · 录像片段`
+  const value = new Date(result.segmentStartTime)
+  return `${result.sourceName} · ${value.getMonth() + 1}月${value.getDate()}日 ${value.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}`
+}
+
+function recognitionJobLabel(status?: TranscriptionJob['status']) {
+  if (status === 'completed') return '已完成'
+  if (status === 'processing') return '识别中'
+  if (status === 'pending') return '排队中'
+  if (status === 'failed') return '失败'
+  return '未开始'
+}
 
 export function App() {
   const queryClient = useQueryClient()
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const previewDialogRef = useRef<HTMLDivElement | null>(null)
+  const hasAppliedInitialSegmentRange = useRef(false)
+  const pendingSeekSecondsRef = useRef<number | null>(null)
   const viewerRightRef = useRef<HTMLDivElement | null>(null)
   const clipResizeDragRef = useRef<{ startY: number; startHeight: number } | null>(null)
-  const initializedRangeSourceRef = useRef('')
   const [sourceId, setSourceId] = useState(() => localStorage.getItem(selectedSourceStorageKey) ?? '')
   const [date, setDate] = useState(today)
   const [selectedSegment, setSelectedSegment] = useState<DisplaySegment | null>(null)
+  const [previewSegment, setPreviewSegment] = useState<DisplaySegment | null>(null)
+  useDialogFocus(previewDialogRef, Boolean(previewSegment), () => setPreviewSegment(null))
   const [playbackTimeMs, setPlaybackTimeMs] = useState<number | null>(null)
   const [playbackRate, setPlaybackRate] = useState(1)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [videoState, setVideoState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [autoPlayNext, setAutoPlayNext] = useState(false)
   const [sourceName, setSourceName] = useState('')
   const [sourcePath, setSourcePath] = useState('')
   const [sourceScanInterval, setSourceScanInterval] = useState(0)
+  const [playbackHour, setPlaybackHour] = useState(9)
   const [exportStart, setExportStart] = useState('')
   const [exportEnd, setExportEnd] = useState('')
   const [exportRangeVisible, setExportRangeVisible] = useState(false)
@@ -108,7 +168,10 @@ export function App() {
   const [toastDownloadUrl, setToastDownloadUrl] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(false)
   const [watchedExportIds, setWatchedExportIds] = useState<string[]>([])
-  const [activeView, setActiveView] = useState<ViewKey>('playback')
+  const [activeView, setActiveView] = useState<ViewKey>(readInitialView)
+  const [theme] = useState<ThemeMode>(readInitialTheme)
+  const [manageSection, setManageSection] = useState<ManageSection>(readInitialManageSection)
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('overview')
   const [managePanelOpen, setManagePanelOpen] = useState(false)
   const [manageRangeStart, setManageRangeStart] = useState<number | null>(null)
   const [manageRangeEnd, setManageRangeEnd] = useState<number | null>(null)
@@ -119,6 +182,8 @@ export function App() {
 
   // 搜索相关状态
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [showSearchHistory, setShowSearchHistory] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(searchHistoryStorageKey)
@@ -173,7 +238,12 @@ export function App() {
       startDate: searchStartDate,
       endDate: searchEndDate,
     }),
-    enabled: activeView === 'search' && searchQuery.length > 0,
+    enabled: searchQuery.length > 0,
+  })
+  const popularSearchesQuery = useQuery({
+    queryKey: ['popularSearches'],
+    queryFn: api.popularSearches,
+    enabled: showSearchHistory,
   })
 
   // 当前视频的识别结果查询
@@ -181,6 +251,11 @@ export function App() {
     queryKey: ['transcription', selectedSegment?.id],
     queryFn: () => api.getTranscription(selectedSegment!.id),
     enabled: Boolean(selectedSegment?.id) && activeView === 'playback',
+  })
+  const transcriptionJobsQuery = useQuery({
+    queryKey: ['transcriptionJobs', 'playback-strip'],
+    queryFn: () => api.getTranscriptionJobs(),
+    refetchInterval: 3000,
   })
 
   const scanJobsQuery = useQuery({
@@ -218,8 +293,18 @@ export function App() {
   const scanJobs = scanJobsQuery.data?.items ?? []
   const failedSegments = failedSegmentsQuery.data?.items ?? []
   const selectedSource = sources.find((source) => source.id === sourceId)
-  const searchResults = searchQuery_.data ?? null
+  const quickSearchResult = searchQuery_.data?.items[0]
+  const quickSearchJob = quickSearchResult
+    ? (transcriptionJobsQuery.data?.items ?? []).find((job) => job.segmentId === quickSearchResult.segmentId)
+    : undefined
   const sourceNames = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
+  const transcriptionStatusBySegment = useMemo(() => {
+    const result = new Map<string, TranscriptionJob['status']>()
+    for (const job of transcriptionJobsQuery.data?.items ?? []) {
+      if (!result.has(job.segmentId)) result.set(job.segmentId, job.status)
+    }
+    return result
+  }, [transcriptionJobsQuery.data?.items])
   const allSegments = useMemo(
     () =>
       (segmentsQuery.data?.pages.flatMap((page) => page.items) ?? [])
@@ -237,25 +322,31 @@ export function App() {
       return true
     })
   }, [allSegments, clipRangeEnd, clipRangeStart])
+  const loadedSegmentCount = allSegments.length
+  const totalAvailableSegments = segmentsQuery.data?.pages[0]?.total ?? loadedSegmentCount
   const rangeSegments = filteredSegments
   const playbackQueue = useMemo(
     () => [...rangeSegments].sort((left, right) => new Date(left.startTime).getTime() - new Date(right.startTime).getTime()),
     [rangeSegments],
   )
 
+  const latestExport = exports[0]
   const activeExportCount = exports.filter((job) => job.status === 'queued' || job.status === 'running').length
-  const allSourceSegmentCount = useMemo(
-    () => sources.reduce((sum, source) => sum + source.segmentCount, 0),
-    [sources],
-  )
   const currentSourceSegmentCount = useMemo(
     () => (sourceId ? selectedSource?.segmentCount ?? allSegments.length : 0),
     [allSegments.length, selectedSource?.segmentCount, sourceId],
   )
-  const totalRecordedSeconds = useMemo(
-    () => allSegments.reduce((sum, segment) => sum + segment.durationSeconds, 0),
-    [allSegments],
-  )
+  const playbackWindowStartMs = new Date(`${date}T${String(playbackHour).padStart(2, '0')}:00:00`).getTime()
+  const playbackWindowEndMs = playbackWindowStartMs + 60 * 60 * 1000
+
+  useEffect(() => {
+    localStorage.setItem(activeViewStorageKey, activeView)
+  }, [activeView])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem(themeStorageKey, theme)
+  }, [theme])
 
   function notify(text: string, downloadUrl?: string | null) {
     setMessage(text)
@@ -264,11 +355,19 @@ export function App() {
     window.setTimeout(() => setToastOpen(true), 0)
   }
 
+  function setPlaybackWindow(nextDate: string, nextHour: number) {
+    const start = new Date(`${nextDate}T${String(nextHour).padStart(2, '0')}:00:00`)
+    const end = new Date(start.getTime() + 60 * 60 * 1000)
+    setDate(nextDate)
+    setPlaybackHour(nextHour)
+    setClipRangeStart(toLocalDateTimeInput(start))
+    setClipRangeEnd(toLocalDateTimeInput(end))
+  }
+
   // 搜索相关函数
   function handleSearch(query: string) {
     if (!query.trim()) return
     setSearchQuery(query.trim())
-    setActiveView('search')
     setSelectedSearchResult(null)
     setSearchTranscriptions([])
 
@@ -278,12 +377,28 @@ export function App() {
     localStorage.setItem(searchHistoryStorageKey, JSON.stringify(newHistory))
   }
 
-  function handleSelectSearchResult(result: SearchResponseType['items'][0]) {
+  async function handleSelectSearchResult(result: SearchResponseType['items'][0]) {
     setSelectedSearchResult(result)
-    // 加载该视频的识别结果
-    api.getTranscription(result.segmentId).then((data) => {
-      setSearchTranscriptions(data.items)
-    })
+    let segment = allSegments.find((item) => item.id === result.segmentId)
+    if (!segment) {
+      try {
+        const response = await api.segments({ sourceId: result.sourceId, limit: 1000 })
+        const candidates = response.items.map(toDisplaySegment).filter((item): item is DisplaySegment => Boolean(item))
+        segment = candidates.find((item) => item.id === result.segmentId)
+      } catch {
+        segment = undefined
+      }
+    }
+    if (!segment) {
+      notify('无法加载该搜索结果对应的录像片段')
+      return
+    }
+    setSourceId(result.sourceId)
+    localStorage.setItem(selectedSourceStorageKey, result.sourceId)
+    const absoluteTime = new Date(segment.startTime).getTime() + result.transcription.startTime * 1000
+    selectSegmentAtTime(segment, absoluteTime)
+    setShowSearchHistory(false)
+    setActiveView('playback')
   }
 
   function handleExportSrt(segmentId: string) {
@@ -313,15 +428,6 @@ export function App() {
   function handleClearSearchHistory() {
     setSearchHistory([])
     localStorage.removeItem(searchHistoryStorageKey)
-  }
-
-  function openSearch() {
-    setActiveView('search')
-    window.setTimeout(() => {
-      const input = document.querySelector('.searchStageInput') as HTMLInputElement | null
-      input?.focus()
-      input?.select()
-    }, 0)
   }
 
   async function refreshAll() {
@@ -357,23 +463,21 @@ export function App() {
     const savedSourceId = localStorage.getItem(selectedSourceStorageKey)
     if (!sourceId && savedSourceId && sources.some((source) => source.id === savedSourceId)) {
       setSourceId(savedSourceId)
+      return
+    }
+    if (!sourceId) {
+      setSourceId(sources[0].id)
+      localStorage.setItem(selectedSourceStorageKey, sources[0].id)
     }
   }, [sourceId, sources, sourcesQuery.isSuccess])
 
   useEffect(() => {
-    if (!sourceId || !allSegments.length || initializedRangeSourceRef.current === sourceId) return
-    initializedRangeSourceRef.current = sourceId
-    if (rangeSegments.length) return
-
-    const latestStartMs = Math.max(...allSegments.map((segment) => new Date(segment.startTime).getTime()))
-    const rangeEnd = new Date(latestStartMs)
-    rangeEnd.setHours(23, 59, 59, 999)
-    const rangeStart = new Date(rangeEnd)
-    rangeStart.setDate(rangeStart.getDate() - 6)
-    rangeStart.setHours(0, 0, 0, 0)
-    setClipRangeStart(toLocalDateTimeInput(rangeStart))
-    setClipRangeEnd(toLocalDateTimeInput(rangeEnd))
-  }, [allSegments, rangeSegments.length, sourceId])
+    if (hasAppliedInitialSegmentRange.current || !allSegments.length) return
+    const latest = [...allSegments].sort((left, right) => new Date(right.startTime).getTime() - new Date(left.startTime).getTime())[0]
+    const latestDate = segmentDate(latest.startTime)
+    setPlaybackWindow(latestDate, new Date(latest.startTime).getHours())
+    hasAppliedInitialSegmentRange.current = true
+  }, [allSegments])
 
   useEffect(() => {
     if (!sourceId || !rangeSegments.length) {
@@ -391,9 +495,9 @@ export function App() {
     const video = videoRef.current
     if (!video) return
     requestAnimationFrame(() => {
-      video.play()
-        .then(() => setAutoPlayNext(false))
-        .catch(() => setAutoPlayNext(false))
+      video.play().catch(() => {
+        setAutoPlayNext(false)
+      })
     })
   }, [activeView, autoPlayNext, selectedSegment])
 
@@ -422,32 +526,19 @@ export function App() {
   // 快捷键支持
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+K 或 Cmd+K 聚焦搜索框
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
-        openSearch()
-        return
-      }
-      if (e.key === 'Escape' && activeView === 'search') {
-        setActiveView('playback')
-        return
-      }
-      const target = e.target as HTMLElement | null
-      const isTyping = target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target?.tagName ?? '')
-      if (activeView !== 'playback' || isTyping || !selectedSegment) return
-      if (e.code === 'Space') {
-        e.preventDefault()
-        togglePlayback()
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault()
-        seekPlayback(-10)
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault()
-        seekPlayback(10)
+        const searchInput = document.querySelector('.searchBar input') as HTMLInputElement
+        if (searchInput) {
+          searchInput.focus()
+          searchInput.select()
+        }
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [activeView, selectedSegment])
+  }, [activeView])
 
   const createSourceMutation = useMutation({
     mutationFn: api.createSource,
@@ -487,13 +578,39 @@ export function App() {
       path,
       enabled,
       scanIntervalMinutes,
+      autoTranscribe,
+      autoDetect,
+      recognitionTrigger,
+      recognitionPriority,
+      transcribeLanguage,
+      detectLabels,
+      detectConfidence,
     }: {
       id: string
       name?: string
       path?: string
       enabled?: boolean
       scanIntervalMinutes?: number
-    }) => api.updateSource(id, { name, path, enabled, scanIntervalMinutes }),
+      autoTranscribe?: boolean
+      autoDetect?: boolean
+      recognitionTrigger?: Source['recognitionTrigger']
+      recognitionPriority?: Source['recognitionPriority']
+      transcribeLanguage?: Source['transcribeLanguage']
+      detectLabels?: string[]
+      detectConfidence?: number
+    }) => api.updateSource(id, {
+      name,
+      path,
+      enabled,
+      scanIntervalMinutes,
+      autoTranscribe,
+      autoDetect,
+      recognitionTrigger,
+      recognitionPriority,
+      transcribeLanguage,
+      detectLabels,
+      detectConfidence,
+    }),
     onSuccess: async () => {
       notify('源状态已更新')
       await queryClient.invalidateQueries({ queryKey: ['sources'] })
@@ -539,8 +656,10 @@ export function App() {
       localStorage.removeItem(selectedSourceStorageKey)
     }
     setSelectedSegment(null)
+    setPreviewSegment(null)
     setPlaybackTimeMs(null)
     setIsPlaying(false)
+    setVideoState('idle')
     setAutoPlayNext(false)
     setExportStart('')
     setExportEnd('')
@@ -548,13 +667,37 @@ export function App() {
   }
 
   function selectSegment(segment: DisplaySegment, play = false, showExportRange = false) {
+    pendingSeekSecondsRef.current = null
     setSelectedSegment(segment)
+    setVideoState('loading')
     setPlaybackTimeMs(new Date(segment.startTime).getTime())
     setAutoPlayNext(play)
     setDate(segmentDate(segment.startTime))
     setExportStart(toLocalInputValue(segment.startTime))
     setExportEnd(toLocalInputValue(segment.endTime))
     setExportRangeVisible(showExportRange)
+  }
+
+  function selectSegmentAtTime(segment: DisplaySegment, absoluteTimeMs: number) {
+    pendingSeekSecondsRef.current = Math.max(0, Math.min(segment.durationSeconds, (absoluteTimeMs - new Date(segment.startTime).getTime()) / 1000))
+    setSelectedSegment(segment)
+    setVideoState('loading')
+    setPlaybackTimeMs(absoluteTimeMs)
+    setAutoPlayNext(true)
+    setDate(segmentDate(segment.startTime))
+    setExportStart(toLocalInputValue(segment.startTime))
+    setExportEnd(toLocalInputValue(segment.endTime))
+    setExportRangeVisible(false)
+  }
+
+  function openClipPreview(segment: DisplaySegment) {
+    setSelectedSegment(segment)
+    setPlaybackTimeMs(new Date(segment.startTime).getTime())
+    setDate(segmentDate(segment.startTime))
+    setExportStart(toLocalInputValue(segment.startTime))
+    setExportEnd(toLocalInputValue(segment.endTime))
+    setExportRangeVisible(false)
+    setPreviewSegment(segment)
   }
 
   function handleSegmentEnded() {
@@ -575,18 +718,10 @@ export function App() {
     setExportRangeVisible(false)
   }
 
-  function handlePlaybackTimeChange(seconds: number) {
-    setCurrentPlaybackTime(seconds)
-    if (!selectedSegment) return
-    setPlaybackTimeMs(new Date(selectedSegment.startTime).getTime() + seconds * 1000)
-  }
-
-  function seekPlayback(deltaSeconds: number) {
+  function syncPlaybackTime() {
     const video = videoRef.current
-    if (!video || !Number.isFinite(video.currentTime)) return
-    const duration = Number.isFinite(video.duration) ? video.duration : selectedSegment?.durationSeconds ?? 0
-    video.currentTime = Math.max(0, Math.min(duration, video.currentTime + deltaSeconds))
-    handlePlaybackTimeChange(video.currentTime)
+    if (!video || !selectedSegment || !Number.isFinite(video.currentTime)) return
+    setPlaybackTimeMs(new Date(selectedSegment.startTime).getTime() + video.currentTime * 1000)
   }
 
   function clampClipDockHeight(nextHeight: number) {
@@ -708,362 +843,490 @@ export function App() {
     failedSegmentsQuery.isFetching ||
     segmentsQuery.isFetching
 
-  const stageMeta =
-    activeView === 'playback'
-      ? sourceId
-        ? `${formatRangeLabel(clipRangeStart, clipRangeEnd)} · ${currentSourceSegmentCount} 个片段 · ${formatDuration(totalRecordedSeconds)}`
-        : '请选择录像源后加载片段'
-      : activeView === 'search'
-        ? searchQuery
-          ? `${searchResults?.total ?? 0} 条结果 · ${searchQuery}`
-          : '搜索语音识别文本并定位回放'
-      : activeView === 'sources'
-        ? `${sources.length} 个源 · ${allSourceSegmentCount} 个片段`
-        : activeView === 'exports'
-          ? `${exports.length} 条导出记录 · ${activeExportCount} 个进行中`
-          : `版本 ${systemStatus?.version ?? '-'} · 数据库 ${systemStatus?.database.path ?? '/app/data/clipline.db'}`
-  const showSourceSelect = activeView === 'playback' || activeView === 'sources'
-
   return (
     <Toast.Provider swipeDirection="right">
-      <div className="protectShell compactShell">
-        <aside className="rail">
-          <button className="railLogo" title="Clipline" aria-label="Clipline 录像回放" onClick={() => setActiveView('playback')}>
-            <svg className="railLogoMark" viewBox="0 0 40 40" role="img" aria-hidden="true">
-              <defs>
-                <linearGradient id="cliplineLogoFill" x1="7" y1="4" x2="33" y2="36" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stopColor="#ffffff" />
-                  <stop offset="1" stopColor="#eaf2ff" />
-                </linearGradient>
-                <linearGradient id="cliplineLogoAccent" x1="13" y1="22" x2="29" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stopColor="#34d3c8" />
-                  <stop offset="1" stopColor="#2f6df6" />
-                </linearGradient>
-              </defs>
-              <rect x="4.5" y="4.5" width="31" height="31" rx="10" fill="url(#cliplineLogoFill)" />
-              <rect x="4.5" y="4.5" width="31" height="31" rx="10" fill="none" stroke="#d6e5ff" />
-              <path d="M12 13.5H24.5" stroke="#8ba2bd" strokeWidth="2.4" strokeLinecap="round" />
-              <path d="M12 26.5H28" stroke="#b5c4d6" strokeWidth="2.4" strokeLinecap="round" />
-              <rect x="11" y="18.5" width="3.5" height="7" rx="1.75" fill="#34d3c8" />
-              <path d="M18 16.5L28.5 22L18 27.5V16.5Z" fill="url(#cliplineLogoAccent)" />
-            </svg>
-            <span className="railLogoStatus" />
+      <div className="protectShell compactShell fullRedesignShell">
+        <header className="fullTopbar">
+          <button className="fullBrand" aria-label="返回回看" onClick={() => setActiveView('playback')}>
+            <img src="/clipline-logo.svg" alt="" />
+            <span>Clipline</span>
           </button>
-          {primaryNavItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                className={activeView === item.key ? 'railButton active' : 'railButton'}
-                key={item.key}
-                title={item.label}
-                aria-label={item.label}
-                aria-pressed={activeView === item.key}
-                onClick={() => setActiveView(item.key)}
-              >
-                <Icon size={20} />
-              </button>
-            )
-          })}
-          <div className="railSpacer" />
-          {utilityNavItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                className={activeView === item.key ? 'railButton active' : 'railButton'}
-                key={item.key}
-                title={item.label}
-                aria-label={item.label}
-                aria-pressed={activeView === item.key}
-                onClick={() => setActiveView(item.key)}
-              >
-                <Icon size={20} />
-              </button>
-            )
-          })}
+          <div className="searchBarWrapper fullGlobalSearch">
+            <div className={`searchBar${showSearchHistory ? ' isOpen' : ''}`}>
+              <MagnifyingGlass size={18} />
+                  <input
+                    type="text"
+                    aria-label="全局搜索"
+                    placeholder="搜索字幕内容"
+                    value={searchInput}
+                    onChange={(e) => {
+                      setSearchInput(e.target.value)
+                      setSearchQuery(e.target.value.trim())
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && searchInput.trim()) {
+                        handleSearch(searchInput.trim())
+                      }
+                      if (e.key === 'Escape') {
+                        setSearchInput('')
+                        setSearchQuery('')
+                        setShowSearchHistory(false)
+                      }
+                    }}
+                    onFocus={() => setShowSearchHistory(true)}
+                    onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
+                  />
+                  {searchInput && (
+                    <button
+                      className="searchClear"
+                      onClick={() => { setSearchInput(''); setSearchQuery('') }}
+                      title="清除"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                  <kbd>⌘ K</kbd>
+            </div>
+            {showSearchHistory && (
+              <div className="fullSearchResults redesignSearchPopover">
+                {searchInput.trim() ? (
+                  <>
+                    <div className="searchPopoverHeading"><span>字幕与片段结果</span></div>
+                    {searchQuery_.isFetching && <div className="searchPopoverState">正在搜索真实字幕…</div>}
+                    {!searchQuery_.isFetching && searchQuery_.isError && <div className="searchPopoverState error">搜索失败，请稍后重试</div>}
+                    {!searchQuery_.isFetching && !searchQuery_.isError && (searchQuery_.data?.items.length ?? 0) === 0 && <div className="searchPopoverState">没有找到匹配的字幕内容</div>}
+                    {!searchQuery_.isFetching && quickSearchResult && (
+                      <div className="searchResultRows">
+                        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => handleSelectSearchResult(quickSearchResult)}>
+                          <span className="searchResultIcon"><Play size={15} /></span>
+                          <strong>“{(quickSearchResult.transcription.text || quickSearchResult.highlight).replaceAll('**', '').slice(0, 18)}”</strong>
+                          <time>{searchResultClock(quickSearchResult)}</time>
+                        </button>
+                        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => handleSelectSearchResult(quickSearchResult)}>
+                          <span className="searchResultIcon"><ArchiveIcon size={15} /></span>
+                          <strong>{searchResultSegmentLabel(quickSearchResult)}</strong>
+                          <small>片段</small>
+                        </button>
+                        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setShowSearchHistory(false); setActiveView('tasks') }}>
+                          <span className="searchResultIcon"><Mic size={15} /></span>
+                          <strong>语音识别任务</strong>
+                          <small>{recognitionJobLabel(quickSearchJob?.status)}</small>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {(popularSearchesQuery.data?.popular.length ?? 0) > 0 && <section className="searchPresetSection"><strong>热门搜索</strong><div>{popularSearchesQuery.data?.popular.slice(0, 6).map((item) => <button key={item} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSearchInput(item); handleSearch(item) }}>{item}</button>)}</div></section>}
+                    {searchHistory.length > 0 ? <section className="searchPresetSection"><header><strong>最近搜索</strong><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={handleClearSearchHistory}>清除</button></header><div>{searchHistory.slice(0, 6).map((item) => <button key={item} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSearchInput(item); handleSearch(item) }}><History size={13} />{item}</button>)}</div></section> : <div className="searchPopoverState">输入关键词搜索真实字幕内容</div>}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="fullTopActions">
+            <button className="fullIconButton notificationButton" aria-label="通知" title="通知">
+              <Bell size={19} />
+              {activeExportCount > 0 && <span />}
+            </button>
+            <button className="accountButton" aria-label="管理员账户">
+              <span className="accountAvatar">管</span>
+              <span>管理员</span>
+              <CaretDown size={14} />
+            </button>
+          </div>
+        </header>
+
+        <aside className="rail fullNavRail" aria-label="主导航">
+          <div className="fullNavStack">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  className={activeView === item.key ? 'railButton active' : 'railButton'}
+                  key={item.key}
+                  title={item.label}
+                  aria-label={item.label}
+                  aria-pressed={activeView === item.key}
+                  onClick={() => setActiveView(item.key)}
+                >
+                  <Icon size={22} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
+          <button className="navCollapse" aria-label="收起导航" title="收起导航">‹</button>
         </aside>
 
-        <main className="stage">
-          <header className="stageTop">
-            <div>
-              <div className="stageTitle">
-                {activeView === 'playback' ? selectedSource?.name ?? viewTitles[activeView] : viewTitles[activeView]}
-              </div>
-              <div className="stageMeta">
-                {stageMeta}
-              </div>
-            </div>
-            <div className="stageTools">
-              <button className="headerSearchButton" onClick={openSearch} aria-pressed={activeView === 'search'}>
-                <Search size={16} />
-                <span>智能检索</span>
-                <kbd>⌘K</kbd>
-              </button>
-              {showSourceSelect && <SourceSelect sources={sources} value={sourceId} onChange={handleSourceChange} />}
-              <button className="refreshButton" onClick={() => void refreshAll()} title="刷新数据" aria-label="刷新数据">
-                <RefreshCw size={18} className={busy ? 'spin' : ''} />
-              </button>
-            </div>
-          </header>
+        <main className={`stage fullPageStage${activeView === 'manage' ? ' manageStage' : ''}`}>
 
-          {activeView === 'sources' ? (
-            <SourceStage
-              sources={sources}
-              selectedId={sourceId}
-              directories={directories}
-              directoryRoot={directoryRoot}
-              sourceName={sourceName}
-              sourcePath={sourcePath}
-              sourceScanInterval={sourceScanInterval}
-              scanJobs={scanJobs}
-              creating={createSourceMutation.isPending}
-              scanning={scanMutation.isPending}
-              onSelect={handleSourceChange}
-              onScan={(id) => scanMutation.mutate(id)}
-              onCreate={handleCreateSource}
-              onNameChange={setSourceName}
-              onPathChange={setSourcePath}
-              onIntervalChange={setSourceScanInterval}
-              onToggle={(id, enabled) => updateSourceMutation.mutate({ id, enabled })}
-              onScheduleChange={(id, scanIntervalMinutes) =>
-                updateSourceMutation.mutate({ id, scanIntervalMinutes })
-              }
-              onSave={(id, payload) => updateSourceMutation.mutate({ id, ...payload })}
-              onDelete={(id) => deleteSourceMutation.mutate(id)}
-            />
-          ) : activeView === 'search' ? (
-            <SearchStage
-              searchQuery={searchQuery}
-              searchResults={searchResults}
-              selectedResult={selectedSearchResult}
-              transcriptions={searchTranscriptions}
-              sources={sources}
-              searchSourceId={searchSourceId}
-              searchStartDate={searchStartDate}
-              searchEndDate={searchEndDate}
-              loading={searchQuery_.isFetching}
-              onBack={() => setActiveView('playback')}
-              onSearch={handleSearch}
-              searchHistory={searchHistory}
-              onClearSearchHistory={handleClearSearchHistory}
-              onSelectResult={handleSelectSearchResult}
-              onSourceChange={setSearchSourceId}
-              onStartDateChange={setSearchStartDate}
-              onEndDateChange={setSearchEndDate}
-              onExportSrt={handleExportSrt}
-              onExportTxt={handleExportTxt}
-            />
-          ) : activeView === 'settings' ? (
-            <SettingsPage
-              sources={sources}
-              status={systemStatus}
-              onRefresh={() => void refreshAll()}
-              busy={busy}
-            />
-          ) : activeView === 'exports' ? (
-            <ExportStage
+          {activeView === 'manage' ? (
+            <div className="fullManagePage">
+              <aside className="fullManageSidebar">
+                <div className="manageHeading">
+                  <small>管理</small>
+                  <h1>系统管理</h1>
+                </div>
+                <nav className="manageNavigation" aria-label="系统管理">
+                  <button className={manageSection === 'sources' ? 'active' : ''} onClick={() => setManageSection('sources')}>
+                    <VideoCamera size={19} /><span>录像源</span><span>›</span>
+                  </button>
+                  <button className={manageSection === 'logs' ? 'active' : ''} onClick={() => setManageSection('logs')}>
+                    <FileTextIcon size={19} /><span>日志</span><span>›</span>
+                  </button>
+                  <button className={manageSection === 'settings' ? 'active' : ''} onClick={() => setManageSection('settings')}>
+                    <GearIcon size={19} /><span>设置</span><span>›</span>
+                  </button>
+                </nav>
+                {manageSection === 'settings' && (
+                  <div className="manageSettingsNav" aria-label="设置分类">
+                    <span>设置分类</span>
+                    {SETTINGS_TABS.map((tab) => {
+                      const Icon = tab.icon
+                      return (
+                        <button
+                          key={tab.key}
+                          className={settingsTab === tab.key ? 'active' : ''}
+                          onClick={() => setSettingsTab(tab.key)}
+                        >
+                          <Icon size={17} />
+                          <span>{tab.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <div className="manageIndexStatus">
+                  <ArchiveIcon size={18} />
+                  <strong>索引状态</strong>
+                  <p>{selectedSource?.name ?? '暂无录像源'} · {currentSourceSegmentCount} 个片段</p>
+                  <div><span style={{ width: `${Math.min(100, currentSourceSegmentCount)}%` }} /></div>
+                  <button onClick={() => { setManageSection('settings'); setSettingsTab('overview') }}>查看系统状态</button>
+                </div>
+              </aside>
+              <section className="fullManageContent">
+                {manageSection === 'sources' && (
+                  <SourceStage
+                    sources={sources}
+                    segments={allSegments}
+                    selectedId={sourceId}
+                    directories={directories}
+                    directoryRoot={directoryRoot}
+                    sourceName={sourceName}
+                    sourcePath={sourcePath}
+                    sourceScanInterval={sourceScanInterval}
+                    scanJobs={scanJobs}
+                    creating={createSourceMutation.isPending}
+                    scanning={scanMutation.isPending}
+                    onSelect={handleSourceChange}
+                    onScan={(id) => scanMutation.mutate(id)}
+                    onCreate={handleCreateSource}
+                    onNameChange={setSourceName}
+                    onPathChange={setSourcePath}
+                    onIntervalChange={setSourceScanInterval}
+                    onToggle={(id, enabled) => updateSourceMutation.mutate({ id, enabled })}
+                    onScheduleChange={(id, scanIntervalMinutes) =>
+                      updateSourceMutation.mutate({ id, scanIntervalMinutes })
+                    }
+                    onRecognitionChange={(id, payload) => updateSourceMutation.mutate({ id, ...payload })}
+                    onSave={(id, payload) => updateSourceMutation.mutate({ id, ...payload })}
+                    onDelete={(id) => deleteSourceMutation.mutate(id)}
+                  />
+                )}
+                {manageSection === 'logs' && (
+                  <LogsStage
+                    sources={sources}
+                    segments={allSegments}
+                    scanJobs={scanJobs}
+                    exports={exports}
+                    failedSegments={failedSegments}
+                    onRefresh={() => void refreshAll()}
+                    busy={busy}
+                  />
+                )}
+                {manageSection === 'settings' && (
+                  <SettingsPage
+                    sources={sources}
+                    status={systemStatus}
+                    onRefresh={() => void refreshAll()}
+                    busy={busy}
+                    activeTab={settingsTab}
+                    onTabChange={setSettingsTab}
+                    onOpenSources={() => setManageSection('sources')}
+                    embedded
+                  />
+                )}
+              </section>
+            </div>
+          ) : activeView === 'tasks' ? (
+            <TaskCenterView
               exports={exports}
-              error={exportsQuery.error}
-              onRefresh={() => void refreshAll()}
-              busy={busy}
+              exportError={exportsQuery.error}
+              segments={allSegments}
+              sourceNames={sourceNames}
+              onNotify={notify}
+              onSelectSegment={(segment) => {
+                selectSegment(segment, true)
+                setActiveView('playback')
+              }}
+            />
+          ) : activeView === 'clips' ? (
+            <ClipLibraryView
+              segments={allSegments}
+              sourceNames={sourceNames}
+              selectedId={selectedSegment?.id}
+              onOpenPlayback={(segment) => {
+                selectSegment(segment, true)
+                setActiveView('playback')
+              }}
+              onExportSegments={(segments) => {
+                if (!segments.length) return
+                const sourceIds = new Set(segments.map((segment) => segment.sourceId))
+                if (sourceIds.size > 1) {
+                  notify('合并导出仅支持同一录像源，请调整选择')
+                  return
+                }
+                const orderedSelection = [...segments].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                const first = orderedSelection[0]
+                const last = orderedSelection[orderedSelection.length - 1]
+                selectSegment(first)
+                setManageRangeStart(new Date(first.startTime).getTime())
+                setManageRangeEnd(new Date(last.endTime).getTime())
+                setManagePanelOpen(true)
+                setActiveView('playback')
+              }}
+              onNotify={notify}
             />
           ) : (
-            <div className="workbenchLayout">
-              <div className="workbenchContent">
-                <section className={`viewerBand${managePanelOpen ? ' viewerBandWithManage' : ''}`}>
-                  <TimeRail
-                    dateStart={clipRangeStart ? clipRangeStart.slice(0, 10) : today}
-                    dateEnd={clipRangeEnd ? clipRangeEnd.slice(0, 10) : today}
+            <div className="redesignPlaybackPage">
+              <aside className="playbackSourceContext">
+                <div className="playbackContextEyebrow">回看上下文</div>
+                <h1>录像源</h1>
+                <label className="playbackSourceSelect">
+                  <span>当前录像源</span>
+                  <select value={sourceId} onChange={(event) => handleSourceChange(event.target.value)}>
+                    <option value="">选择录像源</option>
+                    {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+                  </select>
+                </label>
+                <div className="playbackSourceCard">
+                  <div className="playbackSourceStatus">
+                    <strong>{selectedSource?.name ?? '暂无录像源'}</strong>
+                    <small>{selectedSource?.enabled ? '已启用' : '未连接'}</small>
+                  </div>
+                  <p>{selectedSource?.path ?? '请在管理中添加录像目录'}</p>
+                  <dl>
+                    <div><dt>录像片段</dt><dd>{currentSourceSegmentCount} 个片段</dd></div>
+                    <div><dt>最近扫描</dt><dd>{selectedSource?.lastScanAt ? formatClipDateTime(selectedSource.lastScanAt) : '尚未扫描'}</dd></div>
+                  </dl>
+                </div>
+                <div className="playbackContextBlock playbackDateBlock">
+                  <span>日期</span>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(event) => setPlaybackWindow(event.target.value, playbackHour)}
+                  />
+                </div>
+                <label className="playbackContextBlock playbackRangeBlock">
+                  <span>显示范围</span>
+                  <select value={playbackHour} onChange={(event) => setPlaybackWindow(date, Number(event.target.value))}>
+                    {Array.from({ length: 24 }, (_, hour) => (
+                      <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00 – {String((hour + 1) % 24).padStart(2, '0')}:00</option>
+                    ))}
+                  </select>
+                </label>
+                {(selectedSource?.failedCount ?? 0) > 0 && <p className="playbackContextAlert" role="status">当前录像源有 {selectedSource?.failedCount} 个扫描失败文件，可在活动日志查看原因。</p>}
+                <button className="playbackScanButton" type="button" onClick={handleScan} disabled={!sourceId || scanMutation.isPending}>
+                  <RefreshCw size={17} className={scanMutation.isPending ? 'spinning' : ''} />
+                  {scanMutation.isPending ? '扫描中…' : '立即扫描'}
+                </button>
+                <p className="playbackContextNote"><Activity size={15} />录像源是已连接的摄像目录。扫描只建立索引，不修改源文件。</p>
+                <button className="playbackManageLink" type="button" onClick={() => { setManageSection('sources'); setActiveView('manage') }}>
+                  管理录像源
+                </button>
+              </aside>
+
+              <section className="playbackWorkspace">
+                <div className="playbackViewerShell">
+                  <div className="playbackViewerHeader">
+                    <div>
+                      <span>正在回看</span>
+                      <strong>{selectedSource?.name ?? '选择录像源'}</strong>
+                    </div>
+                    <div>
+                      <button aria-label="刷新回看数据" title="刷新" onClick={() => void refreshAll()}><RefreshCw size={17} /></button>
+                      <button
+                        aria-label="导出当前片段"
+                        title="导出"
+                        onClick={() => {
+                          if (!selectedSegment) return
+                          setManageRangeStart(new Date(selectedSegment.startTime).getTime())
+                          setManageRangeEnd(new Date(selectedSegment.endTime).getTime())
+                          setManagePanelOpen(true)
+                        }}
+                        disabled={!selectedSegment || exportMutation.isPending}
+                      ><Download size={17} /></button>
+                      <button aria-label="识别当前片段字幕" title="语音识别" disabled={!selectedSegment} onClick={() => {
+                        if (!selectedSegment) return
+                        api.triggerTranscription(selectedSegment.id).then(() => notify('语音识别任务已创建')).catch((error) => notify(queryMessage(error, '创建识别任务失败')))
+                      }}><Mic size={17} /></button>
+                    </div>
+                  </div>
+                  <div className="prototypeViewer">
+                    {selectedSegment ? (
+                      <>
+                        <video
+                          key={selectedSegment.id}
+                          ref={videoRef}
+                          className="viewerVideo"
+                          src={`/api/segments/${selectedSegment.id}/stream`}
+                          poster={selectedSegment.thumbnailUrl ?? undefined}
+                          aria-label={`${sourceNames.get(selectedSegment.sourceId) ?? '录像源'}录像回放`}
+                          onClick={togglePlayback}
+                          onLoadStart={() => setVideoState('loading')}
+                          onLoadedMetadata={() => {
+                            const pendingSeek = pendingSeekSecondsRef.current
+                            if (videoRef.current && pendingSeek !== null) videoRef.current.currentTime = pendingSeek
+                            pendingSeekSecondsRef.current = null
+                            syncPlaybackTime()
+                          }}
+                          onCanPlay={() => setVideoState('ready')}
+                          onWaiting={() => setVideoState('loading')}
+                          onError={() => { setVideoState('error'); setIsPlaying(false); setAutoPlayNext(false) }}
+                          onTimeUpdate={() => {
+                            syncPlaybackTime()
+                            if (videoRef.current) setCurrentPlaybackTime(videoRef.current.currentTime)
+                          }}
+                          onSeeking={syncPlaybackTime}
+                          onEnded={handleSegmentEnded}
+                          onPlay={() => { setIsPlaying(true); setAutoPlayNext(true) }}
+                          onPause={() => { setIsPlaying(false); setAutoPlayNext(false) }}
+                        />
+                        {subtitleMode === 'overlay' && currentTranscriptions.length > 0 && (
+                          <SubtitleOverlay transcriptions={currentTranscriptions} currentTime={currentPlaybackTime} />
+                        )}
+                        <div className="prototypeViewerMeta">
+                          <span className="liveDot" />
+                          <strong>{sourceNames.get(selectedSegment.sourceId) ?? selectedSource?.name ?? '录像源'}</strong>
+                          <span>{formatTime(selectedSegment.startTime)}</span>
+                        </div>
+                        {videoState === 'loading' && <div className="prototypeVideoState" aria-live="polite"><RefreshCw size={25} className="spinning" /><strong>正在加载录像</strong></div>}
+                        {videoState === 'error' && <div className="prototypeVideoState error" role="alert"><VideoCamera size={30} /><strong>录像无法播放</strong><span>文件可能损坏或浏览器不支持该编码。</span></div>}
+                        <div className="prototypePlayerControls">
+                          <button type="button" className="mainPlay" aria-label={isPlaying ? '暂停' : '播放'} onClick={togglePlayback}>{isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}</button>
+                          <button type="button" className="skipControl" aria-label="后退 10 秒" onClick={() => { if (videoRef.current) videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10) }}>−10</button>
+                          <button type="button" className="skipControl" aria-label="前进 10 秒" onClick={() => { if (videoRef.current) videoRef.current.currentTime += 10 }}>+10</button>
+                          <time>{formatTime(new Date(playbackTimeMs ?? new Date(selectedSegment.startTime).getTime()).toISOString())}<small> / {formatTime(selectedSegment.endTime)}</small></time>
+                          <div className="prototypeProgress" role="progressbar" aria-label="播放进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(100, Math.max(0, (currentPlaybackTime / Math.max(1, selectedSegment.durationSeconds)) * 100)))}><span style={{ width: `${Math.min(100, Math.max(0, (currentPlaybackTime / Math.max(1, selectedSegment.durationSeconds)) * 100))}%` }} /></div>
+                          <button type="button" className="playerRate" aria-label="切换播放速度" onClick={() => {
+                            const currentIndex = playbackRates.indexOf(playbackRate)
+                            handlePlaybackRateChange(playbackRates[(currentIndex + 1) % playbackRates.length] ?? 1)
+                          }}>{playbackRate.toFixed(1)}x</button>
+                          <button type="button" aria-label="切换字幕显示" onClick={() => setSubtitleMode((mode) => mode === 'overlay' ? 'list' : 'overlay')}><SlidersHorizontal size={16} /></button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className={`prototypeViewerEmpty${timelineQuery.isError ? ' error' : ''}`} role={timelineQuery.isError ? 'alert' : 'status'}>
+                        {timelineQuery.isFetching ? <RefreshCw size={36} className="spinning" /> : <VideoCamera size={42} />}
+                        <strong>{timelineQuery.isFetching ? '正在加载回看数据' : timelineQuery.isError ? '回看数据加载失败' : '选择录像片段开始回看'}</strong>
+                        <span>{timelineQuery.isError ? '请检查后端连接后重试刷新。' : sourceId ? '当前日期暂无可播放片段' : '请先从左侧选择录像源'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <TimeRail
+                    dateStart={date}
+                    dateEnd={date}
                     segments={rangeSegments}
+                    gaps={timeline?.gaps ?? []}
                     selectedId={selectedSegment?.id}
                     playbackTimeMs={playbackTimeMs}
+                    playbackRate={playbackRate}
                     isPlaying={isPlaying}
                     onSelect={(segment) => selectSegment(segment, true)}
+                    onSeek={selectSegmentAtTime}
+                    onGapClick={(gap) => notify(`该时段断档 ${Math.round(gap.durationSeconds)} 秒，可选择相邻录像片段`)}
+                    onPlaybackRateChange={handlePlaybackRateChange}
+                    onTogglePlayback={togglePlayback}
                     manageOpen={managePanelOpen}
                     onManage={() => setManagePanelOpen(!managePanelOpen)}
-                    onDateStartChange={(d) => setClipRangeStart(d + 'T00:00')}
-                    onDateEndChange={(d) => setClipRangeEnd(d + 'T23:59')}
+                    onDateStartChange={(nextDate) => {
+                      setPlaybackWindow(nextDate, playbackHour)
+                    }}
+                    onDateEndChange={(nextDate) => {
+                      setPlaybackWindow(nextDate, playbackHour)
+                    }}
                     onRangeChange={(startMs, endMs) => {
                       setManageRangeStart(startMs)
                       setManageRangeEnd(endMs)
-                      setManagePanelOpen(true)
                     }}
+                    exportMode={exportMode}
+                    onExportModeChange={setExportMode}
+                    windowStartMs={playbackWindowStartMs}
+                    windowEndMs={playbackWindowEndMs}
                   />
+
                   {managePanelOpen && (
-                    <ManagePanel
-                      segments={rangeSegments}
-                      sources={sources}
-                      selectedSourceId={sourceId}
-                      currentTimeMs={playbackTimeMs}
-                      externalRangeStart={manageRangeStart}
-                      externalRangeEnd={manageRangeEnd}
-                      onClose={() => {
-                        setManagePanelOpen(false)
-                        setManageRangeStart(null)
-                        setManageRangeEnd(null)
-                      }}
-                      onExport={(startTime, endTime, mode, speed) => {
-                        exportMutation.mutate({
-                          sourceId: selectedSegment?.sourceId ?? sourceId,
-                          startTime,
-                          endTime,
-                          mode: mode || 'fast',
-                          timelapseSpeed: speed,
-                        })
-                        setManagePanelOpen(false)
-                        setManageRangeStart(null)
-                        setManageRangeEnd(null)
-                      }}
-                    />
-                  )}
-                  <div
-                    ref={viewerRightRef}
-                    className="viewerRight"
-                    style={{ gridTemplateRows: `minmax(${minViewerHeight}px, 1fr) 8px ${clipDockHeight}px` }}
-                  >
-                    {selectedSegment ? (
-                      <PlaybackViewer
-                        key={selectedSegment.id}
-                        ref={videoRef}
-                        segment={selectedSegment}
-                        sourceName={sourceNames.get(selectedSegment.sourceId) ?? selectedSource?.name ?? '录像源'}
-                        playbackRate={playbackRate}
-                        transcriptions={currentTranscriptions}
-                        subtitleMode={subtitleMode}
-                        refreshing={busy}
-                        exporting={exportMutation.isPending}
-                        scanning={scanMutation.isPending}
-                        onTimeChange={handlePlaybackTimeChange}
-                        onEnded={handleSegmentEnded}
-                        onPlayStateChange={(playing) => {
-                          setIsPlaying(playing)
-                        }}
-                        onPlaybackRateChange={handlePlaybackRateChange}
-                        onPlaybackError={() => notify('无法开始播放，请检查浏览器权限或视频格式')}
-                        onRefresh={() => void refreshAll()}
-                        onExport={handleExport}
-                        onScan={handleScan}
-                        onTranscribe={() => {
-                          api.triggerTranscription(selectedSegment.id).then(() => {
-                            notify('语音识别任务已创建')
-                            void queryClient.invalidateQueries({ queryKey: ['transcription'] })
-                            void queryClient.invalidateQueries({ queryKey: ['transcriptionStatus'] })
-                          }).catch((err) => {
-                            notify(queryMessage(err, '创建识别任务失败'))
-                          })
-                        }}
-                      />
-                    ) : (
-                      <div className="viewer viewerEmpty">
-                        <span className="viewerEmptyIcon"><CameraOff size={26} /></span>
-                        <strong>{sourceId ? '当前范围内没有录像' : '选择录像源开始回放'}</strong>
-                        <span>{sourceId ? '调整时间范围或重新扫描录像源' : '从右上角选择一个录像源'}</span>
-                        {sourceId && (
-                          <button type="button" onClick={handleScan} disabled={scanMutation.isPending}>
-                            <RefreshCw size={15} className={scanMutation.isPending ? 'spin' : ''} />
-                            重新扫描
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    <button
-                      className="viewerResizeHandle"
-                      type="button"
-                      aria-label="调整播放器和录像片段高度"
-                      title="拖拽调整高度，双击恢复默认"
-                      onPointerDown={handleClipResizePointerDown}
-                      onPointerMove={handleClipResizePointerMove}
-                      onPointerUp={finishClipResize}
-                      onPointerCancel={finishClipResize}
-                      onLostPointerCapture={finishClipResize}
-                      onMouseDown={handleClipResizeMouseDown}
-                      onDoubleClick={() => updateClipDockHeight(defaultClipDockHeight)}
-                    >
-                      <span />
-                    </button>
-
-                    <section className="clipDock">
-                      <div className="dockHead">
-                        <div>
-                          <div className="dockTitle">录像片段</div>
-                          <div className="dockMeta">
-                            {sourceId ? `${rangeSegments.length} 个片段 · ${timeline?.gaps.length ?? 0} 个断档` : '选择录像源后显示片段'}
-                          </div>
-                        </div>
-                        <div className="dockActions">
-                          {failedSegments.length > 0 && <FailurePill segments={failedSegments} />}
-                          <button
-                            className="dockSizeButton"
-                            type="button"
-                            title={clipDockHeight <= minClipDockHeight + 8 ? '展开片段区' : '收起片段区'}
-                            aria-label={clipDockHeight <= minClipDockHeight + 8 ? '展开片段区' : '收起片段区'}
-                            onClick={() => updateClipDockHeight(clipDockHeight <= minClipDockHeight + 8 ? defaultClipDockHeight : minClipDockHeight)}
-                          >
-                            {clipDockHeight <= minClipDockHeight + 8 ? <PanelBottomOpen size={17} /> : <PanelBottomClose size={17} />}
-                          </button>
-                        </div>
-                      </div>
-                      <ClipGrid
-                        sourceName={selectedSource?.name ?? 'Camera'}
-                        sourceNames={sourceNames}
+                    <div className="playbackManageOverlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setManagePanelOpen(false) }}>
+                      <ManagePanel
                         segments={rangeSegments}
-                        selectedId={selectedSegment?.id}
-                        onSelect={(segment) => selectSegment(segment, true)}
-                        onTranscribe={(segmentId) => {
-                          api.triggerTranscription(segmentId).then(() => {
-                            notify('语音识别任务已创建')
-                          }).catch((err) => {
-                            notify(queryMessage(err, '创建识别任务失败'))
-                          })
+                        sources={sources}
+                        selectedSourceId={sourceId}
+                        currentTimeMs={playbackTimeMs}
+                        externalRangeStart={manageRangeStart}
+                        externalRangeEnd={manageRangeEnd}
+                        onClose={() => { setManagePanelOpen(false); setManageRangeStart(null); setManageRangeEnd(null) }}
+                        onExport={async (startTime, endTime, mode) => {
+                          await exportMutation.mutateAsync({ sourceId: selectedSegment?.sourceId ?? sourceId, startTime, endTime, mode })
                         }}
+                        onViewTasks={() => { setManagePanelOpen(false); setActiveView('tasks') }}
                       />
-                    </section>
-                  </div>
-                </section>
+                    </div>
+                  )}
+
+                <PlaybackClipStrip
+                  segments={rangeSegments}
+                  selectedId={selectedSegment?.id}
+                  sourceNames={sourceNames}
+                  transcriptionStatuses={transcriptionStatusBySegment}
+                  onSelect={(segment) => selectSegment(segment, true)}
+                  onTranscribe={(segmentId) => api.triggerTranscription(segmentId).then(() => notify('语音识别任务已创建')).catch((error) => notify(queryMessage(error, '创建识别任务失败')))}
+                  onExportRange={(segment) => {
+                    selectSegment(segment)
+                    setManageRangeStart(new Date(segment.startTime).getTime())
+                    setManageRangeEnd(new Date(segment.endTime).getTime())
+                    setManagePanelOpen(true)
+                  }}
+                  onOpenLibrary={() => setActiveView('clips')}
+                />
 
                 {selectedSegment && (
-                  <TranscriptionPanel
-                    segmentId={selectedSegment.id}
-                    transcriptions={currentTranscriptions}
-                    currentTime={currentPlaybackTime}
-                    mode={subtitleMode}
-                    onModeChange={setSubtitleMode}
-                    onSelect={(time) => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = time
-                      }
-                    }}
-                    onExportSrt={() => handleExportSrt(selectedSegment.id)}
-                    onExportTxt={() => handleExportTxt(selectedSegment.id)}
-                    onNotify={notify}
-                  />
+                  <details className="playbackTranscriptDetails">
+                    <summary>字幕与识别结果</summary>
+                    <TranscriptionPanel
+                      segmentId={selectedSegment.id}
+                      transcriptions={currentTranscriptions}
+                      currentTime={currentPlaybackTime}
+                      mode={subtitleMode}
+                      onModeChange={setSubtitleMode}
+                      onSelect={(time) => { if (videoRef.current) videoRef.current.currentTime = time }}
+                      onExportSrt={() => handleExportSrt(selectedSegment.id)}
+                      onExportTxt={() => handleExportTxt(selectedSegment.id)}
+                      onNotify={notify}
+                    />
+                  </details>
                 )}
-              </div>
+              </section>
             </div>
           )}
         </main>
-
-        <nav className="mobileNav" aria-label="主导航">
-          {mobileNavItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                className={activeView === item.key ? 'mobileNavButton active' : 'mobileNavButton'}
-                key={item.key}
-                type="button"
-                aria-pressed={activeView === item.key}
-                onClick={() => setActiveView(item.key)}
-              >
-                <Icon size={19} />
-                <span>{item.label.replace('录像', '')}</span>
-              </button>
-            )
-          })}
-        </nav>
       </div>
 
       <Toast.Root className="toastRoot" open={toastOpen} onOpenChange={setToastOpen}>
-        <Toast.Description>{message}</Toast.Description>
+        <Toast.Description aria-live="polite">{message}</Toast.Description>
         {toastDownloadUrl && (
           <Toast.Action asChild altText="下载导出文件">
             <a className="toastAction" href={toastDownloadUrl}>
@@ -1072,6 +1335,43 @@ export function App() {
           </Toast.Action>
         )}
       </Toast.Root>
+      {previewSegment && (
+        <div className="modalBackdrop clipPreviewBackdrop" role="presentation" onClick={() => setPreviewSegment(null)}>
+          <div ref={previewDialogRef} className="clipPreviewModal" role="dialog" aria-modal="true" aria-label="片段预览" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
+            <div className="clipPreviewTopbar">
+              <div className="clipPreviewTitle">
+                <Camera size={15} />
+                <strong>{sourceNames.get(previewSegment.sourceId) ?? selectedSource?.name ?? 'Camera'}</strong>
+                <span>{formatClipDateTime(previewSegment.startTime)}</span>
+              </div>
+              <div className="clipPreviewTools">
+                <button
+                  onClick={() => {
+                    setPreviewSegment(null)
+                    selectSegment(previewSegment, true)
+                    setActiveView('playback')
+                  }}
+                >
+                  查看回放
+                </button>
+                <button aria-label="关闭片段预览" title="关闭" onClick={() => setPreviewSegment(null)}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="clipPreviewBody">
+              <video
+                key={previewSegment.id}
+                className="clipPreviewVideo"
+                src={`/api/segments/${previewSegment.id}/stream`}
+                aria-label="片段预览视频"
+                autoPlay
+                controls
+              />
+            </div>
+          </div>
+        </div>
+      )}
       <Toast.Viewport className="toastViewport" />
     </Toast.Provider>
   )

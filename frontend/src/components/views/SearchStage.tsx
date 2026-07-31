@@ -1,4 +1,4 @@
-import { ArrowLeft, RefreshCw, Search, X } from 'lucide-react'
+import { ArrowLeft, ArrowClockwise as RefreshCw } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
 import type { SearchResponse, Source, Transcription } from '../../types'
 
@@ -13,9 +13,6 @@ export function SearchStage({
   searchEndDate,
   loading,
   onBack,
-  onSearch,
-  searchHistory,
-  onClearSearchHistory,
   onSelectResult,
   onSourceChange,
   onStartDateChange,
@@ -33,9 +30,6 @@ export function SearchStage({
   searchEndDate: string | undefined
   loading: boolean
   onBack: () => void
-  onSearch: (query: string) => void
-  searchHistory: string[]
-  onClearSearchHistory: () => void
   onSelectResult: (result: SearchResponse['items'][0]) => void
   onSourceChange: (sourceId: string | undefined) => void
   onStartDateChange: (date: string | undefined) => void
@@ -45,24 +39,8 @@ export function SearchStage({
 }) {
   const [currentTime, setCurrentTime] = useState(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [draft, setDraft] = useState(searchQuery)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
   const resultsListRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    setDraft(searchQuery)
-  }, [searchQuery])
-
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
-  function submitSearch() {
-    const nextQuery = draft.trim()
-    if (!nextQuery) return
-    onSearch(nextQuery)
-  }
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -131,34 +109,9 @@ export function SearchStage({
           <span>返回</span>
         </button>
         <div className="searchTitle">
-          智能检索
+          搜索: &quot;{searchQuery}&quot;
           {searchResults && <span className="searchCount">共 {searchResults.total} 条结果</span>}
         </div>
-        <form
-          className="searchQueryForm"
-          onSubmit={(event) => {
-            event.preventDefault()
-            submitSearch()
-          }}
-        >
-          <Search size={16} />
-          <input
-            ref={inputRef}
-            className="searchStageInput"
-            type="search"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="搜索语音识别文本"
-          />
-          {draft && (
-            <button className="searchInlineClear" type="button" onClick={() => setDraft('')} title="清除">
-              <X size={14} />
-            </button>
-          )}
-          <button className="searchSubmit" type="submit" disabled={!draft.trim()}>
-            搜索
-          </button>
-        </form>
         <div className="searchFilters">
           <select
             value={searchSourceId ?? ''}
@@ -272,18 +225,6 @@ export function SearchStage({
           ) : (
             <div className="searchEmpty">
               <div className="searchEmptyTitle">输入关键词开始搜索</div>
-              {searchHistory.length > 0 && (
-                <div className="searchHistoryChips">
-                  {searchHistory.slice(0, 6).map((item) => (
-                    <button key={item} onClick={() => onSearch(item)}>
-                      {item}
-                    </button>
-                  ))}
-                  <button className="searchHistoryClearChip" onClick={onClearSearchHistory}>
-                    清除历史
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>

@@ -10,6 +10,7 @@ from typing import TypedDict
 
 from app.core.config import get_settings
 from app.core.settings_store import get_effective, update_settings
+from app.services.model_cache import configure_model_cache_env, whisper_cache_root
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +33,13 @@ def get_asr_config() -> dict:
     """获取 ASR 配置（从 settings_store 读取）"""
     return {
         "model": get_effective("asr_model", "funasr"),
-        "modelSize": get_effective("asr_model_size", "medium"),
+        "modelSize": get_effective("asr_model_size", "base"),
         "device": get_effective("asr_device", "auto"),
         "language": get_effective("asr_language", "zh"),
         "autoTranscribe": get_effective("asr_auto_transcribe", False),
         "hotwords": get_effective("asr_hotwords", ""),
         "audioSampleRate": get_effective("asr_audio_sample_rate", 16000),
-        "maxConcurrent": get_effective("asr_max_concurrent", 2),
+        "maxConcurrent": get_effective("asr_max_concurrent", 1),
         "timeoutSeconds": get_effective("asr_timeout_seconds", 600),
     }
 
@@ -141,6 +142,7 @@ class ASRService:
     def _load_funasr(self, model_size: str, device: str):
         """加载 FunASR 模型"""
         try:
+            configure_model_cache_env()
             import torch
             from funasr import AutoModel
 
@@ -178,6 +180,7 @@ class ASRService:
     def _load_sensevoice(self, model_size: str, device: str):
         """加载 SenseVoice 模型"""
         try:
+            configure_model_cache_env()
             from funasr import AutoModel
 
             return AutoModel(
@@ -192,13 +195,18 @@ class ASRService:
     def _load_whisper(self, model_size: str, device: str):
         """加载 Whisper 模型"""
         try:
+            configure_model_cache_env()
             import whisper
 
-            return whisper.load_model(model_size, device=device if device != "auto" else "cpu")
+            return whisper.load_model(
+                model_size,
+                device=device if device != "auto" else "cpu",
+                download_root=str(whisper_cache_root()),
+            )
         except ImportError:
             raise ImportError("Whisper not installed. Run: pip install openai-whisper")
 
-    def extract_audio(self, video_path: str) -> str:
+    def extract_audio(self, video_path: str, timeout: int | None = None) -> str:
         """FFmpeg 提取音频"""
         settings = get_settings()
         config = self._get_runtime_asr_config()
@@ -210,6 +218,9 @@ class ASRService:
 
         cmd = [
             "ffmpeg", "-y",
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel", "error",
             "-i", video_path,
             "-vn",
             "-acodec", "pcm_s16le",
@@ -220,12 +231,16 @@ class ASRService:
 
         logger.info(f"Extracting audio: {video_path} -> {audio_path}")
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TimeoutError(f"音频提取超时（{timeout} 秒）") from exc
 
         if result.returncode != 0:
             error_msg = result.stderr.strip() or "ffmpeg failed"
@@ -234,7 +249,7 @@ class ASRService:
 
         return str(audio_path)
 
-    def transcribe(self, audio_path: str) -> list[TranscriptionSegment]:
+    def transcribe(self, audio_path: str, language: str | None = None) -> list[TranscriptionSegment]:
         """语音识别，返回带时间戳的文字"""
         model = self._load_model()
         config = self._get_runtime_asr_config()
@@ -247,7 +262,7 @@ class ASRService:
             if model_type in ("funasr", "sensevoice"):
                 return self._transcribe_funasr(model, audio_path, hotwords)
             elif model_type == "whisper":
-                return self._transcribe_whisper(model, audio_path)
+                return self._transcribe_whisper(model, audio_path, language)
             else:
                 raise ValueError(f"Unknown ASR model: {model_type}")
         except Exception as e:
@@ -299,9 +314,9 @@ class ASRService:
         logger.debug(f"Parsed {len(segments)} segments")
         return segments
 
-    def _transcribe_whisper(self, model, audio_path: str) -> list[TranscriptionSegment]:
+    def _transcribe_whisper(self, model, audio_path: str, language: str | None) -> list[TranscriptionSegment]:
         """Whisper 识别"""
-        result = model.transcribe(audio_path, language=get_effective("asr_language", "zh"))
+        result = model.transcribe(audio_path, language=language or get_effective("asr_language", "zh"))
 
         segments = []
         for segment in result.get("segments", []):

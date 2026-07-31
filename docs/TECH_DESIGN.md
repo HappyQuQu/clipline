@@ -1,5 +1,7 @@
 # Clipline Technical Design
 
+> 前端结构必须服务于 `frontend/prototypes/clipline-full-redesign`，不得沿用旧信息架构。页面与视觉对齐规则见 `docs/FULL_REDESIGN_ALIGNMENT.md`。
+
 ## 1. 文档目的
 
 本文档定义 Clipline MVP 的技术架构、模块边界、核心流程、文件安全策略和开发拆分。
@@ -131,6 +133,8 @@ CLIPLINE_SKIP_RECENT_SECONDS=30
 CLIPLINE_LOG_LEVEL=INFO
 CLIPLINE_LOG_FORMAT=text
 CLIPLINE_LOG_FILE=/app/data/logs/clipline.log
+CLIPLINE_PLAYBACK_PROXY_MAX_WIDTH=1920
+CLIPLINE_PLAYBACK_PROXY_TIMEOUT_SECONDS=1800
 ```
 
 ### 6.2 配置文件
@@ -435,22 +439,26 @@ MVP 使用应用内 worker，不引入 Redis。
 
 ### 9.1 页面
 
-- PlaybackPage。
-- SettingsPage。
-- ExportJobsPage。
+- AppShell：顶栏、全局搜索和四项一级导航。
+- ReviewPage：录像回看与导出核心工作区。
+- ClipLibraryPage：片段筛选、详情和批量处理。
+- TaskPage：导出、语音和视觉任务统一列表。
+- ManagePage：录像源、活动日志和设置的二级容器。
+- SettingsPanel：七个设置分类的三级容器。
 
 ### 9.2 核心组件
 
-- SourceSelector。
-- DatePicker。
-- VideoPlayer。
-- Timeline。
-- SegmentList。
-- ExportRangeSelector。
-- ExportJobList。
-- SourceForm。
-- DirectoryPicker。
-- SystemStatusPanel。
+- Topbar / GlobalSearch。
+- PrimaryNav / ManageSidebar / SettingsSubnav。
+- SourceContext / DatePicker / DisplayRange。
+- VideoStage / PlaybackControls。
+- TimelinePanel / ExportRange / ExportModal。
+- ClipStrip / ClipGrid / ClipList / ClipInspector / BatchActionBar。
+- TaskFilters / TaskTable / TaskSummary。
+- SourcesTable / SourceDetail / DirectoryPicker。
+- LogsToolbar / LogsTable。
+- SettingsGroup / SettingsField / SettingsToggle / StickySaveBar。
+- ModelSummary / ModelTable / VisionModelCard。
 
 ### 9.3 数据请求
 
@@ -458,7 +466,8 @@ MVP 使用应用内 worker，不引入 Redis。
 
 - 缓存源列表。
 - 缓存时间线数据。
-- 定时刷新源列表、导出任务和日志。
+- 定时刷新源列表、导出/语音/视觉任务和活动日志。
+- 全局搜索复用字幕搜索 API，以顶栏浮层展示结果。
 - 扫描任务排队后刷新源列表、时间线和日志。
 - 导出完成后刷新任务列表。
 
@@ -472,6 +481,8 @@ MVP 使用应用内 worker，不引入 Redis。
 - Toast：操作反馈。
 
 使用 Tailwind CSS 作为样式工具链，保留少量语义 class 来维持工作台页面的可读性和稳定布局。
+
+正式实现必须将 full redesign 的 token 固化为共享变量：顶栏 64px、一级导航 78px、回看上下文栏 250px、管理侧栏 220px，以及原型定义的颜色、字体、圆角、控件高度和 1180/900/660 响应式断点。组件库只负责行为和可访问性，不得覆盖原型外观。
 
 ## 10. 文件安全
 
@@ -548,7 +559,7 @@ services:
 - 源表。
 - 源 API。
 - 目录树 API。
-- 设置页源列表。
+- 管理 / 录像源列表与选中源详情。
 - 新建源表单。
 - 路径安全校验。
 
@@ -566,9 +577,10 @@ services:
 - timeline API。
 - segments API。
 - Range stream。
-- 回看页。
-- 时间线组件。
-- 片段列表。
+- 对 `needsTranscode` 片段按需生成 H.264/AAC MP4 播放代理，写入 `/app/data/playback-proxies` 并按源文件状态复用；源录像始终只读。
+- full redesign 回看页骨架。
+- 单条横向真实时间线。
+- 横向片段条。
 - 单片段播放。
 - 连续播放。
 
@@ -579,14 +591,21 @@ services:
 - 导出 worker。
 - 快速导出。
 - 精准导出。
-- 导出任务页。
+- 统一任务页中的导出任务。
 - 下载接口。
 
-### 13.6 Milestone 6: 收尾
+### 13.6 Milestone 6: 内容识别与管理
 
-- P1 缩略图。
-- 系统状态页。
+- 片段库、全局字幕搜索和视觉标签筛选。
+- 语音识别与视觉识别任务。
+- 活动日志。
+- 七个设置分类和模型管理。
+
+### 13.7 Milestone 7: Full redesign 收尾
+
+- 将 App Shell、页面结构和视觉 token 完全对齐原型。
+- 390、660、900、1180、1440px 响应式验证。
+- 键盘、读屏、焦点、动态状态和对比度验证。
 - 错误处理。
-- 日志。
-- 验收测试。
+- 原型/正式实现同状态截图回归。
 - 文档整理。

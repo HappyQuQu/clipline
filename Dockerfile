@@ -16,6 +16,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CLIPLINE_PORT=8080 \
     CLIPLINE_DATA=/app/data \
     CLIPLINE_DB=/app/data/clipline.db \
+    CLIPLINE_MODEL_CACHE_DIR=/app/data/models \
     CLIPLINE_RECORDINGS_ROOT=/recordings
 
 RUN apt-get update \
@@ -24,7 +25,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY backend /app/backend
-RUN pip install --no-cache-dir --index-url ${PIP_INDEX_URL} --trusted-host ${PIP_TRUSTED_HOST} /app/backend[asr]
+RUN pip install --no-cache-dir --index-url ${PIP_INDEX_URL} --trusted-host ${PIP_TRUSTED_HOST} /app/backend[asr,vision]
 RUN cp -R /app/backend/app /app/app
 COPY --from=frontend-build /src/frontend/dist /app/static
 

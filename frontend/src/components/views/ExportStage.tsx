@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Check, Download, RefreshCw } from 'lucide-react'
+import { ArrowClockwise as RefreshCw, Check, DownloadSimple as Download, Pulse as Activity, Warning as AlertTriangle } from '@phosphor-icons/react'
 import type { ExportJob } from '../../types'
 import { exportProgressPercent, exportStatusLabel, formatBytes, formatClipDateTime, formatDuration, queryMessage } from '../../utils'
 

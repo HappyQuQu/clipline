@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clipline — 录像回放 (完整代码功能版)</title>
+<meta name="description" content="Clipline NAS 录像片段回放与语音字幕工作台">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   CLIPLINE DESIGN SYSTEM — Apple-inspired Dark
+   ============================================ */
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #141419;
+  --bg-tertiary: #1c1c24;
+  --bg-elevated: #232330;
+  --bg-hover: #2a2a38;
+
+  --border-primary: rgba(255,255,255,0.06);
+  --border-secondary: rgba(255,255,255,0.1);
+  --border-active: rgba(0,113,227,0.5);
+
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #6e6e73;
+  --text-quaternary: #48484a;
+
+  --accent-blue: #0a84ff;
+  --accent-blue-dim: rgba(10,132,255,0.15);
+  --accent-green: #30d158;
+  --accent-green-dim: rgba(48,209,88,0.15);
+  --accent-red: #ff453a;
+  --accent-orange: #ff9f0a;
+  --accent-purple: #bf5af2;
+  --accent-teal: #64d2ff;
+
+  --glass-bg: rgba(20,20,25,0.72);
+  --glass-border: rgba(255,255,255,0.08);
+
+  --font: 'Inter', -apple-system, 'SF Pro Display', system-ui, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 100px;
+
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md: 0 8px 30px rgba(0,0,0,0.4);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 20px rgba(10,132,255,0.15);
+
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --rail-width: 72px;
+  --topbar-height: 56px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, select { font-family: inherit; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-quaternary); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* ============================================
+   SHELL LAYOUT
+   ============================================ */
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  grid-template-rows: var(--topbar-height) 1fr;
+  height: 100vh;
+}
+
+/* ── Rail Navigation ── */
+.rail {
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 0 20px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  z-index: 10;
+}
+
+.rail-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+  display: grid;
+  place-items: center;
+  margin-bottom: 20px;
+  position: relative;
+  transition: transform 0.3s var(--spring);
+}
+.rail-logo:hover { transform: scale(1.08); }
+.rail-logo svg { width: 22px; height: 22px; fill: white; }
+.rail-logo-status {
+  position: absolute; right: -1px; top: -1px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--accent-green); border: 2px solid var(--bg-secondary);
+}
+
+.rail-nav { display: flex; flex-direction: column; gap: 4px; }
+
+.rail-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 56px; padding: 8px 0 6px; border-radius: var(--radius-md);
+  color: var(--text-tertiary); transition: all 0.2s var(--ease); text-decoration: none;
+}
+.rail-btn:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+.rail-btn.active { background: var(--accent-blue-dim); color: var(--accent-blue); }
+.rail-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rail-btn span { font-size: 10px; font-weight: 600; }
+
+.rail-spacer { flex: 1; }
+
+/* ── Topbar ── */
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 0 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--glass-border);
+  z-index: 5;
+}
+
+.topbar-title h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.topbar-title p { font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
+.topbar-spacer { flex: 1; }
+
+.search-box {
+  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px;
+  background: var(--bg-tertiary); border: 1px solid var(--border-primary);
+  border-radius: var(--radius-pill); min-width: 240px; transition: all 0.25s var(--ease);
+}
+.search-box:focus-within { border-color: var(--accent-blue); box-shadow: var(--shadow-glow); background: var(--bg-elevated); }
+.search-box svg { width: 15px; height: 15px; stroke: var(--text-tertiary); fill: none; stroke-width: 2; flex-shrink: 0; }
+.search-box input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-size: 13px; font-weight: 500; }
+.search-box kbd { font-size: 10px; font-weight: 600; color: var(--text-quaternary); background: var(--bg-primary); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-primary); }
+
+.topbar-select, .topbar-date {
+  height: 34px; padding: 0 12px; background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary); border-radius: var(--radius-sm);
+  color: var(--text-primary); font-size: 13px; font-weight: 600; outline: none; cursor: pointer;
+  color-scheme: dark;
+}
+.topbar-select { padding-right: 32px; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+
+.topbar-icon-btn {
+  width: 34px; height: 34px; border-radius: var(--radius-sm); display: grid; place-items: center;
+  color: var(--text-tertiary); transition: all 0.2s var(--ease);
+}
+.topbar-icon-btn:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+.topbar-icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.topbar-divider { width: 1px; height: 20px; background: var(--border-primary); margin: 0 4px; }
+
+/* ============================================
+   MAIN WORKSPACE — Split into Video/Timeline + Subtitle Panel
+   ============================================ */
+.main {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 0.3s var(--ease);
+}
+.main.panel-closed {
+  grid-template-columns: 1fr 0px;
+}
+
+.left-stage {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border-primary);
+}
+
+/* ── Video Player Area ── */
+.player-area {
+  flex: 1;
+  min-height: 280px;
+  position: relative;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Subtitle Overlay (视频悬浮字幕) */
+.subtitle-overlay {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: var(--shadow-md);
+  z-index: 4;
+  transition: all 0.3s var(--ease);
+}
+.subtitle-overlay .time-tag {
+  color: var(--accent-teal);
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-badge {
+  position: absolute; left: 20px; top: 16px; display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(12px); color: white; font-size: 13px; font-weight: 700;
+  z-index: 3;
+}
+.player-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); }
+
+.player-floating {
+  position: absolute; top: 16px; right: 20px; display: flex; gap: 4px; padding: 4px;
+  border-radius: var(--radius-md); background: rgba(0,0,0,0.55); backdrop-filter: blur(12px);
+  z-index: 3;
+}
+.player-floating button {
+  width: 36px; height: 32px; border-radius: var(--radius-sm); color: rgba(255,255,255,0.75);
+  display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px;
+  transition: all 0.15s var(--ease); font-size: 11px; font-weight: 700;
+}
+.player-floating button:hover { background: rgba(255,255,255,0.15); color: white; }
+.player-floating button.active { background: var(--accent-blue); color: white; }
+.player-floating button svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+/* ── Timeline Bar ── */
+.timeline-bar {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  padding: 12px 24px 8px;
+}
+
+.timeline-controls {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+
+.play-btn {
+  width: 36px; height: 36px; border-radius: 50%; background: var(--accent-blue); color: white;
+  display: grid; place-items: center; transition: all 0.2s var(--ease); flex-shrink: 0;
+}
+.play-btn:hover { background: #0977e0; transform: scale(1.05); }
+.play-btn svg { width: 16px; height: 16px; fill: white; stroke: none; margin-left: 2px; }
+
+.nav-btn-group {
+  display: flex; background: var(--bg-tertiary); border-radius: var(--radius-sm); overflow: hidden;
+}
+.nav-btn-group button {
+  width: 34px; height: 32px; display: grid; place-items: center; color: var(--text-tertiary);
+  transition: all 0.15s var(--ease);
+}
+.nav-btn-group button:hover { background: var(--bg-elevated); color: var(--text-secondary); }
+.nav-btn-group button + button { border-left: 1px solid var(--border-primary); }
+.nav-btn-group svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+.speed-btn {
+  height: 28px; padding: 0 10px; border-radius: var(--radius-sm); background: var(--bg-tertiary);
+  color: var(--text-secondary); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.speed-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+.timeline-clock {
+  font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text-primary);
+  margin-left: 8px; letter-spacing: -0.02em;
+}
+
+.timeline-controls-spacer { flex: 1; }
+
+.export-btn {
+  height: 32px; padding: 0 16px; border-radius: var(--radius-pill); background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary); color: var(--text-secondary); font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; gap: 6px; transition: all 0.2s var(--ease);
+}
+.export-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: var(--accent-blue-dim); }
+.export-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* ── Timeline Track ── */
+.timeline-track {
+  position: relative; height: 36px; background: var(--bg-tertiary); border-radius: var(--radius-sm);
+  overflow: hidden; cursor: pointer; margin-bottom: 6px;
+}
+.timeline-segments {
+  position: absolute; inset: 4px; display: flex; gap: 2px; border-radius: 4px; overflow: hidden;
+}
+.tl-segment { height: 100%; border-radius: 3px; position: relative; }
+.tl-segment.has-recording { background: var(--accent-blue); opacity: 0.6; }
+.tl-segment.has-recording.active { opacity: 1; box-shadow: 0 0 8px rgba(10,132,255,0.4); }
+.tl-segment.no-recording { background: var(--bg-elevated); opacity: 0.3; }
+
+.timeline-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text-primary); left: 38%; z-index: 2;
+}
+.timeline-playhead::before {
+  content: ''; position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+  width: 8px; height: 8px; border-radius: 50%; background: var(--text-primary);
+}
+
+.timeline-labels { display: flex; justify-content: space-between; padding: 0 4px; }
+.timeline-labels span { font-size: 10px; font-weight: 600; color: var(--text-quaternary); }
+
+/* ── Export Range Panel ── */
+.export-range {
+  display: none; align-items: center; gap: 12px; padding: 10px 16px; margin-top: 6px;
+  background: var(--bg-tertiary); border-radius: var(--radius-md); border: 1px solid var(--border-active);
+}
+.export-range.visible { display: flex; }
+.export-range label { font-size: 11px; font-weight: 700; color: var(--text-tertiary); }
+.export-range input[type="datetime-local"] {
+  height: 30px; padding: 0 8px; background: var(--bg-primary); border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm); color: var(--text-primary); font-size: 12px; font-weight: 600; outline: none;
+  color-scheme: dark;
+}
+.export-confirm-btn {
+  height: 32px; padding: 0 18px; border-radius: var(--radius-pill); background: var(--accent-blue);
+  color: white; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px;
+}
+
+/* ── Clip Dock ── */
+.clip-dock {
+  background: var(--bg-secondary); border-top: 1px solid var(--border-primary);
+  display: flex; flex-direction: column; min-height: 0; height: 210px;
+}
+.dock-header {
+  display: flex; align-items: center; justify-content: space-between; padding: 10px 24px 6px; flex-shrink: 0;
+}
+.dock-header h3 { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.dock-header p { font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
+
+.dock-grid {
+  flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px; padding: 4px 24px 12px; overflow-y: auto; align-content: start;
+}
+
+.clip-card {
+  border-radius: var(--radius-md); background: var(--bg-tertiary); border: 1px solid var(--border-primary);
+  overflow: hidden; cursor: pointer; transition: all 0.25s var(--ease);
+}
+.clip-card:hover { border-color: var(--border-secondary); transform: translateY(-2px); }
+.clip-card.selected { border-color: var(--accent-blue); box-shadow: 0 0 0 1px var(--accent-blue), var(--shadow-glow); }
+.clip-poster { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+.clip-poster img { width: 100%; height: 100%; object-fit: cover; }
+.clip-time-badge { position: absolute; left: 6px; top: 6px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.65); color: white; font-size: 10px; font-weight: 700; }
+.clip-duration-badge { position: absolute; right: 6px; bottom: 6px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.65); color: rgba(255,255,255,0.8); font-size: 10px; font-weight: 700; }
+.clip-info { padding: 6px 8px; }
+.clip-info-time { font-size: 11px; font-weight: 700; color: var(--text-primary); }
+
+/* ============================================
+   RIGHT PANEL — Transcription Subtitles (代码同款)
+   ============================================ */
+.transcript-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+}
+.panel-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.panel-header-title svg { width: 16px; height: 16px; stroke: var(--accent-teal); fill: none; stroke-width: 2; }
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.export-sub-btn {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+.export-sub-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+.transcript-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transcript-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+.transcript-item:hover {
+  border-color: var(--border-secondary);
+  background: var(--bg-elevated);
+}
+.transcript-item.active {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+  box-shadow: var(--shadow-glow);
+}
+.transcript-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.transcript-time {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-teal);
+  font-variant-numeric: tabular-nums;
+}
+.transcript-speaker {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.transcript-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.transcript-item.active .transcript-text {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 100; padding: 12px 20px;
+  border-radius: var(--radius-md); background: var(--bg-elevated); border: 1px solid var(--border-secondary);
+  box-shadow: var(--shadow-lg); color: var(--text-primary); font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 10px; opacity: 0; transform: translateY(16px);
+  transition: all 0.35s var(--spring); pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ═══ Left Rail ═══ -->
+  <nav class="rail">
+    <a href="playback.html" class="rail-logo" title="Clipline">
+      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <span class="rail-logo-status"></span>
+    </a>
+    <div class="rail-nav">
+      <a href="playback.html" class="rail-btn active">
+        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>回放</span>
+      </a>
+      <a href="clips.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>片段</span>
+      </a>
+      <a href="tasks.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>任务</span>
+      </a>
+      <a href="sources.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span>录像源</span>
+      </a>
+    </div>
+    <div class="rail-spacer"></div>
+    <div class="rail-nav">
+      <a href="settings.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>设置</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ═══ Top Bar ═══ -->
+  <header class="topbar">
+    <div class="topbar-title">
+      <h1>门口摄像头</h1>
+      <p>近 7 天 · 142 个片段 · 语音识别已准备</p>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="搜索对话内容 (⌘K)..." id="searchInput" onkeydown="if(event.key==='Enter')location.href='search.html?q='+encodeURIComponent(this.value)">
+      <kbd>⌘K</kbd>
+    </div>
+    <div class="topbar-divider"></div>
+    <select class="topbar-select"><option>门口摄像头</option><option>客厅摄像头</option><option>行车记录仪</option></select>
+    <input type="date" class="topbar-date" value="2026-07-29">
+    <div class="topbar-divider"></div>
+    <button class="topbar-icon-btn" title="刷新" onclick="showToast('数据已刷新')">
+      <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+  </header>
+
+  <!-- ═══ Main Content (Split Stage) ═══ -->
+  <main class="main" id="mainWorkspace">
+    <!-- Left Stage: Video + Timeline + Clip Dock -->
+    <div class="left-stage">
+      <div class="player-area">
+        <div class="player-badge">
+          <span class="dot"></span>
+          <span id="badgeTime">14:23:07</span>
+          <span style="opacity:0.5">|</span>
+          <span>门口摄像头</span>
+        </div>
+
+        <div class="player-floating">
+          <button id="toggleOverlayBtn" class="active" onclick="toggleOverlay()" title="开关视频浮层字幕">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            字幕
+          </button>
+          <button id="togglePanelBtn" class="active" onclick="togglePanel()" title="展开/收起语音对话面板">
+            <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            面板
+          </button>
+          <button onclick="triggerASR()" title="触发语音识别">
+            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+        </div>
+
+        <!-- Video Frame Simulation -->
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0d1117 0%,#161b22 40%,#1a1e2a 60%,#0d1117 100%);display:flex;align-items:center;justify-content:center;">
+          <div style="width:120px;height:120px;border-radius:50%;background:rgba(10,132,255,0.08);display:grid;place-items:center;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </div>
+        </div>
+
+        <!-- Subtitle Overlay (代码对应实现) -->
+        <div class="subtitle-overlay" id="subtitleOverlay">
+          <span class="time-tag">00:07</span>
+          <span id="overlayText">你好，快递帮你放在门口了</span>
+        </div>
+      </div>
+
+      <!-- Timeline Bar -->
+      <div class="timeline-bar">
+        <div class="timeline-controls">
+          <button class="play-btn" id="playBtn" title="播放/暂停"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+          <div class="nav-btn-group">
+            <button onclick="prevSegment()"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <button onclick="nextSegment()"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+          <button class="speed-btn" id="speedBtn" onclick="cycleSpeed()">1.0x</button>
+          <span class="timeline-clock" id="clock">14:23:07</span>
+          <div class="timeline-controls-spacer"></div>
+          <button class="export-btn" onclick="toggleExport()"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出</button>
+        </div>
+
+        <div class="timeline-track" id="timelineTrack">
+          <div class="timeline-segments" id="timelineSegments"></div>
+          <div class="timeline-playhead" id="playhead"></div>
+        </div>
+        <div class="timeline-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+
+        <div class="export-range" id="exportRange">
+          <label>开始</label><input type="datetime-local" value="2026-07-29T14:23:07">
+          <span>→</span>
+          <label>结束</label><input type="datetime-local" value="2026-07-29T14:24:07">
+          <button class="export-confirm-btn" onclick="showToast('导出任务已创建');toggleExport()">确认导出</button>
+        </div>
+      </div>
+
+      <!-- Clip Dock -->
+      <section class="clip-dock">
+        <div class="dock-header">
+          <div><h3>录像片段列表</h3><p>点击选择片段，自动定位时间轴</p></div>
+        </div>
+        <div class="dock-grid" id="clipGrid"></div>
+      </section>
+    </div>
+
+    <!-- Right Panel: Transcription Dialogue Panel (代码 TranscriptionPanel.tsx 对应) -->
+    <aside class="transcript-panel" id="transcriptPanel">
+      <div class="panel-header">
+        <div class="panel-header-title">
+          <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+          语音识别对话 (ASR)
+        </div>
+        <div class="panel-header-actions">
+          <button class="export-sub-btn" onclick="exportSub('srt')">导出 SRT</button>
+          <button class="export-sub-btn" onclick="exportSub('txt')">导出 TXT</button>
+        </div>
+      </div>
+
+      <div class="transcript-list" id="transcriptList"></div>
+    </aside>
+  </main>
+</div>
+
+<div class="toast" id="toast"><span id="toastMsg">操作成功</span></div>
+
+<script>
+const dialogues = [
+  { id:1, time:'00:07', sec:7, text:'你好，快递帮你放在门口了。', speaker:'说话人 1' },
+  { id:2, time:'00:15', sec:15, text:'好的，非常感谢！顺便帮我关下门。', speaker:'说话人 2' },
+  { id:3, time:'00:28', sec:28, text:'没问题，我已经顺手带上了。', speaker:'说话人 1' },
+  { id:4, time:'00:42', sec:42, text:'这箱东西挺沉的，放在鞋柜旁边了。', speaker:'说话人 1' },
+  { id:5, time:'01:05', sec:65, text:'好的，辛苦了，祝您生活愉快！', speaker:'说话人 2' }
+];
+
+const segments = [
+  { id:1, start:'14:22:30', end:'14:24:00', dur:'1:30' },
+  { id:2, start:'14:24:00', end:'14:25:15', dur:'1:15' },
+  { id:3, start:'14:26:00', end:'14:27:30', dur:'1:30' }
+];
+
+let currentDialogueId = 1;
+let selectedSegId = 1;
+
+function renderTranscripts() {
+  const container = document.getElementById('transcriptList');
+  container.innerHTML = dialogues.map(d => `
+    <div class="transcript-item${d.id === currentDialogueId ? ' active' : ''}" onclick="jumpDialogue(${d.id})">
+      <div class="transcript-item-meta">
+        <span class="transcript-time">⏱ ${d.time}</span>
+        <span class="transcript-speaker">${d.speaker}</span>
+      </div>
+      <div class="transcript-text">${d.text}</div>
+    </div>
+  `).join('');
+}
+
+function jumpDialogue(id) {
+  currentDialogueId = id;
+  const d = dialogues.find(x => x.id === id);
+  if(d) {
+    document.getElementById('overlayText').textContent = d.text;
+    document.querySelector('#subtitleOverlay .time-tag').textContent = d.time;
+    showToast(`跳转到时间点 ${d.time}`);
+  }
+  renderTranscripts();
+}
+
+function renderClips() {
+  const grid = document.getElementById('clipGrid');
+  grid.innerHTML = segments.map((seg, i) => `
+    <div class="clip-card${seg.id === selectedSegId ? ' selected' : ''}" onclick="selectedSegId=${seg.id};renderClips()">
+      <div class="clip-poster">
+        <img src="https://picsum.photos/seed/clip${seg.id}/300/170" alt="">
+        <span class="clip-time-badge">${seg.start}</span>
+        <span class="clip-duration-badge">${seg.dur}</span>
+      </div>
+      <div class="clip-info">
+        <div class="clip-info-time">7/29 ${seg.start}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleOverlay() {
+  const el = document.getElementById('subtitleOverlay');
+  const btn = document.getElementById('toggleOverlayBtn');
+  const visible = el.style.display !== 'none';
+  el.style.display = visible ? 'none' : 'block';
+  btn.classList.toggle('active', !visible);
+}
+
+function togglePanel() {
+  const ws = document.getElementById('mainWorkspace');
+  const btn = document.getElementById('togglePanelBtn');
+  const closed = ws.classList.toggle('panel-closed');
+  btn.classList.toggle('active', !closed);
+}
+
+function triggerASR() {
+  showToast('已提交语音识别任务');
+}
+
+function exportSub(type) {
+  showToast(`已导出字幕文件 (.${type.toUpperCase()})`);
+}
+
+function toggleExport() {
+  const el = document.getElementById('exportRange');
+  el.classList.toggle('visible');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+renderTranscripts();
+renderClips();
+</script>
+</body>
+</html>

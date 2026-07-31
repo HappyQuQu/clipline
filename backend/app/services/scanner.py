@@ -15,10 +15,14 @@ from app.models import ScanJob, Source, Thumbnail, VideoSegment
 from app.services.common import make_id, now_iso
 from app.services.probe import ffprobe
 from app.services.time_parser import infer_start_time
+from app.services.playback_proxy import remove_playback_proxies
+from app.services.transcription import create_transcription_job, enqueue_transcription_job
+from app.services.vision import create_vision_job, enqueue_vision_job
 
 SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".ts", ".m4v"}
 BATCH_SIZE = 50
 logger = get_logger(__name__)
+MAX_AUTO_TRANSCRIPTION_JOBS_PER_SCAN = 20
 
 
 def _is_idle_time() -> bool:
@@ -123,6 +127,8 @@ def run_scan_job(job_id: str) -> None:
             existing_map[seg.path] = seg
 
         discovered_paths: set[str] = set()
+        auto_transcription_segment_ids: list[str] = []
+        auto_vision_segment_ids: list[str] = []
         pending_probe: list[tuple[Path, str, datetime, str, str]] = []
         batch_count = 0
 
@@ -205,6 +211,7 @@ def run_scan_job(job_id: str) -> None:
                     segment.updated_at = timestamp
 
                     if metadata:
+                        was_indexed = existing.scan_status == "indexed" if existing else False
                         duration = metadata["duration_seconds"]
                         start, source_name, confidence = infer_start_time(path, mtime_dt, duration)
                         end = start + timedelta(seconds=duration or 0)
@@ -224,6 +231,18 @@ def run_scan_job(job_id: str) -> None:
                         segment.scan_status = "indexed"
                         segment.error_message = None
                         job.indexed_files += 1
+                        if (
+                            source.auto_transcribe
+                            and source.recognition_trigger == "new_segments"
+                            and not was_indexed
+                        ):
+                            auto_transcription_segment_ids.append(segment.id)
+                        if (
+                            source.auto_detect
+                            and source.recognition_trigger == "new_segments"
+                            and not was_indexed
+                        ):
+                            auto_vision_segment_ids.append(segment.id)
                     else:
                         segment.scan_status = "failed"
                         segment.error_message = "ffprobe failed"
@@ -241,6 +260,47 @@ def run_scan_job(job_id: str) -> None:
         if batch_count > 0:
             db.commit()
 
+        if auto_transcription_segment_ids:
+            queued = 0
+            for segment_id in auto_transcription_segment_ids[:MAX_AUTO_TRANSCRIPTION_JOBS_PER_SCAN]:
+                try:
+                    transcription_job = create_transcription_job(db, segment_id)
+                except ValueError:
+                    continue
+                enqueue_transcription_job(transcription_job.id)
+                queued += 1
+            logger.info(
+                "auto transcription jobs queued",
+                extra={
+                    "scan_job_id": job.id,
+                    "source_id": source.id,
+                    "queued": queued,
+                    "matched": len(auto_transcription_segment_ids),
+                    "limit": MAX_AUTO_TRANSCRIPTION_JOBS_PER_SCAN,
+                },
+            )
+
+        if auto_vision_segment_ids:
+            limit = int(get_effective("vision_max_auto_jobs_per_scan", 10))
+            queued = 0
+            for segment_id in auto_vision_segment_ids[:limit]:
+                try:
+                    vision_job = create_vision_job(db, segment_id)
+                except ValueError:
+                    continue
+                enqueue_vision_job(vision_job.id)
+                queued += 1
+            logger.info(
+                "auto vision jobs queued",
+                extra={
+                    "scan_job_id": job.id,
+                    "source_id": source.id,
+                    "queued": queued,
+                    "matched": len(auto_vision_segment_ids),
+                    "limit": limit,
+                },
+            )
+
         # 清理已删除的文件（用 set 操作代替 NOT IN）
         stale_ids = [
             seg.id for seg in existing_map.values()
@@ -250,6 +310,7 @@ def run_scan_job(job_id: str) -> None:
             db.execute(delete(Thumbnail).where(Thumbnail.segment_id.in_(stale_ids)))
             db.execute(delete(VideoSegment).where(VideoSegment.id.in_(stale_ids)))
             db.commit()
+            remove_playback_proxies(stale_ids)
             logger.info(
                 "scan stale segments removed",
                 extra={"scan_job_id": job.id, "source_id": source.id, "removed": len(stale_ids)},
@@ -272,6 +333,7 @@ def run_scan_job(job_id: str) -> None:
                 db.execute(delete(Thumbnail).where(Thumbnail.segment_id.in_(old_ids)))
                 db.execute(delete(VideoSegment).where(VideoSegment.id.in_(old_ids)))
                 db.commit()
+                remove_playback_proxies(old_ids)
                 logger.info(
                     "auto cleanup removed old segments",
                     extra={"scan_job_id": job.id, "source_id": source.id, "removed": len(old_ids), "cutoff_days": cleanup_days},

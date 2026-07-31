@@ -49,7 +49,10 @@ pip install funasr torch torchaudio
 CLIPLINE_ASR_MODEL=funasr  # funasr/sensevoice/whisper
 
 # 模型大小
-CLIPLINE_ASR_MODEL_SIZE=medium  # tiny/base/medium/large
+CLIPLINE_ASR_MODEL_SIZE=base  # tiny/base/medium/large
+
+# 模型缓存目录，默认在 CLIPLINE_DATA/models 下
+CLIPLINE_MODEL_CACHE_DIR=/app/data/models
 
 # 运行设备
 CLIPLINE_ASR_DEVICE=auto  # auto/cpu/cuda/mps
@@ -63,6 +66,11 @@ CLIPLINE_ASR_AUTO_TRANSCRIBE=false
 # 热词（逗号分隔）
 CLIPLINE_ASR_HOTWORDS=张三,李四,公司名
 ```
+
+模型目录统一放在 `CLIPLINE_MODEL_CACHE_DIR`，NAS/Docker 部署时建议直接映射 `/app/data`。下载困难时可以提前放入：
+
+- FunASR / SenseVoice: `/app/data/models/modelscope/hub/models/...`
+- Whisper: `/app/data/models/whisper/*.pt`
 
 ### 使用步骤
 

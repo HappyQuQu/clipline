@@ -1,24 +1,14 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
-import {
-  Check,
-  CircleAlert,
-  Clock3,
-  ExternalLink,
-  LoaderCircle,
-  Mic,
-  Play,
-  RotateCw,
-  X,
-} from 'lucide-react'
+import { ArrowClockwise as RotateCw, Check, Hourglass, Microphone, Play, VideoCamera, X } from '@phosphor-icons/react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api'
 import type { DisplaySegment } from '../../utils'
 import { formatClipDateTime } from '../../utils'
 
-const CARD_TARGET_WIDTH = 210
-const CARD_MIN_HEIGHT = 116
-const CARD_MAX_HEIGHT = 148
-const GRID_GAP = 8
+const CARD_TARGET_WIDTH = 260
+const CARD_MIN_HEIGHT = 128
+const CARD_MAX_HEIGHT = 168
+const GRID_GAP = 6
 
 function ClipContextMenu({
   x, y, segment, transcriptionStatus, onTranscribe, onClose,
@@ -40,23 +30,19 @@ function ClipContextMenu({
   const isFailed = transcriptionStatus === 'failed'
 
   return (
-    <div
-      ref={menuRef}
-      className="clipContextMenu"
-      style={{ left: Math.min(x, window.innerWidth - 220), top: Math.min(y, window.innerHeight - 132) }}
-    >
+    <div ref={menuRef} className="clipContextMenu" style={{ left: x, top: y }}>
       {!isCompleted && !isProcessing && (
-        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><Mic size={16} />开始识别</button>
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><Microphone size={15} />开始识别</button>
       )}
-      {isProcessing && <button disabled><LoaderCircle size={16} className="spin" />识别中...</button>}
+      {isProcessing && <button disabled><Hourglass size={15} />识别中...</button>}
       {isCompleted && (
-        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><RotateCw size={16} />重新识别</button>
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><RotateCw size={15} />重新识别</button>
       )}
       {isFailed && (
-        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><CircleAlert size={16} />重新识别</button>
+        <button onClick={() => { onTranscribe?.(segment.id); onClose() }}><X size={15} />重新识别</button>
       )}
       <button onClick={() => { window.open(`/api/segments/${segment.id}/stream`, '_blank'); onClose() }}>
-        <ExternalLink size={16} />在新窗口播放
+        <VideoCamera size={15} />在新窗口播放
       </button>
     </div>
   )
@@ -200,14 +186,7 @@ export function ClipGrid({
                         onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, segment }) }}
                       >
                         <div className="clipPoster">
-                          {segment.thumbnailUrl && (
-                            <img
-                              src={segment.thumbnailUrl}
-                              loading="lazy"
-                              decoding="async"
-                              alt={`${sourceNames?.get(segment.sourceId) ?? sourceName} ${formatClipDateTime(segment.startTime)}`}
-                            />
-                          )}
+                          {segment.thumbnailUrl && <img src={segment.thumbnailUrl} loading="lazy" decoding="async" alt="" />}
                           <Play size={22} />
                         </div>
                         <span className="clipLabel">
@@ -216,12 +195,13 @@ export function ClipGrid({
                           {formatClipDateTime(segment.startTime)}
                         </span>
                         <span className="confidence">{segment.playable ? '可播放' : '转码'}</span>
-                        {tStatus && tStatus !== 'none' && <div className={`clipSubtitleBar ${tStatus}`}>
+                        <div className={`clipSubtitleBar ${tStatus || 'none'}`}>
                           {tStatus === 'completed' && <><Check size={12} /> 已识别</>}
                           {tStatus === 'processing' && <><RotateCw size={12} className="spin" /> 识别中</>}
-                          {tStatus === 'pending' && <><Clock3 size={12} /> 等待中</>}
+                          {tStatus === 'pending' && <><Hourglass size={12} /> 等待中</>}
                           {tStatus === 'failed' && <><X size={12} /> 失败</>}
-                        </div>}
+                          {(!tStatus || tStatus === 'none') && <>未识别</>}
+                        </div>
                       </button>
                     )
                   })}

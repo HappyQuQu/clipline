@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clipline — 录像源管理 (包含 ASR 与 YOLO AI 高级配置)</title>
+<meta name="description" content="Clipline 录像源管理，支持 ASR 语音识别与 YOLO 视觉检测配置">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #141419;
+  --bg-tertiary: #1c1c24;
+  --bg-elevated: #232330;
+  --border-primary: rgba(255,255,255,0.06);
+  --border-secondary: rgba(255,255,255,0.1);
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #6e6e73;
+  --accent-blue: #0a84ff;
+  --accent-blue-dim: rgba(10,132,255,0.15);
+  --accent-green: #30d158;
+  --accent-teal: #64d2ff;
+  --accent-purple: #bf5af2;
+  --font: 'Inter', -apple-system, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 100px;
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --rail-width: 72px;
+  --topbar-height: 56px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; font-family: var(--font); background: var(--bg-primary); color: var(--text-primary); }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, select { font-family: inherit; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 3px; }
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  grid-template-rows: var(--topbar-height) 1fr;
+  height: 100vh;
+}
+
+/* ── Rail ── */
+.rail {
+  grid-row: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0 20px;
+  background: var(--bg-secondary); border-right: 1px solid var(--border-primary); z-index: 10;
+}
+.rail-logo {
+  width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+  display: grid; place-items: center; margin-bottom: 20px; position: relative;
+}
+.rail-logo svg { width: 22px; height: 22px; fill: white; }
+.rail-logo-status { position: absolute; right: -1px; top: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent-green); border: 2px solid var(--bg-secondary); }
+
+.rail-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 56px; padding: 8px 0 6px;
+  border-radius: var(--radius-md); color: var(--text-tertiary); transition: all 0.2s var(--ease); text-decoration: none;
+}
+.rail-btn:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+.rail-btn.active { background: var(--accent-blue-dim); color: var(--accent-blue); }
+.rail-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.rail-btn span { font-size: 10px; font-weight: 600; }
+.rail-spacer { flex: 1; }
+
+/* ── Topbar ── */
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 0 24px;
+  background: rgba(20,20,25,0.72); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.08); z-index: 5;
+}
+.topbar-title h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.topbar-title p { font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
+.topbar-spacer { flex: 1; }
+
+.add-btn {
+  height: 34px; padding: 0 16px; border-radius: var(--radius-pill); background: var(--accent-blue);
+  color: white; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px;
+}
+
+.main-content {
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.source-card {
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: all 0.25s var(--ease);
+}
+.source-card:hover { border-color: var(--border-secondary); box-shadow: var(--shadow-lg); }
+
+.source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.source-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.source-icon {
+  width: 44px; height: 44px; border-radius: var(--radius-md); background: var(--bg-tertiary);
+  display: grid; place-items: center; color: var(--accent-blue);
+}
+.source-icon svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
+.source-name { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.source-path { font-size: 12px; font-weight: 500; color: var(--text-tertiary); }
+
+.ai-config-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  border: 1px solid var(--border-primary);
+}
+.ai-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ai-section-title svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Apple Switch */
+.switch {
+  position: relative; width: 36px; height: 20px; display: inline-block;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; inset: 0; background: var(--bg-elevated); border-radius: 20px; cursor: pointer; transition: .2s;
+}
+.slider:before {
+  position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background: white; border-radius: 50%; transition: .2s;
+}
+input:checked + .slider { background: var(--accent-blue); }
+input:checked + .slider:before { transform: translateX(16px); }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 100; padding: 12px 20px;
+  border-radius: var(--radius-md); background: var(--bg-elevated); border: 1px solid var(--border-secondary);
+  box-shadow: var(--shadow-lg); color: var(--text-primary); font-size: 13px; font-weight: 600;
+  opacity: 0; transform: translateY(16px); transition: all 0.35s var(--spring); pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ═══ Rail ═══ -->
+  <nav class="rail">
+    <a href="playback.html" class="rail-logo" title="Clipline"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg><span class="rail-logo-status"></span></a>
+    <div class="rail-nav">
+      <a href="playback.html" class="rail-btn"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>回放</span></a>
+      <a href="clips.html" class="rail-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><span>片段</span></a>
+      <a href="tasks.html" class="rail-btn"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>任务</span></a>
+      <a href="sources.html" class="rail-btn active"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>录像源</span></a>
+    </div>
+    <div class="rail-spacer"></div>
+    <div class="rail-nav">
+      <a href="settings.html" class="rail-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>设置</span></a>
+    </div>
+  </nav>
+
+  <!-- ═══ Topbar ═══ -->
+  <header class="topbar">
+    <div class="topbar-title">
+      <h1>录像源管理</h1>
+      <p>管理视频目录、自动扫描策略以及 ASR / YOLO AI 配置</p>
+    </div>
+    <div class="topbar-spacer"></div>
+    <button class="add-btn" onclick="showToast('打开新建录像源弹窗')">+ 添加录像源</button>
+  </header>
+
+  <!-- ═══ Main Content ═══ -->
+  <main class="main-content">
+
+    <!-- Source Card 1 -->
+    <div class="source-card">
+      <div class="source-head">
+        <div class="source-title">
+          <div class="source-icon"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div>
+            <div class="source-name">门口摄像头</div>
+            <div class="source-path">/recordings/front-door</div>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--accent-green)">● 正常 (370 片段)</div>
+      </div>
+
+      <!-- AI High-level Settings Integration (代码 SourceStage.tsx 对应) -->
+      <div class="ai-config-box">
+        <div>
+          <div class="ai-section-title">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            ASR 语音识别配置
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div class="toggle-row">
+              <span>自动识别新视频</span>
+              <label class="switch"><input type="checkbox" checked onchange="showToast('已更新 ASR 自动识别开关')"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row" style="color:var(--text-tertiary);font-size:11px;">
+              <span>识别语言：中文 (zh)</span>
+              <span>触发：新片段入库</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="ai-section-title">
+            <svg viewBox="0 0 24 24" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            YOLO 视觉检测配置
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div class="toggle-row">
+              <span>开启目标标注 (人/车/包裹)</span>
+              <label class="switch"><input type="checkbox" checked onchange="showToast('已更新 YOLO 视觉检测开关')"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row" style="color:var(--text-tertiary);font-size:11px;">
+              <span>最低置信度：70%</span>
+              <span>抽帧策略：1 FPS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Source Card 2 -->
+    <div class="source-card">
+      <div class="source-head">
+        <div class="source-title">
+          <div class="source-icon"><svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 5.5 20 13.5 16 11"/></svg></div>
+          <div>
+            <div class="source-name">行车记录仪</div>
+            <div class="source-path">/recordings/dashcam</div>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--accent-teal)">● 扫描中 65% (128 片段)</div>
+      </div>
+
+      <div class="ai-config-box">
+        <div>
+          <div class="ai-section-title">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            ASR 语音识别配置
+          </div>
+          <div class="toggle-row">
+            <span>自动识别新视频</span>
+            <label class="switch"><input type="checkbox" onchange="showToast('已更新 ASR 自动识别开关')"><span class="slider"></span></label>
+          </div>
+        </div>
+        <div>
+          <div class="ai-section-title">
+            <svg viewBox="0 0 24 24" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            YOLO 视觉检测配置
+          </div>
+          <div class="toggle-row">
+            <span>开启目标标注</span>
+            <label class="switch"><input type="checkbox" checked onchange="showToast('已更新 YOLO 视觉检测开关')"><span class="slider"></span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"><span id="toastMsg">提示</span></div>
+
+<script>
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>

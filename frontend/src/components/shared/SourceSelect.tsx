@@ -1,5 +1,5 @@
 import * as Select from '@radix-ui/react-select'
-import { Camera, ChevronDown } from 'lucide-react'
+import { Camera, CaretDown as ChevronDown } from '@phosphor-icons/react'
 import type { Source } from '../../types'
 
 export function SourceSelect({

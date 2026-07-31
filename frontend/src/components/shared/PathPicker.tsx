@@ -1,9 +1,9 @@
-import * as Select from '@radix-ui/react-select'
+import { FolderOpen, X } from '@phosphor-icons/react'
 import { useQuery } from '@tanstack/react-query'
-import { FolderOpen, X } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '../../api'
 import type { DirectoryNode } from '../../types'
+import { useDialogFocus } from './useDialogFocus'
 
 function DirectoryPickerModal({
   currentValue,
@@ -20,6 +20,8 @@ function DirectoryPickerModal({
   onClose: () => void
   onPick: (path: string) => void
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialogRef, true, onClose)
   const [currentPath, setCurrentPath] = useState(initialPath || root)
   const directoryQuery = useQuery({
     queryKey: ['directories', currentPath],
@@ -31,14 +33,14 @@ function DirectoryPickerModal({
   const parentPath = canGoUp ? currentPath.slice(0, currentPath.lastIndexOf('/')) || '/' : '/'
 
   return (
-    <div className="modalBackdrop" role="dialog" aria-modal="true">
-      <div className="directoryModal">
+    <div className="modalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <div className="directoryModal" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="directory-dialog-title" tabIndex={-1}>
         <div className="directoryModalHead">
           <div>
-            <strong>选择视频目录</strong>
+            <strong id="directory-dialog-title">选择视频目录</strong>
             <span>容器路径：{currentPath}</span>
           </div>
-          <button className="iconAction" onClick={onClose}>
+          <button className="iconAction" aria-label="关闭目录选择" onClick={onClose}>
             <X size={16} />
           </button>
         </div>

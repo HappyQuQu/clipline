@@ -33,22 +33,38 @@ from app.schemas import (
     TranscriptionJobListResponse,
     TranscriptionJobOut,
     TranscriptionListResponse,
+    VisionDetectionListResponse,
+    VisionJobListResponse,
+    VisionJobOut,
 )
 from app.services.paths import directory_tree
 from app.services.exports import create_export_job, get_export_job, list_export_jobs
 from app.services.sources import create_source, list_sources, queue_scan, source_to_out, update_source
 from app.services.streaming import stream_file
+from app.services.playback_proxy import ensure_playback_proxy
 from app.services.timeline import build_timeline, resolve_segment_at
 from app.services.thumbnails import ensure_thumbnail, thumbnail_url
 from app.services.transcription import (
     create_transcription_job,
-    run_transcription_job,
+    enqueue_transcription_job,
     list_transcription_jobs,
     get_transcription_job,
     list_transcriptions,
     get_transcription_status,
     delete_transcription,
 )
+from app.services.vision import (
+    create_vision_job,
+    delete_segment_detections,
+    enqueue_vision_job,
+    get_vision_job,
+    get_vision_status,
+    list_detection_labels,
+    list_detections,
+    list_segment_detections,
+    list_vision_jobs,
+)
+from app.services.vision_detector import get_vision_detector
 from app.services.search import search_transcriptions, get_search_suggestions, get_popular_searches
 
 router = APIRouter(prefix="/api")
@@ -247,7 +263,10 @@ def get_segment_stream(segment_id: str, request: Request, db: Session = Depends(
     segment = db.get(VideoSegment, segment_id)
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
-    return stream_file(Path(segment.path), request)
+    path = Path(segment.path)
+    if segment.needs_transcode:
+        path = ensure_playback_proxy(segment.id, path)
+    return stream_file(path, request)
 
 
 @router.get("/segments/{segment_id}/thumbnail")
@@ -319,6 +338,15 @@ def system_status(db: Session = Depends(get_db)) -> dict:
             "path": str(settings.recordings_root_path),
             "readable": settings.recordings_root_path.exists(),
         },
+        "paths": {
+            "data": str(settings.data_path),
+            "models": str(settings.models_path),
+            "vision": str(settings.vision_models_path),
+            "modelscope": str(settings.modelscope_cache_path),
+            "whisper": str(settings.whisper_cache_path),
+            "huggingface": str(settings.huggingface_cache_path),
+            "torch": str(settings.torch_cache_path),
+        },
         "cache": {
             "thumbnailBytes": 0,
             "exportBytes": sum(
@@ -358,6 +386,7 @@ def get_all_settings() -> dict:
             "scan_interval_seconds": int(get_effective("scan_interval_seconds", 300)),
             "skip_recent_seconds": int(get_effective("skip_recent_seconds", 30)),
             "timezone": get_effective("timezone", "Asia/Shanghai"),
+            "scan_workers_per_source": int(get_effective("scan_workers_per_source", 1)),
             "global_ffprobe_concurrency": int(get_effective("global_ffprobe_concurrency", 4)),
             "auto_cleanup_days": int(get_effective("auto_cleanup_days", 0)),
             "idle_scan_enabled": bool(get_effective("idle_scan_enabled", False)),
@@ -371,10 +400,29 @@ def get_all_settings() -> dict:
             "thumbnail_mode": get_effective("thumbnail_mode", "middle"),
         },
         "asr": get_asr_config(),
+        "vision": {
+            "model": get_effective("vision_model", "yolov8n"),
+            "device": get_effective("vision_device", "cpu"),
+            "maxConcurrent": int(get_effective("vision_max_concurrent", 1)),
+            "sampleIntervalSeconds": int(get_effective("vision_sample_interval_seconds", 5)),
+            "imageSize": int(get_effective("vision_image_size", 416)),
+            "confidence": int(get_effective("vision_confidence", 45)),
+            "maxAutoJobsPerScan": int(get_effective("vision_max_auto_jobs_per_scan", 10)),
+            "modelStatus": get_vision_detector().model_status(),
+        },
         "logs": {
             "log_level": get_effective("log_level", "INFO"),
             "log_format": get_effective("log_format", "text"),
             "log_file": str(settings.resolved_log_file),
+        },
+        "paths": {
+            "data": str(settings.data_path),
+            "models": str(settings.models_path),
+            "vision": str(settings.vision_models_path),
+            "modelscope": str(settings.modelscope_cache_path),
+            "whisper": str(settings.whisper_cache_path),
+            "huggingface": str(settings.huggingface_cache_path),
+            "torch": str(settings.torch_cache_path),
         },
     }
 
@@ -391,6 +439,14 @@ def update_all_settings(payload: dict) -> dict:
     if asr_model_keys & set(payload.keys()):
         from app.services.asr import get_asr_service
         get_asr_service().invalidate_model()
+    if "asr_max_concurrent" in payload:
+        from app.services.transcription import set_max_concurrent_transcriptions
+        set_max_concurrent_transcriptions(int(payload["asr_max_concurrent"]))
+    if "vision_max_concurrent" in payload:
+        from app.services.vision import set_max_concurrent_vision_jobs
+        set_max_concurrent_vision_jobs(int(payload["vision_max_concurrent"]))
+    if {"vision_model", "vision_device"} & set(payload.keys()):
+        get_vision_detector().invalidate()
     # 如果日志配置变了，立即生效
     log_keys = {"log_level", "log_format"}
     if log_keys & set(payload.keys()):
@@ -439,12 +495,32 @@ def get_asr_model_status(model_id: str) -> dict:
 @router.delete("/settings/asr/models/{model_id}")
 def delete_asr_model(model_id: str) -> dict:
     """删除模型缓存"""
-    from app.services.model_manager import delete_model
+    from app.services.model_manager import delete_model, is_active_model
     try:
+        current_engine = str(get_effective("asr_model", "funasr"))
+        current_size = str(get_effective("asr_model_size", "base"))
+        if is_active_model(model_id, current_engine, current_size):
+            raise HTTPException(status_code=409, detail="当前使用中的模型不可删除")
         deleted = delete_model(model_id)
         return {"deleted": deleted}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/settings/models/reload")
+def reload_runtime_models() -> dict:
+    """Release loaded model sessions so the next recognition task reloads current files."""
+    from app.services.asr import get_asr_config, get_asr_service
+
+    asr_service = get_asr_service()
+    asr_service.invalidate_model()
+    detector = get_vision_detector()
+    detector.invalidate()
+    return {
+        "reloaded": True,
+        "asr": {**get_asr_config(), "loaded": asr_service.model_loaded},
+        "vision": detector.model_status(),
+    }
 
 
 # 语音识别相关端点
@@ -452,7 +528,6 @@ def delete_asr_model(model_id: str) -> dict:
 @router.post("/segments/{segment_id}/transcribe", response_model=TranscriptionJobOut)
 def trigger_transcription(
     segment_id: str,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> TranscriptionJobOut:
     """手动触发语音识别"""
@@ -461,8 +536,7 @@ def trigger_transcription(
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    # 后台执行识别任务
-    background_tasks.add_task(run_transcription_job, job.id)
+    enqueue_transcription_job(job.id)
 
     return TranscriptionJobOut(
         id=job.id,
@@ -526,6 +600,101 @@ def delete_segment_transcription(
     """删除某个视频的所有识别结果"""
     count = delete_transcription(db, segment_id)
     return {"deleted": count}
+
+
+# 视频视觉识别相关端点
+
+@router.post("/segments/{segment_id}/vision", response_model=VisionJobOut)
+def trigger_vision_detection(
+    segment_id: str,
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> VisionJobOut:
+    try:
+        job = create_vision_job(db, segment_id, force=force)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    enqueue_vision_job(job.id)
+    return VisionJobOut(
+        id=job.id,
+        segmentId=job.segment_id,
+        status=job.status,
+        stage=job.stage,
+        progress=job.progress,
+        model=job.model,
+        labels=[],
+        confidenceThreshold=job.confidence_threshold,
+        sampleIntervalSeconds=job.sample_interval_seconds,
+        imageSize=job.image_size,
+        detectionsCount=job.detections_count,
+        errorMessage=job.error_message,
+        createdAt=job.created_at,
+        updatedAt=job.updated_at,
+    )
+
+
+@router.get("/vision-jobs", response_model=VisionJobListResponse)
+def get_vision_jobs(
+    segmentId: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> VisionJobListResponse:
+    result = list_vision_jobs(db, segmentId, status, limit, offset)
+    return VisionJobListResponse(**result)
+
+
+@router.get("/vision-jobs/{job_id}", response_model=VisionJobOut)
+def get_vision_job_by_id(job_id: str, db: Session = Depends(get_db)) -> VisionJobOut:
+    job = get_vision_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Vision job not found")
+    return VisionJobOut(**job)
+
+
+@router.get("/segments/{segment_id}/vision", response_model=VisionDetectionListResponse)
+def get_segment_vision_detections(
+    segment_id: str,
+    db: Session = Depends(get_db),
+) -> VisionDetectionListResponse:
+    result = list_segment_detections(db, segment_id)
+    return VisionDetectionListResponse(**result)
+
+
+@router.get("/segments/{segment_id}/vision/status")
+def get_segment_vision_status(
+    segment_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    return get_vision_status(db, segment_id)
+
+
+@router.delete("/segments/{segment_id}/vision")
+def delete_segment_vision_detections(
+    segment_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    return {"deleted": delete_segment_detections(db, segment_id)}
+
+
+@router.get("/vision/detections", response_model=VisionDetectionListResponse)
+def get_vision_detections(
+    sourceId: str | None = None,
+    labels: str | None = None,
+    startDate: str | None = None,
+    endDate: str | None = None,
+    limit: int = Query(default=2000, ge=1, le=10000),
+    db: Session = Depends(get_db),
+) -> VisionDetectionListResponse:
+    parsed_labels = [label for label in (labels or "").split(",") if label]
+    result = list_detections(db, sourceId, parsed_labels, startDate, endDate, limit)
+    return VisionDetectionListResponse(**result)
+
+
+@router.get("/vision/labels")
+def get_vision_labels(sourceId: str | None = None, db: Session = Depends(get_db)) -> dict:
+    return {"items": list_detection_labels(db, sourceId)}
 
 
 @router.get("/segments/{segment_id}/transcription/export")

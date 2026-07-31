@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import threading
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
 from app.core.logging import get_logger
+from app.services.model_cache import (
+    configure_model_cache_env,
+    modelscope_models_path,
+    whisper_cache_root,
+)
 
 logger = get_logger(__name__)
 
@@ -71,11 +80,13 @@ _status_lock = threading.Lock()
 
 
 def _modelscope_cache() -> Path:
-    return Path.home() / ".cache" / "modelscope" / "hub" / "models"
+    configure_model_cache_env()
+    return modelscope_models_path()
 
 
 def _whisper_cache() -> Path:
-    return Path.home() / ".cache" / "whisper"
+    configure_model_cache_env()
+    return whisper_cache_root()
 
 
 def _dir_size(path: Path) -> int:
@@ -179,6 +190,7 @@ def _do_download(model_id: str, engine: str, size: str) -> None:
 def _download_funasr(engine: str, size: str) -> None:
     """通过 FunASR 库触发模型下载。"""
     try:
+        configure_model_cache_env()
         import torch
         from funasr import AutoModel
 
@@ -213,11 +225,67 @@ def _download_funasr(engine: str, size: str) -> None:
 def _download_whisper(size: str) -> None:
     """通过 Whisper 库触发模型下载。"""
     try:
+        configure_model_cache_env()
         import whisper
 
-        whisper.load_model(size, device="cpu")
+        url = whisper._MODELS.get(size)  # type: ignore[attr-defined]
+        if not url:
+            raise RuntimeError(f"Whisper 不支持模型规格: {size}")
+        model_path = _whisper_cache() / MODEL_REGISTRY[("whisper", size)]["whisper_file"]
+        _download_with_resume(url, model_path)
+        whisper.load_model(size, device="cpu", download_root=str(_whisper_cache()))
     except ImportError as exc:
         raise RuntimeError(f"Whisper 未安装: {exc}") from exc
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _download_with_resume(url: str, target: Path, retries: int = 8) -> None:
+    """Download a model with bounded reads and byte-range resume."""
+    expected_sha256 = url.rstrip("/").split("/")[-2]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists() and _file_sha256(target) == expected_sha256:
+        return
+
+    partial = target.with_name(f"{target.name}.part")
+    if target.exists():
+        target.replace(partial)
+
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        offset = partial.stat().st_size if partial.exists() else 0
+        request = urllib.request.Request(url)
+        if offset:
+            request.add_header("Range", f"bytes={offset}-")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                resumed = offset > 0 and response.status == 206
+                mode = "ab" if resumed else "wb"
+                with partial.open(mode) as output:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+            if _file_sha256(partial) == expected_sha256:
+                partial.replace(target)
+                return
+            last_error = RuntimeError("Whisper 模型校验失败或下载不完整")
+        except (OSError, TimeoutError, urllib.error.URLError) as exc:
+            last_error = exc
+        logger.warning(
+            "Whisper model download interrupted; retrying",
+            extra={"target": str(target), "attempt": attempt + 1, "offset": offset},
+        )
+        time.sleep(min(2 ** attempt, 15))
+
+    raise RuntimeError(f"Whisper 模型下载失败（已重试 {retries} 次）: {last_error}")
 
 
 def download_model(model_id: str) -> dict[str, str]:
@@ -248,6 +316,18 @@ def get_download_status(model_id: str) -> dict[str, Any]:
     if not status:
         return {"status": "idle", "error": None}
     return dict(status)
+
+
+def is_active_model(model_id: str, engine: str, size: str) -> bool:
+    parts = model_id.split(":", 1)
+    if len(parts) != 2:
+        return False
+    candidate_engine, candidate_size = parts
+    if candidate_engine != engine:
+        return False
+    if engine == "funasr" and candidate_size in {"tiny", "base", "medium"}:
+        return size in {"tiny", "base", "medium"}
+    return candidate_size == size
 
 
 def delete_model(model_id: str) -> bool:

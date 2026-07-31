@@ -1,9 +1,18 @@
-import { AlertTriangle, CheckCircle, Clock, Download, HardDrive, Loader2, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  CheckCircle,
+  Clock,
+  DownloadSimple,
+  FilmStrip,
+  SpinnerGap,
+  WarningCircle,
+  X,
+} from '@phosphor-icons/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DisplaySegment } from '../../utils'
-import { toIsoWithOffset, toLocalDateTimePrecise } from '../../utils'
+import { formatBytes, formatDuration, formatTime, toIsoWithOffset, toLocalDateTimePrecise } from '../../utils'
+import { useDialogFocus } from './useDialogFocus'
 
-type Operation = 'download' | 'timelapse'
+type ExportMode = 'fast' | 'accurate'
 
 export function ManagePanel({
   segments,
@@ -14,6 +23,7 @@ export function ManagePanel({
   externalRangeEnd,
   onClose,
   onExport,
+  onViewTasks,
 }: {
   segments: DisplaySegment[]
   sources: { id: string; name: string }[]
@@ -22,194 +32,140 @@ export function ManagePanel({
   externalRangeStart?: number | null
   externalRangeEnd?: number | null
   onClose: () => void
-  onExport: (startTime: string, endTime: string, mode: string, speed?: number) => void
+  onExport: (startTime: string, endTime: string, mode: ExportMode) => Promise<void> | void
+  onViewTasks?: () => void
 }) {
-  const [operation, setOperation] = useState<Operation>('download')
+  const dialogRef = useRef<HTMLElement>(null)
+  useDialogFocus(dialogRef, true, onClose)
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
-  const [timelapseSpeed, setTimelapseSpeed] = useState(60)
-  const [status, setStatus] = useState<'idle' | 'executing' | 'completed'>('idle')
-  const [resultMessage, setResultMessage] = useState('')
+  const [mode, setMode] = useState<ExportMode>('fast')
+  const [fileName, setFileName] = useState('')
+  const [status, setStatus] = useState<'idle' | 'executing' | 'completed' | 'failed'>('idle')
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    if (externalRangeStart != null && externalRangeEnd != null) {
-      setStartTime(toLocalDateTimePrecise(new Date(externalRangeStart)))
-      setEndTime(toLocalDateTimePrecise(new Date(externalRangeEnd)))
-    } else {
-      const now = currentTimeMs ?? Date.now()
-      setStartTime(toLocalDateTimePrecise(new Date(now)))
-      setEndTime(toLocalDateTimePrecise(new Date(now + 60_000)))
-    }
-    setOperation('download')
+    const start = externalRangeStart ?? currentTimeMs ?? Date.now()
+    const end = externalRangeEnd ?? start + 60_000
+    setStartTime(toLocalDateTimePrecise(new Date(start)))
+    setEndTime(toLocalDateTimePrecise(new Date(end)))
+    setMode('fast')
     setStatus('idle')
-    setResultMessage('')
-  }, [externalRangeStart, externalRangeEnd])
+    setError('')
+  }, [externalRangeStart, externalRangeEnd, currentTimeMs])
 
   const startMs = startTime ? new Date(startTime).getTime() : null
   const endMs = endTime ? new Date(endTime).getTime() : null
   const rangeValid = startMs !== null && endMs !== null && endMs > startMs
+  const sourceName = sources.find((source) => source.id === selectedSourceId)?.name ?? '录像源'
 
   const affectedSegments = useMemo(() => {
     if (!rangeValid) return []
-    return segments.filter((seg) => {
-      const segStart = new Date(seg.startTime).getTime()
-      const segEnd = new Date(seg.endTime).getTime()
-      return segEnd > startMs! && segStart < endMs!
-    })
+    return segments
+      .filter((segment) => new Date(segment.endTime).getTime() > startMs! && new Date(segment.startTime).getTime() < endMs!)
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
   }, [segments, startMs, endMs, rangeValid])
 
-  const totalDuration = useMemo(
-    () => affectedSegments.reduce((sum, seg) => sum + seg.durationSeconds, 0),
-    [affectedSegments],
-  )
-  const estimatedSize = useMemo(() => {
-    if (!affectedSegments.length) return null
-    return Math.round(totalDuration * 2_000_000 / 8)
-  }, [affectedSegments, totalDuration])
+  const coveredMs = useMemo(() => {
+    if (!rangeValid) return 0
+    return affectedSegments.reduce((sum, segment) => {
+      const start = Math.max(startMs!, new Date(segment.startTime).getTime())
+      const end = Math.min(endMs!, new Date(segment.endTime).getTime())
+      return sum + Math.max(0, end - start)
+    }, 0)
+  }, [affectedSegments, endMs, rangeValid, startMs])
 
-  function fmtDuration(sec: number) {
-    if (sec < 60) return `${Math.round(sec)}秒`
-    const m = Math.floor(sec / 60), s = Math.round(sec % 60)
-    return s > 0 ? `${m}分${s}秒` : `${m}分`
-  }
-  function fmtSize(bytes: number | null) {
-    if (bytes === null) return '未知'
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  }
+  const rangeMs = rangeValid ? endMs! - startMs! : 0
+  const gapMs = Math.max(0, rangeMs - coveredMs)
+  const estimatedSize = coveredMs ? Math.round((coveredMs / 1000) * 2_000_000 / 8) : null
+  const preview = affectedSegments[0]?.thumbnailUrl
 
-  function datePart(value: string) {
-    return value.slice(0, 10)
-  }
-
-  function timePart(value: string) {
-    return value.slice(11, 19) || '00:00:00'
-  }
-
-  function updateDateTime(kind: 'start' | 'end', part: 'date' | 'time', value: string) {
-    const current = kind === 'start' ? startTime : endTime
-    const nextDate = part === 'date' ? value : datePart(current)
-    const nextTime = part === 'time' ? value : timePart(current)
-    const nextValue = `${nextDate}T${nextTime}`
-    if (kind === 'start') setStartTime(nextValue)
-    else setEndTime(nextValue)
-    setStatus('idle')
-  }
-
-  function handleAction() {
+  useEffect(() => {
     if (!rangeValid) return
+    const stamp = (ms: number) => {
+      const date = new Date(ms)
+      return `${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}${String(date.getSeconds()).padStart(2, '0')}`
+    }
+    const day = startTime.slice(0, 10).replaceAll('-', '')
+    setFileName(`${sourceName.replaceAll(/\s+/g, '_')}_${day}_${stamp(startMs!)}-${stamp(endMs!)}.mp4`)
+  }, [endMs, rangeValid, sourceName, startMs, startTime])
+
+  function updateDateTime(kind: 'start' | 'end', value: string) {
+    if (kind === 'start') setStartTime(value)
+    else setEndTime(value)
+    setStatus('idle')
+    setError('')
+  }
+
+  async function handleCreate() {
+    if (!rangeValid || !affectedSegments.length) return
     setStatus('executing')
-    const mode = operation === 'timelapse' ? 'timelapse' : 'fast'
-    onExport(toIsoWithOffset(startTime), toIsoWithOffset(endTime), mode, timelapseSpeed)
-    setStatus('completed')
-    setResultMessage(operation === 'download' ? '导出任务已创建' : `延时视频(${timelapseSpeed}x)导出任务已创建`)
+    setError('')
+    try {
+      await onExport(toIsoWithOffset(startTime), toIsoWithOffset(endTime), mode)
+      setStatus('completed')
+    } catch (reason) {
+      setStatus('failed')
+      setError(reason instanceof Error ? reason.message : '创建导出任务失败')
+    }
+  }
+
+  if (status === 'completed') {
+    return (
+      <section ref={dialogRef} className="exportModal exportSuccessState" role="dialog" aria-modal="true" aria-label="导出任务已创建" tabIndex={-1}>
+        <span><CheckCircle size={58} weight="fill" /></span>
+        <h2>导出任务已创建</h2>
+        <p>可前往“任务”查看处理进度，完成后可直接下载。</p>
+        <button type="button" className="exportPrimaryButton" onClick={onViewTasks}>查看任务</button>
+        <button type="button" className="exportSecondaryButton" onClick={onClose}>继续浏览</button>
+      </section>
+    )
   }
 
   return (
-    <div className="managePanelColumn">
-      <div className="managePanelHeader">
-        <span>管理片段</span>
-        <button className="managePanelClose" onClick={onClose} title="关闭"><X size={18} /></button>
+    <section ref={dialogRef} className="exportModal" role="dialog" aria-modal="true" aria-label="创建导出任务" tabIndex={-1}>
+      <header className="exportModalHeading">
+        <div><small>导出片段</small><h2>创建导出任务</h2></div>
+        <button type="button" aria-label="关闭" title="关闭" onClick={onClose}><X size={20} /></button>
+      </header>
+
+      <div className={`exportPreview${preview ? '' : ' empty'}`} style={preview ? { backgroundImage: `url(${preview})` } : undefined}>
+        {!preview && <FilmStrip size={36} />}
+        <span>{sourceName} · {rangeValid ? `${formatTime(new Date(startMs!).toISOString())} – ${formatTime(new Date(endMs!).toISOString())}` : '选择时间范围'}</span>
       </div>
 
-      <div className="managePanelBody">
-        {/* 时间范围 */}
-        <div className="manageTimeRange">
-          <div className="manageTimeBlock">
-            <label className="manageTimeLabel">开始</label>
-            <div className="manageDateTimeInputs">
-              <input type="date" className="manageDateInput" value={datePart(startTime)}
-                onChange={(e) => updateDateTime('start', 'date', e.target.value)} />
-              <input type="time" step="1" className="manageTimeInput" value={timePart(startTime)}
-                onChange={(e) => updateDateTime('start', 'time', e.target.value)} />
-            </div>
-          </div>
-          <div className="manageTimeArrow">›</div>
-          <div className="manageTimeBlock">
-            <label className="manageTimeLabel">结束</label>
-            <div className="manageDateTimeInputs">
-              <input type="date" className="manageDateInput" value={datePart(endTime)}
-                onChange={(e) => updateDateTime('end', 'date', e.target.value)} />
-              <input type="time" step="1" className="manageTimeInput" value={timePart(endTime)}
-                onChange={(e) => updateDateTime('end', 'time', e.target.value)} />
-            </div>
-          </div>
+      <div className="exportForm">
+        <label>文件名称<input value={fileName} onChange={(event) => setFileName(event.target.value)} /></label>
+        <div className="exportFormGrid">
+          <label>开始时间<input type="datetime-local" step="1" value={startTime} onChange={(event) => updateDateTime('start', event.target.value)} /></label>
+          <label>结束时间<input type="datetime-local" step="1" value={endTime} onChange={(event) => updateDateTime('end', event.target.value)} /></label>
         </div>
+        <fieldset className="exportModeField">
+          <legend>导出模式</legend>
+          <button type="button" className={mode === 'fast' ? 'active' : ''} onClick={() => setMode('fast')}><strong>快速</strong><span>关键帧切割，速度更快</span></button>
+          <button type="button" className={mode === 'accurate' ? 'active' : ''} onClick={() => setMode('accurate')}><strong>精准</strong><span>重新编码，边界更准确</span></button>
+        </fieldset>
 
-        {/* 可用性 */}
-        {affectedSegments.length > 0 ? (
-          <div className="manageAvailOk"><CheckCircle size={15} /><span>该范围内有 {affectedSegments.length} 个片段</span></div>
-        ) : rangeValid ? (
-          <div className="manageAvailEmpty"><AlertTriangle size={15} /><span>所选范围内无可用视频</span></div>
+        {!rangeValid ? (
+          <p className="exportError"><WarningCircle size={17} weight="fill" />结束时间必须晚于开始时间。</p>
+        ) : !affectedSegments.length ? (
+          <p className="exportError"><WarningCircle size={17} weight="fill" />选择范围内没有可导出的录像。</p>
+        ) : gapMs > 1000 ? (
+          <p className="exportNote"><WarningCircle size={17} weight="fill" />选择范围包含 {formatDuration(gapMs / 1000)} 未索引片段，导出结果会保留时间断档。</p>
         ) : (
-          <div className="manageAvailEmpty"><Clock size={15} /><span>请选择时间范围</span></div>
+          <p className="exportReady"><CheckCircle size={17} weight="fill" />范围内包含 {affectedSegments.length} 个可用片段。</p>
         )}
-
-        {/* 下载模式 */}
-        <div className="manageSection">
-          <div className="manageSectionTitle">下载模式</div>
-          <div className="manageOperations">
-            <label className={`manageOpItem ${operation === 'download' ? 'manageOpActive' : ''}`}>
-              <input type="radio" name="manageOp" checked={operation === 'download'} onChange={() => setOperation('download')} />
-              <span className="manageOpRadio" />
-              <Download size={16} /><span>下载</span>
-            </label>
-            <label className={`manageOpItem ${operation === 'timelapse' ? 'manageOpActive' : ''}`}>
-              <input type="radio" name="manageOp" checked={operation === 'timelapse'} onChange={() => setOperation('timelapse')} />
-              <span className="manageOpRadio" />
-              <Download size={16} /><span>延时视频下载</span>
-            </label>
-          </div>
-          {operation === 'timelapse' && (
-            <div className="manageTimelapseSpeed">
-              <span className="manageSpeedLabel">倍速</span>
-              <select className="manageSpeedSelect" value={timelapseSpeed} onChange={(e) => setTimelapseSpeed(Number(e.target.value))}>
-                <option value={10}>10x</option>
-                <option value={30}>30x</option>
-                <option value={60}>60x</option>
-                <option value={120}>120x</option>
-                <option value={300}>300x</option>
-                <option value={600}>600x</option>
-              </select>
-              <span className="manageSpeedHint">
-                {rangeValid ? `→ 约 ${Math.round(totalDuration / timelapseSpeed)}秒` : ''}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* 摄像头 */}
-        <div className="manageSection">
-          <div className="manageSectionTitle">摄像头</div>
-          <div className="manageSourceTags">
-            {selectedSourceId && (
-              <span className="manageSourceTag">{sources.find((s) => s.id === selectedSourceId)?.name ?? '未知'}</span>
-            )}
-          </div>
-        </div>
-
-        {/* 信息 */}
-        <div className="manageInfo">
-          <div className="manageInfoRow"><Clock size={14} /><span>时长：{rangeValid ? fmtDuration(totalDuration) : '--'}</span></div>
-          <div className="manageInfoRow"><HardDrive size={14} /><span>大小：{rangeValid ? fmtSize(estimatedSize) : '--'}</span></div>
-        </div>
+        {status === 'failed' && <p className="exportError"><WarningCircle size={17} weight="fill" />{error}</p>}
       </div>
 
-      <div className="managePanelFooter">
-        {status === 'completed' ? (
-          <div className="manageSuccess"><CheckCircle size={16} /><span>{resultMessage}</span></div>
-        ) : (
-          <>
-            <button className="manageActionButton" onClick={handleAction}
-              disabled={!rangeValid || affectedSegments.length === 0 || status === 'executing'}>
-              {status === 'executing' && <Loader2 size={15} className="spin" />}
-              {operation === 'download' ? '下载' : '延时视频下载'}
-            </button>
-            <button className="manageCancel" onClick={onClose}>取消</button>
-          </>
-        )}
-      </div>
-    </div>
+      <footer className="exportModalFooter">
+        <span><Clock size={15} />{formatDuration(rangeMs / 1000)} · 预计 {formatBytes(estimatedSize)} · 不修改源文件</span>
+        <button type="button" className="exportSecondaryButton" onClick={onClose}>取消</button>
+        <button type="button" className="exportPrimaryButton" disabled={!rangeValid || !affectedSegments.length || status === 'executing'} onClick={() => void handleCreate()}>
+          {status === 'executing' ? <SpinnerGap size={17} className="spinning" /> : <DownloadSimple size={17} />}
+          {status === 'executing' ? '创建中…' : '创建任务'}
+        </button>
+      </footer>
+    </section>
   )
 }

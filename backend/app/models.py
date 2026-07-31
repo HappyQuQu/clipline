@@ -13,6 +13,13 @@ class Source(Base):
     path: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     scan_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    auto_transcribe: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    auto_detect: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recognition_trigger: Mapped[str] = mapped_column(String, nullable=False, default="manual")
+    recognition_priority: Mapped[str] = mapped_column(String, nullable=False, default="normal")
+    transcribe_language: Mapped[str] = mapped_column(String, nullable=False, default="global")
+    detect_labels: Mapped[str] = mapped_column(Text, nullable=False, default='["person","cat","dog","vehicle","phone"]')
+    detect_confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -123,3 +130,38 @@ class TranscriptionJob(Base):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
 
+
+class VisionDetection(Base):
+    __tablename__ = "vision_detections"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    segment_id: Mapped[str] = mapped_column(String, ForeignKey("video_segments.id"), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String, ForeignKey("sources.id"), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    label_name: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    start_time: Mapped[float] = mapped_column(Float, nullable=False)
+    end_time: Mapped[float] = mapped_column(Float, nullable=False)
+    frame_time: Mapped[float] = mapped_column(Float, nullable=False)
+    bbox_json: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class VisionJob(Base):
+    __tablename__ = "vision_jobs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    segment_id: Mapped[str] = mapped_column(String, ForeignKey("video_segments.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    stage: Mapped[str] = mapped_column(String, nullable=False, default="")
+    progress: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    model: Mapped[str] = mapped_column(String, nullable=False, default="yolov8n")
+    labels_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    confidence_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.45)
+    sample_interval_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=5.0)
+    image_size: Mapped[int] = mapped_column(Integer, nullable=False, default=416)
+    detections_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)

@@ -1,5 +1,7 @@
 # Clipline API and Database
 
+> 本文档为 full redesign 正式实现提供数据契约。页面职责与交互基准见 `docs/FULL_REDESIGN_ALIGNMENT.md`；接口不得迫使前端恢复旧信息架构。
+
 ## 1. 文档目的
 
 本文档定义 Clipline MVP 的数据库表结构、API 约定、请求响应格式和状态枚举。
@@ -624,13 +626,15 @@ GET /api/segments?sourceId=src_001&scanStatus=failed&limit=20
 
 #### GET /api/segments/{segmentId}/stream
 
-返回视频文件流。
+返回浏览器可播放的视频文件流。H.264/AAC 片段直接读取源文件；`needsTranscode=true` 的片段首次访问时生成并缓存 H.264/AAC MP4 播放代理，源录像保持只读且不被修改。
 
 要求：
 
 - 支持 Range 请求。
 - 不允许通过任意路径读取。
 - 只能根据 segment id 访问源文件。
+- 代理缓存键包含源路径、文件大小和修改时间；源文件变化后自动生成新代理。
+- 删除录像源、扫描清理缺失片段或自动清理过期片段时同步删除对应代理。
 
 响应：
 
@@ -913,6 +917,58 @@ GET /api/system/logs?lines=200
   ]
 }
 ```
+
+### 5.9 设置
+
+full redesign 的七个设置分类共用系统设置契约；前端按页面分组展示，后端继续使用统一读写接口。
+
+- `GET /api/settings`：读取扫描、索引、导出、识别、任务和日志默认值。
+- `PATCH /api/settings`：按字段更新系统默认值。
+- `GET /api/settings/asr`：读取 ASR 专用设置。
+- `PATCH /api/settings/asr`：更新 ASR 模型、语言、设备和并发设置。
+
+录像源上的扫描和识别策略是单源覆盖项，继续通过 `PATCH /api/sources/{sourceId}` 更新。
+
+### 5.10 语音模型管理
+
+- `GET /api/settings/asr/models`：返回模型列表、安装状态、当前模型、缓存大小和下载状态。
+- `POST /api/settings/asr/models/{modelId}/download`：创建模型下载任务。
+- `GET /api/settings/asr/models/{modelId}/status`：读取下载进度。
+- `DELETE /api/settings/asr/models/{modelId}`：删除非当前模型缓存。
+- `POST /api/settings/models/reload`：释放已加载的语音与视觉模型会话；下一次识别任务按当前配置和缓存重新加载。
+
+当前使用中的模型不得删除。模型删除不影响已生成字幕。
+
+### 5.11 语音识别
+
+- `POST /api/segments/{segmentId}/transcribe`：创建片段语音识别任务。
+- `GET /api/transcription-jobs`：列出语音识别任务。
+- `GET /api/transcription-jobs/{jobId}`：读取任务详情。
+- `GET /api/segments/{segmentId}/transcription`：读取字幕分段。
+- `GET /api/segments/{segmentId}/transcription/status`：读取片段识别状态。
+- `DELETE /api/segments/{segmentId}/transcription`：删除字幕结果。
+- `GET /api/segments/{segmentId}/transcription/export`：下载 SRT 或 TXT。
+
+### 5.12 视觉识别
+
+- `POST /api/segments/{segmentId}/vision`：创建视觉识别任务。
+- `GET /api/vision-jobs`：列出视觉识别任务。
+- `GET /api/vision-jobs/{jobId}`：读取任务详情。
+- `GET /api/segments/{segmentId}/vision`：读取片段检测结果。
+- `GET /api/segments/{segmentId}/vision/status`：读取片段视觉状态。
+- `DELETE /api/segments/{segmentId}/vision`：删除视觉结果。
+- `GET /api/vision/detections`：按来源、日期、标签或置信度查询检测结果。
+- `GET /api/vision/labels`：返回可用标签及数量。
+
+视觉模型由本地文件或部署配置提供。当前契约不提供视觉模型下载接口；设置页只展示状态和后端支持的重新加载能力。
+
+### 5.13 全局搜索
+
+- `GET /api/search`：按字幕内容搜索并返回片段、时间偏移和命中摘要。
+- `GET /api/search/suggestions`：返回输入建议。
+- `GET /api/search/popular`：返回热门词。
+
+搜索结果用于顶栏浮层，点击后定位到对应片段和真实时间，不对应独立一级页面。
 
 ## 6. 前端类型建议
 

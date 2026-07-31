@@ -31,7 +31,7 @@
 
 ---
 
-Clipline 用来管理小米 NAS、家庭 NAS 或本地硬盘里持续备份的视频片段。它适合行车记录仪、监控摄像头、停车监控、执法记录仪等按时间切片保存的视频目录：挂载目录后，Clipline 会扫描片段、建立索引、生成缩略图，并提供统一的录像回放、时间线定位、片段墙浏览和后台导出。
+Clipline 用来管理小米 NAS、家庭 NAS 或本地硬盘里持续备份的视频片段。它适合行车记录仪、监控摄像头、停车监控、执法记录仪等按时间切片保存的视频目录：挂载目录后，Clipline 会扫描片段、建立索引、生成缩略图，并提供统一的录像回放、时间线定位、片段库浏览和后台导出。
 
 ## 适合什么场景
 
@@ -162,6 +162,8 @@ build: .
 
 ## 界面预览
 
+正式界面正在按 [Full Redesign 对齐与开发方案](docs/FULL_REDESIGN_ALIGNMENT.md) 收敛，具体执行项见 [Full Redesign 开发任务清单](docs/FULL_REDESIGN_TASKS.md)。页面结构、文案、视觉 token 和交互以 `frontend/prototypes/clipline-full-redesign` 为开发与验收基准；下方截图仅用于说明当前业务能力。
+
 <table>
   <tr>
     <td width="50%">
@@ -179,7 +181,7 @@ build: .
   </tr>
   <tr>
     <td width="50%">
-      <strong>片段墙</strong><br />
+      <strong>片段库</strong><br />
       按录像时间倒序展示缩略图，适合快速筛选和切换片段。
     </td>
     <td width="50%">
@@ -188,7 +190,7 @@ build: .
     </td>
   </tr>
   <tr>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/clips.png" alt="片段墙" /></td>
+    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/clips.png" alt="片段库" /></td>
     <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/sources.png" alt="录像源管理" /></td>
   </tr>
 </table>
@@ -199,7 +201,7 @@ build: .
 | --- | --- |
 | 小米 NAS 备份目录管理 | 将 NAS 备份目录挂载为录像源，统一扫描和浏览。 |
 | 自动扫描 | 使用 FFmpeg / ffprobe 读取视频元数据，保存片段索引。 |
-| 缩略图索引 | 为片段生成缩略图，片段墙可快速识别内容。 |
+| 缩略图索引 | 为片段生成缩略图，片段库可快速识别内容。 |
 | 同步时间线 | 视频播放时间和时间线光标同步，选择片段后自动缩放定位。 |
 | 区间导出 | 在时间线上通过滑块选择范围，支持快速和精准两种模式。 |
 | 后台任务 | 确认导出后创建任务，完成后提示下载，不打断当前回放页面。 |
@@ -231,7 +233,7 @@ build: .
 ```
 
 1. 在视频播放器中点击 🔍 按钮触发语音识别。
-2. 或在片段墙中批量选择后点击”批量识别语音”。
+2. 或在片段库中批量选择后点击”批量识别”。
 3. 等待识别任务完成（可在日志页面查看进度）。
 4. 在顶部搜索框输入关键词进行搜索。
 5. 点击搜索结果跳转到对应时间点。
@@ -286,12 +288,23 @@ evanqu/clipline:<version>
 | `CLIPLINE_SKIP_RECENT_SECONDS` | `30` | 扫描时跳过最近写入的文件，避免读取未写完片段 |
 | `CLIPLINE_LOG_LEVEL` | `INFO` | 日志级别 |
 | `CLIPLINE_LOG_FILE` | `/app/data/logs/clipline.log` | 日志文件路径 |
+| `CLIPLINE_MODEL_CACHE_DIR` | `/app/data/models` | 模型缓存目录；建议和 `CLIPLINE_DATA` 一起映射到 NAS |
+| `CLIPLINE_PLAYBACK_PROXY_MAX_WIDTH` | `1920` | HEVC/Opus 浏览器播放代理的最大视频宽度 |
+| `CLIPLINE_PLAYBACK_PROXY_TIMEOUT_SECONDS` | `1800` | 首次生成浏览器播放代理的超时时间（秒） |
 | `CLIPLINE_ASR_MODEL` | `funasr` | ASR 模型选择：`funasr` / `sensevoice` / `whisper` |
-| `CLIPLINE_ASR_MODEL_SIZE` | `medium` | 模型大小：`tiny` / `base` / `medium` / `large` |
+| `CLIPLINE_ASR_MODEL_SIZE` | `base` | 模型大小：`tiny` / `base` / `medium` / `large` |
 | `CLIPLINE_ASR_DEVICE` | `auto` | 运行设备：`auto` / `cpu` / `cuda` / `mps` |
 | `CLIPLINE_ASR_LANGUAGE` | `zh` | 识别语言：`zh` / `en` / `mixed` |
 | `CLIPLINE_ASR_AUTO_TRANSCRIBE` | `false` | 自动识别新视频 |
 | `CLIPLINE_ASR_HOTWORDS` | 空 | 热词配置，逗号分隔 |
+
+模型、数据库、导出缓存、缩略图和浏览器播放代理等运行数据默认都在 `CLIPLINE_DATA` 下。HEVC/Opus 录像首次播放时会在 `/app/data/playback-proxies` 生成 H.264/AAC MP4 缓存，不会修改只读挂载的源录像；同一源文件后续播放复用缓存。模型目录结构如下，下载困难时可以提前把模型文件放到对应目录后再启动：
+
+- FunASR / SenseVoice: `/app/data/models/modelscope/hub/models/...`
+- Whisper: `/app/data/models/whisper/*.pt`
+- 视觉识别 YOLO ONNX: `/app/data/models/vision/yolov8n.onnx`
+- Hugging Face 辅助缓存: `/app/data/models/huggingface`
+- Torch 缓存: `/app/data/models/torch`
 
 ## 本地开发
 
@@ -305,6 +318,9 @@ pip install -e ".[dev]"
 
 # 如果需要语音识别功能，安装 ASR 依赖
 pip install -e ".[asr]"
+
+# 如果需要视频视觉识别功能，安装 ONNX 视觉依赖
+pip install -e ".[vision]"
 
 $env:CLIPLINE_DATA = "../data"
 $env:CLIPLINE_DB = "../data/clipline.db"
@@ -411,3 +427,5 @@ clipline/
 - 语音识别功能需要安装额外的 ASR 依赖（`pip install -e ".[asr]"`）。
 - 首次使用语音识别时会自动下载模型文件，请确保网络连接正常。
 - 语音识别是 CPU/GPU 密集型任务，建议在系统空闲时运行。
+- 视频视觉识别功能需要安装额外的 ONNX 依赖（`pip install -e ".[vision]"`），模型文件放在 `/app/data/models/vision/yolov8n.onnx`。
+- 视觉识别默认按低频抽帧和单并发运行，适合 NAS 离线慢速处理，不建议全帧率实时分析。

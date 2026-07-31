@@ -13,8 +13,10 @@ from app.core.config import get_settings
 from app.core.logging import RequestLoggingMiddleware, get_logger, setup_logging
 from app.api import router as api_router
 from app.db import init_db
+from app.services.model_cache import configure_model_cache_env
 from app.services.scheduler import export_cleanup_loop, scheduled_scan_loop
-from app.services.transcription import set_max_concurrent_transcriptions
+from app.services.transcription import resume_pending_transcription_jobs, set_max_concurrent_transcriptions
+from app.services.vision import resume_pending_vision_jobs, set_max_concurrent_vision_jobs
 
 setup_logging()
 logger = get_logger(__name__)
@@ -23,13 +25,23 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    configure_model_cache_env()
     init_db()
 
     # 初始化 ASR 并发控制
     from app.core.settings_store import get_effective
-    max_concurrent = int(get_effective("asr_max_concurrent", 2))
+    max_concurrent = int(get_effective("asr_max_concurrent", 1))
     set_max_concurrent_transcriptions(max_concurrent)
     logger.info(f"ASR max concurrent transcriptions: {max_concurrent}")
+    restored_transcriptions = resume_pending_transcription_jobs()
+    if restored_transcriptions:
+        logger.info("restored pending ASR jobs: %d", restored_transcriptions)
+    max_vision_concurrent = int(get_effective("vision_max_concurrent", 1))
+    set_max_concurrent_vision_jobs(max_vision_concurrent)
+    logger.info(f"Vision max concurrent jobs: {max_vision_concurrent}")
+    restored_vision_jobs = resume_pending_vision_jobs()
+    if restored_vision_jobs:
+        logger.info("restored pending vision jobs: %d", restored_vision_jobs)
 
     stop_event = asyncio.Event()
     scheduler_task = asyncio.create_task(scheduled_scan_loop(stop_event))
@@ -41,6 +53,7 @@ async def lifespan(app: FastAPI):
             "db_path": str(settings.db_path),
             "recordings_root": str(settings.recordings_root_path),
             "log_file": str(settings.resolved_log_file),
+            "models_path": str(settings.models_path),
         },
     )
     try:

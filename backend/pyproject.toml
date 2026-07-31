@@ -17,6 +17,11 @@ asr = [
   "torchaudio>=2.0.0",
   "openai-whisper>=20231117",
 ]
+vision = [
+  "onnxruntime>=1.18.0",
+  "numpy>=1.26.0",
+  "pillow>=10.0.0",
+]
 dev = [
   "ruff>=0.6.0",
 ]

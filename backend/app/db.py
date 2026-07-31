@@ -15,7 +15,14 @@ settings.data_path.mkdir(parents=True, exist_ok=True)
 settings.exports_path.mkdir(parents=True, exist_ok=True)
 settings.tmp_path.mkdir(parents=True, exist_ok=True)
 settings.thumbnails_path.mkdir(parents=True, exist_ok=True)
+settings.playback_proxies_path.mkdir(parents=True, exist_ok=True)
 settings.logs_path.mkdir(parents=True, exist_ok=True)
+settings.models_path.mkdir(parents=True, exist_ok=True)
+settings.vision_models_path.mkdir(parents=True, exist_ok=True)
+settings.modelscope_cache_path.mkdir(parents=True, exist_ok=True)
+settings.whisper_cache_path.mkdir(parents=True, exist_ok=True)
+settings.huggingface_cache_path.mkdir(parents=True, exist_ok=True)
+settings.torch_cache_path.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
     f"sqlite:///{settings.db_path}",
@@ -34,6 +41,18 @@ def init_db() -> None:
             connection.execute(
                 text("ALTER TABLE sources ADD COLUMN scan_interval_minutes INTEGER NOT NULL DEFAULT 0")
             )
+        source_defaults = {
+            "auto_transcribe": "INTEGER NOT NULL DEFAULT 0",
+            "auto_detect": "INTEGER NOT NULL DEFAULT 0",
+            "recognition_trigger": "VARCHAR NOT NULL DEFAULT 'manual'",
+            "recognition_priority": "VARCHAR NOT NULL DEFAULT 'normal'",
+            "transcribe_language": "VARCHAR NOT NULL DEFAULT 'global'",
+            "detect_labels": "TEXT NOT NULL DEFAULT '[\"person\",\"cat\",\"dog\",\"vehicle\",\"phone\"]'",
+            "detect_confidence": "INTEGER NOT NULL DEFAULT 80",
+        }
+        for column, definition in source_defaults.items():
+            if column not in columns:
+                connection.execute(text(f"ALTER TABLE sources ADD COLUMN {column} {definition}"))
         _migrate_sources_unique_name(connection)
         scan_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(scan_jobs)"))}
         if "total_files" not in scan_columns:
@@ -44,6 +63,7 @@ def init_db() -> None:
             )
         _ensure_transcription_indexes(connection)
         _ensure_transcription_job_stage(connection)
+        _ensure_vision_indexes(connection)
         _ensure_segment_indexes(connection)
 
 
@@ -78,6 +98,13 @@ def _migrate_sources_unique_name(connection) -> None:
                 created_at VARCHAR NOT NULL,
                 updated_at VARCHAR NOT NULL,
                 scan_interval_minutes INTEGER NOT NULL DEFAULT 0,
+                auto_transcribe INTEGER NOT NULL DEFAULT 0,
+                auto_detect INTEGER NOT NULL DEFAULT 0,
+                recognition_trigger VARCHAR NOT NULL DEFAULT 'manual',
+                recognition_priority VARCHAR NOT NULL DEFAULT 'normal',
+                transcribe_language VARCHAR NOT NULL DEFAULT 'global',
+                detect_labels TEXT NOT NULL DEFAULT '["person","cat","dog","vehicle","phone"]',
+                detect_confidence INTEGER NOT NULL DEFAULT 80,
                 UNIQUE (name)
             )
             """
@@ -86,8 +113,18 @@ def _migrate_sources_unique_name(connection) -> None:
     connection.execute(
         text(
             """
-            INSERT INTO sources_new (id, name, path, enabled, created_at, updated_at, scan_interval_minutes)
-            SELECT id, name, path, enabled, created_at, updated_at, COALESCE(scan_interval_minutes, 0)
+            INSERT INTO sources_new (
+                id, name, path, enabled, created_at, updated_at, scan_interval_minutes,
+                auto_transcribe, auto_detect, recognition_trigger, recognition_priority,
+                transcribe_language, detect_labels, detect_confidence
+            )
+            SELECT
+                id, name, path, enabled, created_at, updated_at, COALESCE(scan_interval_minutes, 0),
+                COALESCE(auto_transcribe, 0), COALESCE(auto_detect, 0),
+                COALESCE(recognition_trigger, 'manual'), COALESCE(recognition_priority, 'normal'),
+                COALESCE(transcribe_language, 'global'),
+                COALESCE(detect_labels, '["person","cat","dog","vehicle","phone"]'),
+                COALESCE(detect_confidence, 80)
             FROM sources
             """
         )
@@ -122,6 +159,14 @@ def _ensure_segment_indexes(connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS idx_seg_source_time ON video_segments(source_id, start_time, end_time)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS idx_seg_source_status ON video_segments(source_id, scan_status)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS idx_seg_path ON video_segments(source_id, path)"))
+
+
+def _ensure_vision_indexes(connection) -> None:
+    """确保视觉识别相关索引存在"""
+    connection.execute(text("CREATE INDEX IF NOT EXISTS idx_vision_detection_segment ON vision_detections(segment_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS idx_vision_detection_source_label ON vision_detections(source_id, label)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS idx_vision_job_segment ON vision_jobs(segment_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS idx_vision_job_status ON vision_jobs(status)"))
 
 
 def get_db() -> Generator[Session, None, None]:

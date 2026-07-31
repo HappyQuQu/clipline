@@ -22,17 +22,29 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "text"
     log_file: str | None = None
+    model_cache_dir: str | None = None
+    playback_proxy_max_width: int = 1920
+    playback_proxy_timeout_seconds: int = 1800
 
     # ASR 配置
     asr_model: str = "funasr"
-    asr_model_size: str = "medium"
+    asr_model_size: str = "base"
     asr_device: str = "auto"
     asr_language: str = "zh"
     asr_auto_transcribe: bool = False
     asr_hotwords: str = ""
     asr_audio_sample_rate: int = 16000
-    asr_max_concurrent: int = 2
+    asr_max_concurrent: int = 1
     asr_timeout_seconds: int = 600
+
+    # 视觉识别配置
+    vision_model: str = "yolov8n"
+    vision_device: str = "cpu"
+    vision_max_concurrent: int = 1
+    vision_sample_interval_seconds: int = 5
+    vision_image_size: int = 416
+    vision_confidence: int = 45
+    vision_max_auto_jobs_per_scan: int = 10
 
     @property
     def data_path(self) -> Path:
@@ -65,8 +77,36 @@ class Settings(BaseSettings):
         return self.data_path / "thumbnails"
 
     @property
+    def playback_proxies_path(self) -> Path:
+        return self.data_path / "playback-proxies"
+
+    @property
     def logs_path(self) -> Path:
         return self.data_path / "logs"
+
+    @property
+    def models_path(self) -> Path:
+        return Path(self.model_cache_dir) if self.model_cache_dir else self.data_path / "models"
+
+    @property
+    def vision_models_path(self) -> Path:
+        return self.models_path / "vision"
+
+    @property
+    def modelscope_cache_path(self) -> Path:
+        return self.models_path / "modelscope"
+
+    @property
+    def whisper_cache_path(self) -> Path:
+        return self.models_path / "whisper"
+
+    @property
+    def huggingface_cache_path(self) -> Path:
+        return self.models_path / "huggingface"
+
+    @property
+    def torch_cache_path(self) -> Path:
+        return self.models_path / "torch"
 
     @property
     def resolved_log_file(self) -> Path:

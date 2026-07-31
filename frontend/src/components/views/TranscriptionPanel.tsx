@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, Captions, CircleAlert } from 'lucide-react'
+import { WarningCircle } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import type { Transcription } from '../../types'
@@ -131,7 +131,7 @@ export function TranscriptionPanel({
       {isProcessing && (
         <div className="transcriptionProcessing">
           <div className="transcriptionProcessingHeader">
-            <span className="transcriptionProcessingTitle"><AudioLines size={17} />语音识别</span>
+            <span className="transcriptionProcessingTitle">语音识别</span>
             <button
               className="transcriptionCancelButton"
               onClick={() => onNotify('暂不支持取消，请等待完成')}
@@ -140,7 +140,6 @@ export function TranscriptionPanel({
             </button>
           </div>
           <div className="transcriptionProcessingStage">
-            <AudioLines size={16} />
             {getStageText(jobStatus.stage, jobStatus.progress)}
           </div>
           <div className="transcriptionProgressBar">
@@ -163,7 +162,7 @@ export function TranscriptionPanel({
 
       {isFailed && (
         <div className="transcriptionFailed">
-          <div className="transcriptionFailedIcon"><CircleAlert size={30} /></div>
+          <div className="transcriptionFailedIcon"><WarningCircle size={30} /></div>
           <div className="transcriptionFailedText">{jobStatus.errorMessage || '识别失败，请重试'}</div>
           <button className="transcriptionRetryButton" onClick={handleTranscribe}>
             重新识别
@@ -175,7 +174,7 @@ export function TranscriptionPanel({
         <>
           <div className="transcriptionPanelHeader">
             <div className="transcriptionPanelTitle">
-              <span><Captions size={17} />字幕 · {transcriptions.length} 条</span>
+              <span>字幕 · {transcriptions.length} 条</span>
             </div>
             <div className="transcriptionPanelActions">
               <button

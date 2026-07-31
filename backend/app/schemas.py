@@ -1,10 +1,19 @@
 from pydantic import BaseModel, Field
 
+DEFAULT_DETECT_LABELS = ["person", "cat", "dog", "vehicle", "phone"]
+
 
 class SourceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     path: str = Field(min_length=1)
     scanIntervalMinutes: int = Field(default=0, ge=0, le=1440)
+    autoTranscribe: bool = False
+    autoDetect: bool = False
+    recognitionTrigger: str = Field(default="manual", pattern="^(manual|new_segments)$")
+    recognitionPriority: str = Field(default="normal", pattern="^(low|normal|high)$")
+    transcribeLanguage: str = Field(default="global", pattern="^(global|auto|zh|en)$")
+    detectLabels: list[str] = Field(default_factory=lambda: DEFAULT_DETECT_LABELS.copy())
+    detectConfidence: int = Field(default=80, ge=1, le=100)
 
 
 class SourceUpdate(BaseModel):
@@ -12,6 +21,13 @@ class SourceUpdate(BaseModel):
     path: str | None = Field(default=None, min_length=1)
     enabled: bool | None = None
     scanIntervalMinutes: int | None = Field(default=None, ge=0, le=1440)
+    autoTranscribe: bool | None = None
+    autoDetect: bool | None = None
+    recognitionTrigger: str | None = Field(default=None, pattern="^(manual|new_segments)$")
+    recognitionPriority: str | None = Field(default=None, pattern="^(low|normal|high)$")
+    transcribeLanguage: str | None = Field(default=None, pattern="^(global|auto|zh|en)$")
+    detectLabels: list[str] | None = None
+    detectConfidence: int | None = Field(default=None, ge=1, le=100)
 
 
 class SourceOut(BaseModel):
@@ -22,6 +38,13 @@ class SourceOut(BaseModel):
     createdAt: str
     updatedAt: str
     scanIntervalMinutes: int = 0
+    autoTranscribe: bool = False
+    autoDetect: bool = False
+    recognitionTrigger: str = "manual"
+    recognitionPriority: str = "normal"
+    transcribeLanguage: str = "global"
+    detectLabels: list[str] = Field(default_factory=lambda: DEFAULT_DETECT_LABELS.copy())
+    detectConfidence: int = 80
     lastScanAt: str | None = None
     segmentCount: int = 0
     failedCount: int = 0
@@ -213,6 +236,53 @@ class TranscriptionJobListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class VisionDetectionOut(BaseModel):
+    id: str
+    segmentId: str
+    sourceId: str
+    label: str
+    labelName: str
+    confidence: float
+    startTime: float
+    endTime: float
+    frameTime: float
+    bbox: list[float] | None = None
+    model: str
+    createdAt: str
+    segmentStartTime: str | None = None
+
+
+class VisionJobOut(BaseModel):
+    id: str
+    segmentId: str
+    status: str
+    stage: str = ""
+    progress: float
+    model: str = "yolov8n"
+    labels: list[str] = Field(default_factory=list)
+    confidenceThreshold: float = 0.45
+    sampleIntervalSeconds: float = 5
+    imageSize: int = 416
+    detectionsCount: int = 0
+    errorMessage: str | None = None
+    createdAt: str
+    updatedAt: str
+
+
+class VisionJobListResponse(BaseModel):
+    items: list[VisionJobOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class VisionDetectionListResponse(BaseModel):
+    items: list[VisionDetectionOut]
+    total: int
+    limit: int | None = None
+    offset: int | None = None
 
 
 class SearchResultOut(BaseModel):

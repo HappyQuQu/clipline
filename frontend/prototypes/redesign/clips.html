@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clipline — 片段墙 (含批量操作与 AI 识别标注)</title>
+<meta name="description" content="Clipline 片段墙，支持 AI 标注、批量语音识别与智能搜索">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #141419;
+  --bg-tertiary: #1c1c24;
+  --bg-elevated: #232330;
+  --border-primary: rgba(255,255,255,0.06);
+  --border-secondary: rgba(255,255,255,0.1);
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #6e6e73;
+  --accent-blue: #0a84ff;
+  --accent-blue-dim: rgba(10,132,255,0.15);
+  --accent-green: #30d158;
+  --accent-teal: #64d2ff;
+  --font: 'Inter', -apple-system, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 100px;
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 20px rgba(10,132,255,0.15);
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --rail-width: 72px;
+  --topbar-height: 56px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; font-family: var(--font); background: var(--bg-primary); color: var(--text-primary); }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, select { font-family: inherit; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 3px; }
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  grid-template-rows: var(--topbar-height) 1fr;
+  height: 100vh;
+}
+
+/* ── Rail ── */
+.rail {
+  grid-row: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0 20px;
+  background: var(--bg-secondary); border-right: 1px solid var(--border-primary); z-index: 10;
+}
+.rail-logo {
+  width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+  display: grid; place-items: center; margin-bottom: 20px; position: relative;
+}
+.rail-logo svg { width: 22px; height: 22px; fill: white; }
+.rail-logo-status { position: absolute; right: -1px; top: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent-green); border: 2px solid var(--bg-secondary); }
+
+.rail-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 56px; padding: 8px 0 6px;
+  border-radius: var(--radius-md); color: var(--text-tertiary); transition: all 0.2s var(--ease); text-decoration: none;
+}
+.rail-btn:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+.rail-btn.active { background: var(--accent-blue-dim); color: var(--accent-blue); }
+.rail-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.rail-btn span { font-size: 10px; font-weight: 600; }
+.rail-spacer { flex: 1; }
+
+/* ── Topbar ── */
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 0 24px;
+  background: rgba(20,20,25,0.72); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.08); z-index: 5;
+}
+.topbar-title h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.topbar-title p { font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
+.topbar-spacer { flex: 1; }
+
+.search-box {
+  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px;
+  background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-pill);
+  min-width: 240px;
+}
+.search-box svg { width: 15px; height: 15px; stroke: var(--text-tertiary); fill: none; stroke-width: 2; }
+.search-box input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-size: 13px; }
+
+/* ── Main Clips Layout ── */
+.clips-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.filter-sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.filter-group-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.filter-group-title small { font-size: 10px; color: var(--text-tertiary); }
+
+.tag-btn-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag-chip {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.tag-chip.active {
+  background: var(--accent-blue-dim);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+.tag-chip .count { font-size: 10px; opacity: 0.6; }
+
+.grid-area {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.clips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.clip-card {
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  position: relative;
+}
+.clip-card:hover { border-color: var(--border-secondary); transform: translateY(-2px); }
+.clip-card.selected { border-color: var(--accent-blue); box-shadow: 0 0 0 1px var(--accent-blue), var(--shadow-glow); }
+
+.clip-poster { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+.clip-poster img { width: 100%; height: 100%; object-fit: cover; }
+.camera-badge { position: absolute; left: 8px; top: 8px; padding: 3px 6px; border-radius: 4px; background: rgba(0,0,0,0.65); color: white; font-size: 10px; font-weight: 700; }
+.dur-badge { position: absolute; right: 8px; bottom: 8px; padding: 3px 6px; border-radius: 4px; background: rgba(0,0,0,0.65); color: white; font-size: 10px; font-weight: 700; }
+
+.clip-body { padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.clip-time { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+
+.ai-chip-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.ai-chip { padding: 2px 6px; border-radius: 4px; background: rgba(10,132,255,0.12); color: var(--accent-teal); font-size: 10px; font-weight: 700; }
+
+.speech-hit {
+  border-left: 2px solid var(--accent-blue);
+  padding-left: 6px;
+  font-size: 11px;
+  color: var(--accent-teal);
+  line-height: 1.3;
+}
+
+/* ── Apple Style Floating Batch Actions Bar (代码 BatchActions.tsx 对应) ── */
+.batch-actions-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 50;
+  transition: transform 0.35s var(--spring);
+}
+.batch-actions-bar.visible {
+  transform: translateX(-50%) translateY(0);
+}
+.batch-count {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-primary);
+  padding-right: 8px;
+  border-right: 1px solid var(--border-primary);
+}
+.batch-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.batch-btn:hover {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+.batch-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 100; padding: 12px 20px;
+  border-radius: var(--radius-md); background: var(--bg-elevated); border: 1px solid var(--border-secondary);
+  box-shadow: var(--shadow-lg); color: var(--text-primary); font-size: 13px; font-weight: 600;
+  opacity: 0; transform: translateY(16px); transition: all 0.35s var(--spring); pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ═══ Rail ═══ -->
+  <nav class="rail">
+    <a href="playback.html" class="rail-logo" title="Clipline"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg><span class="rail-logo-status"></span></a>
+    <div class="rail-nav">
+      <a href="playback.html" class="rail-btn"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>回放</span></a>
+      <a href="clips.html" class="rail-btn active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><span>片段</span></a>
+      <a href="tasks.html" class="rail-btn"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>任务</span></a>
+      <a href="sources.html" class="rail-btn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span>录像源</span></a>
+    </div>
+    <div class="rail-spacer"></div>
+    <div class="rail-nav">
+      <a href="settings.html" class="rail-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>设置</span></a>
+    </div>
+  </nav>
+
+  <!-- ═══ Topbar ═══ -->
+  <header class="topbar">
+    <div class="topbar-title">
+      <h1>片段墙</h1>
+      <p>123 个片段 · 支持 AI 目标标注与语音对话检索</p>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="搜索片段或标签...">
+    </div>
+  </header>
+
+  <!-- ═══ Main Body ═══ -->
+  <main class="clips-layout">
+    <!-- Sidebar Filters -->
+    <aside class="filter-sidebar">
+      <div>
+        <div class="filter-group-title">日期范围 <small>自定义</small></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <button class="tag-chip active" style="justify-content:center">今天</button>
+          <button class="tag-chip" style="justify-content:center">近7天</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="filter-group-title">AI 视觉标注 <small>YOLO</small></div>
+        <div class="tag-btn-grid">
+          <div class="tag-chip active"><span>人</span><span class="count">48</span></div>
+          <div class="tag-chip"><span>车辆</span><span class="count">12</span></div>
+          <div class="tag-chip"><span>包裹</span><span class="count">6</span></div>
+          <div class="tag-chip"><span>宠物</span><span class="count">3</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="filter-group-title">手动标签 <small>多选</small></div>
+        <div class="tag-btn-grid">
+          <div class="tag-chip active"><span>快递</span><span class="count">12</span></div>
+          <div class="tag-chip"><span>重要</span><span class="count">8</span></div>
+          <div class="tag-chip"><span>可疑</span><span class="count">5</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Grid Area -->
+    <section class="grid-area">
+      <div class="clips-grid" id="clipsGrid"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Apple Floating Batch Actions Bar (对应 BatchActions.tsx 代码) -->
+<div class="batch-actions-bar" id="batchBar">
+  <span class="batch-count" id="batchCountText">已选择 2 项</span>
+  <button class="batch-btn" onclick="batchTranscribe()">
+    <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+    批量语音识别
+  </button>
+  <button class="batch-btn" onclick="batchExport()">
+    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    批量导出
+  </button>
+  <button class="batch-btn" onclick="clearBatch()" style="background:rgba(255,255,255,0.1)">取消</button>
+</div>
+
+<div class="toast" id="toast"><span id="toastMsg">提示</span></div>
+
+<script>
+const items = [
+  { id:1, camera:'门口', time:'09:35:48', dur:'5分22秒', ai:['人','电话机'], speech:'00:07 你好，快递放门口' },
+  { id:2, camera:'门口', time:'08:14:10', dur:'42秒', ai:['人'], speech:'' },
+  { id:3, camera:'行车', time:'10:02:15', dur:'1分30秒', ai:['车辆'], speech:'00:12 导航为您搜索附近加油站' },
+  { id:4, camera:'客厅', time:'11:20:00', dur:'2分10秒', ai:['宠物'], speech:'' },
+  { id:5, camera:'门口', time:'14:22:30', dur:'1分30秒', ai:['人','包裹'], speech:'00:07 你好，快递帮你放在门口了' },
+  { id:6, camera:'行车', time:'18:30:00', dur:'3分45秒', ai:['车辆'], speech:'' }
+];
+
+let selectedSet = new Set([1, 5]);
+
+function renderGrid() {
+  const container = document.getElementById('clipsGrid');
+  container.innerHTML = items.map(item => {
+    const isSelected = selectedSet.has(item.id);
+    return `
+      <div class="clip-card${isSelected ? ' selected' : ''}" onclick="toggleSelect(${item.id})">
+        <div class="clip-poster">
+          <img src="https://picsum.photos/seed/clipcard${item.id}/360/200" alt="">
+          <span class="cameraBadge">${item.camera}</span>
+          <span class="dur-badge">${item.dur}</span>
+        </div>
+        <div class="clip-body">
+          <div class="clip-time">${item.time}</div>
+          <div class="ai-chip-row">
+            ${item.ai.map(a => `<span class="ai-chip">${a}</span>`).join('')}
+          </div>
+          ${item.speech ? `<div class="speech-hit">💬 ${item.speech}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Update Batch Bar
+  const bar = document.getElementById('batchBar');
+  const countText = document.getElementById('batchCountText');
+  if(selectedSet.size > 0) {
+    countText.textContent = `已选择 ${selectedSet.size} 项`;
+    bar.classList.add('visible');
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+function toggleSelect(id) {
+  if(selectedSet.has(id)) selectedSet.delete(id);
+  else selectedSet.add(id);
+  renderGrid();
+}
+
+function clearBatch() {
+  selectedSet.clear();
+  renderGrid();
+}
+
+function batchTranscribe() {
+  showToast(`已成功为 ${selectedSet.size} 个片段创建语音识别任务`);
+  clearBatch();
+}
+
+function batchExport() {
+  showToast(`已创建 ${selectedSet.size} 个批量导出任务`);
+  clearBatch();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+renderGrid();
+</script>
+</body>
+</html>

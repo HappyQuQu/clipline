@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clipline — 设置</title>
+<meta name="description" content="Clipline 系统设置与配置">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   CLIPLINE DESIGN SYSTEM — Apple-inspired Dark
+   ============================================ */
+
+:root {
+  /* Colors */
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #141419;
+  --bg-tertiary: #1c1c24;
+  --bg-elevated: #232330;
+  --bg-hover: #2a2a38;
+
+  --border-primary: rgba(255,255,255,0.06);
+  --border-secondary: rgba(255,255,255,0.1);
+  --border-active: rgba(0,113,227,0.5);
+
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #6e6e73;
+  --text-quaternary: #48484a;
+
+  --accent-blue: #0a84ff;
+  --accent-blue-dim: rgba(10,132,255,0.15);
+  --accent-green: #30d158;
+  --accent-green-dim: rgba(48,209,88,0.15);
+  --accent-red: #ff453a;
+  --accent-orange: #ff9f0a;
+  --accent-purple: #bf5af2;
+  --accent-teal: #64d2ff;
+
+  --glass-bg: rgba(20,20,25,0.72);
+  --glass-border: rgba(255,255,255,0.08);
+
+  /* Typography */
+  --font: 'Inter', -apple-system, 'SF Pro Display', system-ui, sans-serif;
+
+  /* Spacing */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 100px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md: 0 8px 30px rgba(0,0,0,0.4);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 20px rgba(10,132,255,0.15);
+
+  /* Animation */
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Layout */
+  --rail-width: 72px;
+  --topbar-height: 56px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, select { font-family: inherit; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-quaternary); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* ============================================
+   SHELL LAYOUT
+   ============================================ */
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  grid-template-rows: var(--topbar-height) 1fr;
+  height: 100vh;
+}
+
+/* ============================================
+   LEFT RAIL — Navigation
+   ============================================ */
+.rail {
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 0 20px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  z-index: 10;
+}
+
+.rail-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+  display: grid;
+  place-items: center;
+  margin-bottom: 20px;
+  position: relative;
+  transition: transform 0.3s var(--spring);
+  text-decoration: none;
+}
+.rail-logo:hover { transform: scale(1.08); }
+.rail-logo svg { width: 22px; height: 22px; fill: white; }
+.rail-logo-status {
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  border: 2px solid var(--bg-secondary);
+}
+
+.rail-nav { display: flex; flex-direction: column; gap: 4px; }
+
+.rail-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 56px;
+  padding: 8px 0 6px;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  transition: all 0.2s var(--ease);
+  text-decoration: none;
+}
+.rail-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+.rail-btn.active {
+  background: var(--accent-blue-dim);
+  color: var(--accent-blue);
+}
+.rail-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rail-btn span { font-size: 10px; font-weight: 600; letter-spacing: 0.01em; }
+
+.rail-spacer { flex: 1; }
+
+/* ============================================
+   TOP BAR
+   ============================================ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--glass-border);
+  z-index: 5;
+}
+
+.topbar-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.topbar-title h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.topbar-title p {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.topbar-spacer { flex: 1; }
+
+/* ============================================
+   MAIN CONTENT — Settings
+   ============================================ */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-primary);
+}
+
+.settings-scroll {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Settings Group Card ── */
+.settings-group {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.2s var(--ease);
+}
+.settings-group:hover {
+  border-color: var(--border-secondary);
+}
+
+.settings-group-header {
+  padding: 16px 20px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-group-header .group-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.settings-group-header .group-icon svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.settings-group-header h2 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+.settings-group-header p {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+/* ── Settings Row ── */
+.settings-row {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 20px;
+  gap: 12px;
+  border-top: 1px solid var(--border-primary);
+  transition: background 0.15s var(--ease);
+}
+.settings-row:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.settings-row .row-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: 140px;
+}
+
+.settings-row .row-value {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+  min-width: 0;
+}
+
+.settings-row .row-value.mono {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.settings-row .row-value .status-ok {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.settings-row .row-value .status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+}
+.status-badge.green {
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+}
+
+/* ── Select Control ── */
+.settings-select {
+  height: 32px;
+  padding: 0 30px 0 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  min-width: 120px;
+}
+.settings-select:hover { border-color: var(--border-secondary); }
+.settings-select:focus { border-color: var(--accent-blue); box-shadow: var(--shadow-glow); }
+
+/* ── Input Control ── */
+.settings-input {
+  height: 32px;
+  padding: 0 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  width: 80px;
+  text-align: right;
+  transition: all 0.2s var(--ease);
+}
+.settings-input:hover { border-color: var(--border-secondary); }
+.settings-input:focus { border-color: var(--accent-blue); box-shadow: var(--shadow-glow); }
+
+/* ── Toggle Switch (Pure CSS) ── */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-secondary);
+  border-radius: 13px;
+  cursor: pointer;
+  transition: all 0.3s var(--ease);
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  transition: all 0.3s var(--spring);
+}
+.toggle input:checked + .toggle-slider {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+.toggle input:focus-visible + .toggle-slider {
+  box-shadow: 0 0 0 3px var(--accent-blue-dim);
+}
+
+/* ── Clean Button ── */
+.clean-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap;
+}
+.clean-btn:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: rgba(255,69,58,0.1);
+}
+.clean-btn:active {
+  transform: scale(0.96);
+}
+
+/* ── Mode Toggle (Segment Control) ── */
+.mode-toggle {
+  display: flex;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+}
+.mode-toggle button {
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  transition: all 0.2s var(--ease);
+}
+.mode-toggle button.active {
+  background: var(--accent-blue);
+  color: white;
+}
+.mode-toggle button:hover:not(.active) { color: var(--text-secondary); }
+
+/* ── Progress Bar ── */
+.progress-bar-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 80px;
+}
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s var(--ease);
+}
+.progress-bar-fill.blue { background: var(--accent-blue); }
+.progress-bar-fill.orange { background: var(--accent-orange); }
+.progress-bar-fill.green { background: var(--accent-green); }
+.progress-bar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: right;
+}
+
+/* ── About Section ── */
+.about-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 20px;
+}
+.about-logo-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 24px rgba(10,132,255,0.25);
+  transition: transform 0.3s var(--spring);
+}
+.about-logo-icon:hover { transform: scale(1.08) rotate(-3deg); }
+.about-logo-icon svg { width: 32px; height: 32px; fill: white; }
+.about-logo h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+.about-logo p {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-blue);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.link-btn:hover { opacity: 0.8; }
+.link-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Tech Stack Tags ── */
+.tech-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.tech-tag {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.2s var(--ease);
+}
+.tech-tag:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+}
+
+/* ============================================
+   TOAST
+   ============================================ */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 100;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-secondary);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+  transition: all 0.35s var(--spring);
+  pointer-events: none;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.toast .toast-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.toast .toast-icon.green { background: var(--accent-green-dim); }
+.toast .toast-icon.green svg { stroke: var(--accent-green); }
+.toast .toast-icon.red { background: rgba(255,69,58,0.15); }
+.toast .toast-icon.red svg { stroke: var(--accent-red); }
+.toast .toast-icon svg { width: 12px; height: 12px; fill: none; stroke-width: 2.5; }
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 56px 1fr; }
+  .rail { padding: 12px 0 16px; }
+  .rail-btn span { display: none; }
+  .rail-btn { width: 44px; padding: 10px 0; }
+  .settings-scroll { padding: 20px 16px 48px; }
+  .settings-row .row-label { min-width: 100px; font-size: 12px; }
+  .settings-row .row-value { font-size: 12px; }
+}
+
+@media (max-width: 600px) {
+  .settings-row {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px 20px;
+    gap: 8px;
+  }
+  .settings-row .row-value {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ═══ Left Rail ═══ -->
+  <nav class="rail">
+    <a href="playback.html" class="rail-logo" title="Clipline">
+      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <span class="rail-logo-status"></span>
+    </a>
+    <div class="rail-nav">
+      <a href="playback.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>回放</span>
+      </a>
+      <a href="clips.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>片段</span>
+      </a>
+      <a href="tasks.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>任务</span>
+      </a>
+      <a href="sources.html" class="rail-btn">
+        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span>录像源</span>
+      </a>
+    </div>
+    <div class="rail-spacer"></div>
+    <div class="rail-nav">
+      <a href="settings.html" class="rail-btn active">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>设置</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ═══ Top Bar ═══ -->
+  <header class="topbar">
+    <div class="topbar-title">
+      <h1>设置</h1>
+      <p>Clipline v1.0.0</p>
+    </div>
+    <div class="topbar-spacer"></div>
+  </header>
+
+  <!-- ═══ Main Content ═══ -->
+  <main class="main">
+    <div class="settings-scroll">
+
+      <!-- ── 分组 1: 系统状态 ── -->
+      <div class="settings-group">
+        <div class="settings-group-header">
+          <div class="group-icon" style="background: var(--accent-blue-dim); color: var(--accent-blue);">
+            <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <h2>系统状态</h2>
+          <p>运行正常</p>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">版本号</span>
+          <span class="row-value">v1.0.0</span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">数据库路径</span>
+          <span class="row-value mono">/app/data/clipline.db</span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">数据库大小</span>
+          <span class="row-value">12.4 MB</span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">FFmpeg 状态</span>
+          <span class="row-value">
+            <span class="status-badge green">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              可用
+            </span>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">系统运行时间</span>
+          <span class="row-value">3天 14小时</span>
+        </div>
+      </div>
+
+      <!-- ── 分组 2: 存储管理 ── -->
+      <div class="settings-group">
+        <div class="settings-group-header">
+          <div class="group-icon" style="background: rgba(255,159,10,0.15); color: var(--accent-orange);">
+            <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h2>存储管理</h2>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">缩略图缓存</span>
+          <span class="row-value">
+            <span>234 MB</span>
+            <button class="clean-btn" onclick="clearCache('缩略图缓存')">清理</button>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">导出文件缓存</span>
+          <span class="row-value">
+            <span>1.2 GB</span>
+            <button class="clean-btn" onclick="clearCache('导出文件缓存')">清理</button>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">数据目录</span>
+          <span class="row-value mono">/app/data</span>
+        </div>
+        <div class="settings-row" style="padding-top: 12px; padding-bottom: 14px;">
+          <span class="row-label">磁盘使用</span>
+          <span class="row-value">
+            <div class="progress-bar-container">
+              <div class="progress-bar">
+                <div class="progress-bar-fill orange" style="width: 42%;"></div>
+              </div>
+              <span class="progress-bar-label">42.3 / 100 GB</span>
+            </div>
+          </span>
+        </div>
+      </div>
+
+      <!-- ── 分组 3: 扫描配置 ── -->
+      <div class="settings-group">
+        <div class="settings-group-header">
+          <div class="group-icon" style="background: var(--accent-green-dim); color: var(--accent-green);">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15A9 9 0 1 1 22 12"/></svg>
+          </div>
+          <h2>扫描配置</h2>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">默认扫描间隔</span>
+          <span class="row-value">
+            <select class="settings-select" id="scanInterval">
+              <option value="30">30 秒</option>
+              <option value="60" selected>1 分钟</option>
+              <option value="120">2 分钟</option>
+              <option value="300">5 分钟</option>
+              <option value="600">10 分钟</option>
+            </select>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">跳过最近写入的文件</span>
+          <span class="row-value">
+            <label class="toggle">
+              <input type="checkbox" id="skipRecent" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">跳过时间阈值</span>
+          <span class="row-value">
+            <input type="number" class="settings-input" id="skipThreshold" value="10" min="1" max="300">
+            <span style="color: var(--text-tertiary); font-size: 12px; font-weight: 600;">秒</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- ── 分组 4: 导出配置 ── -->
+      <div class="settings-group">
+        <div class="settings-group-header">
+          <div class="group-icon" style="background: rgba(191,90,242,0.15); color: var(--accent-purple);">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <h2>导出配置</h2>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">最大导出时长</span>
+          <span class="row-value">
+            <input type="number" class="settings-input" id="maxDuration" value="30" min="1" max="120">
+            <span style="color: var(--text-tertiary); font-size: 12px; font-weight: 600;">分钟</span>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">导出文件保留时间</span>
+          <span class="row-value">
+            <select class="settings-select" id="retentionTime">
+              <option value="6">6 小时</option>
+              <option value="12">12 小时</option>
+              <option value="24" selected>24 小时</option>
+              <option value="48">48 小时</option>
+              <option value="168">7 天</option>
+            </select>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">最大并发导出数</span>
+          <span class="row-value">
+            <input type="number" class="settings-input" id="maxConcurrent" value="1" min="1" max="8">
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">默认导出模式</span>
+          <span class="row-value">
+            <div class="mode-toggle" id="exportModeToggle">
+              <button class="active" onclick="setExportMode('fast', this)">快速</button>
+              <button onclick="setExportMode('accurate', this)">精准</button>
+            </div>
+          </span>
+        </div>
+      </div>
+
+      <!-- ── 分组 5: 语音识别 ── -->
+      <div class="settings-group">
+        <div class="settings-group-header">
+          <div class="group-icon" style="background: rgba(100,210,255,0.15); color: var(--accent-teal);">
+            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </div>
+          <h2>语音识别</h2>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">ASR 模型</span>
+          <span class="row-value">
+            <select class="settings-select" id="asrModel">
+              <option value="funASR" selected>FunASR</option>
+              <option value="senseVoice">SenseVoice</option>
+              <option value="whisper">Whisper</option>
+            </select>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">模型大小</span>
+          <span class="row-value">
+            <select class="settings-select" id="modelSize">
+              <option value="tiny">tiny</option>
+              <option value="base" selected>base</option>
+              <option value="medium">medium</option>
+              <option value="large">large</option>
+            </select>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">运行设备</span>
+          <span class="row-value">
+            <select class="settings-select" id="device">
+              <option value="auto" selected>auto</option>
+              <option value="cpu">cpu</option>
+              <option value="cuda">cuda</option>
+            </select>
+          </span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">识别语言</span>
+          <span class="row-value">
+            <select class="settings-select" id="asrLang">
+              <option value="zh" selected>中文</option>
+              <option value="en">英文</option>
+              <option value="mix">混合</option>
+            </select>
+          </span>
+        </div>
+      </div>
+
+      <!-- ── 分组 6: 关于 ── -->
+      <div class="settings-group">
+        <div class="about-logo">
+          <div class="about-logo-icon">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+          <h3>Clipline</h3>
+          <p>开源 NAS 录像管理与智能回放系统<br>轻量、高效、可自托管</p>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">项目名称</span>
+          <span class="row-value">Clipline</span>
+        </div>
+        <div class="settings-row">
+          <span class="row-label">GitHub</span>
+          <span class="row-value">
+            <a href="https://github.com/clipline/clipline" target="_blank" class="link-btn">
+              <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              github.com/clipline
+            </a>
+          </span>
+        </div>
+        <div class="settings-row" style="padding-top: 10px; padding-bottom: 14px;">
+          <span class="row-label">技术栈</span>
+          <span class="row-value">
+            <div class="tech-tags">
+              <span class="tech-tag">Python</span>
+              <span class="tech-tag">FastAPI</span>
+              <span class="tech-tag">FFmpeg</span>
+              <span class="tech-tag">SQLite</span>
+              <span class="tech-tag">Vue.js</span>
+            </div>
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <div class="toast-icon green" id="toastIcon">
+    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+  </div>
+  <span id="toastMsg">操作完成</span>
+</div>
+
+<script>
+// ── Toast ──
+function showToast(msg, type = 'green') {
+  const toast = document.getElementById('toast');
+  const icon = document.getElementById('toastIcon');
+  document.getElementById('toastMsg').textContent = msg;
+
+  icon.className = 'toast-icon ' + type;
+  if (type === 'green') {
+    icon.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+  } else if (type === 'red') {
+    icon.innerHTML = '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  }
+
+  toast.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ── Clear Cache ──
+function clearCache(name) {
+  showToast(`${name}已清理`);
+}
+
+// ── Export Mode Toggle ──
+function setExportMode(mode, btn) {
+  document.querySelectorAll('#exportModeToggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  showToast(`已切换为${mode === 'fast' ? '快速' : '精准'}模式`);
+}
+
+// ── Settings change listeners ──
+document.getElementById('scanInterval').addEventListener('change', function() {
+  showToast('扫描间隔已更新');
+});
+
+document.getElementById('skipRecent').addEventListener('change', function() {
+  const threshold = document.getElementById('skipThreshold');
+  threshold.disabled = !this.checked;
+  threshold.style.opacity = this.checked ? '1' : '0.4';
+  showToast(this.checked ? '已开启跳过最近写入文件' : '已关闭跳过最近写入文件');
+});
+
+document.getElementById('asrModel').addEventListener('change', function() {
+  showToast(`ASR 模型已切换为 ${this.options[this.selectedIndex].text}`);
+});
+
+document.getElementById('modelSize').addEventListener('change', function() {
+  showToast(`模型大小已切换为 ${this.value}`);
+});
+
+document.getElementById('device').addEventListener('change', function() {
+  showToast(`运行设备已切换为 ${this.value}`);
+});
+
+document.getElementById('asrLang').addEventListener('change', function() {
+  showToast(`识别语言已切换为${this.options[this.selectedIndex].text}`);
+});
+
+document.getElementById('retentionTime').addEventListener('change', function() {
+  showToast('保留时间已更新');
+});
+</script>
+</body>
+</html>

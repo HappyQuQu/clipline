@@ -12,6 +12,9 @@ import type {
   TimelineResponse,
   Transcription,
   TranscriptionJob,
+  VisionDetection,
+  VisionJob,
+  VisionStatus,
 } from './types'
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -45,7 +48,23 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  updateSource: (sourceId: string, payload: Partial<Pick<Source, 'name' | 'path' | 'enabled' | 'scanIntervalMinutes'>>) =>
+  updateSource: (
+    sourceId: string,
+    payload: Partial<Pick<
+      Source,
+      | 'name'
+      | 'path'
+      | 'enabled'
+      | 'scanIntervalMinutes'
+      | 'autoTranscribe'
+      | 'autoDetect'
+      | 'recognitionTrigger'
+      | 'recognitionPriority'
+      | 'transcribeLanguage'
+      | 'detectLabels'
+      | 'detectConfidence'
+    >>,
+  ) =>
     request<Source & { scanJobId?: string | null }>(`/api/sources/${sourceId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -84,6 +103,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   status: () => request<SystemStatus>('/api/system/status'),
+  systemLogs: (lines = 200) => request<{ path: string; lines: string[] }>(`/api/system/logs?lines=${lines}`),
 
   // 搜索
   search: (params: {
@@ -137,6 +157,47 @@ export const api = {
 
   exportTranscription: (segmentId: string, format: 'srt' | 'txt' = 'srt') =>
     request<{ content: string }>(`/api/segments/${segmentId}/transcription/export?format=${format}`),
+
+  // 视频视觉识别
+  triggerVision: (segmentId: string, force = false) =>
+    request<VisionJob>(`/api/segments/${segmentId}/vision?force=${force ? 'true' : 'false'}`, { method: 'POST' }),
+
+  getVisionJobs: (params?: { segmentId?: string; status?: string }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.segmentId) searchParams.set('segmentId', params.segmentId)
+    if (params?.status) searchParams.set('status', params.status)
+    return request<{ items: VisionJob[] }>(`/api/vision-jobs?${searchParams}`)
+  },
+
+  getVisionStatus: (segmentId: string) =>
+    request<VisionStatus>(`/api/segments/${segmentId}/vision/status`),
+
+  getVisionDetections: (segmentId: string) =>
+    request<{ items: VisionDetection[]; total: number }>(`/api/segments/${segmentId}/vision`),
+
+  listVisionDetections: (params: {
+    sourceId?: string
+    labels?: string[]
+    startDate?: string
+    endDate?: string
+    limit?: number
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params.sourceId) searchParams.set('sourceId', params.sourceId)
+    if (params.labels?.length) searchParams.set('labels', params.labels.join(','))
+    if (params.startDate) searchParams.set('startDate', params.startDate)
+    if (params.endDate) searchParams.set('endDate', params.endDate)
+    searchParams.set('limit', String(params.limit ?? 2000))
+    return request<{ items: VisionDetection[]; total: number }>(`/api/vision/detections?${searchParams}`)
+  },
+
+  getVisionLabels: (sourceId?: string) => {
+    const searchParams = new URLSearchParams()
+    if (sourceId) searchParams.set('sourceId', sourceId)
+    return request<{ items: Array<{ label: string; labelName: string; count: number }> }>(
+      `/api/vision/labels?${searchParams}`
+    )
+  },
 
   // 全局设置
   getSettings: () => request<SettingsResponse>('/api/settings'),
