@@ -8,6 +8,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,20 @@ _FUNASR_SHARED_MODELS = [
 # 下载状态跟踪
 _download_status: dict[str, dict[str, Any]] = {}
 _status_lock = threading.Lock()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _update_download_status(model_id: str, **updates: Any) -> None:
+    """Update one in-memory download status without dropping its start time."""
+    with _status_lock:
+        current = dict(_download_status.get(model_id, {}))
+        current.update(updates)
+        current.setdefault("startedAt", _now_iso())
+        current["updatedAt"] = _now_iso()
+        _download_status[model_id] = current
 
 
 def _modelscope_cache() -> Path:
@@ -162,6 +177,7 @@ def list_models() -> list[dict[str, Any]]:
             "downloaded": downloaded,
             "size_bytes": size_bytes,
             "cache_path": str(cache_path) if cache_path else None,
+            "download": get_download_status(model_id),
         })
 
     return results
@@ -169,25 +185,36 @@ def list_models() -> list[dict[str, Any]]:
 
 def _do_download(model_id: str, engine: str, size: str) -> None:
     """后台下载模型。"""
-    with _status_lock:
-        _download_status[model_id] = {"status": "downloading", "error": None}
+    _update_download_status(
+        model_id,
+        status="downloading",
+        stage="preparing",
+        progress=0.02,
+        bytesDownloaded=0,
+        totalBytes=None,
+        error=None,
+    )
 
     try:
         if engine in ("funasr", "sensevoice"):
-            _download_funasr(engine, size)
+            _download_funasr(model_id, engine, size)
         elif engine == "whisper":
-            _download_whisper(size)
+            _download_whisper(model_id, size)
 
-        with _status_lock:
-            _download_status[model_id] = {"status": "completed", "error": None}
+        _update_download_status(
+            model_id,
+            status="completed",
+            stage="completed",
+            progress=1.0,
+            error=None,
+        )
         logger.info("model download completed: %s", model_id)
     except Exception as exc:
-        with _status_lock:
-            _download_status[model_id] = {"status": "failed", "error": str(exc)}
+        _update_download_status(model_id, status="failed", stage="failed", error=str(exc))
         logger.error("model download failed: %s — %s", model_id, exc)
 
 
-def _download_funasr(engine: str, size: str) -> None:
+def _download_funasr(model_id: str, engine: str, size: str) -> None:
     """通过 FunASR 库触发模型下载。"""
     try:
         configure_model_cache_env()
@@ -211,18 +238,27 @@ def _download_funasr(engine: str, size: str) -> None:
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             device = "mps"
 
-        # 这会触发下载
+        # ModelScope does not expose a stable byte callback here. Keep the task
+        # explicitly indeterminate instead of presenting a fabricated percentage.
+        _update_download_status(
+            model_id,
+            stage="downloading_modelscope",
+            progress=None,
+            bytesDownloaded=0,
+            totalBytes=None,
+        )
         AutoModel(
             model=model_name,
             vad_model="fsmn-vad",
             punc_model="ct-punc",
             device=device,
         )
+        _update_download_status(model_id, stage="verifying", progress=0.95)
     except ImportError as exc:
         raise RuntimeError(f"FunASR 未安装: {exc}") from exc
 
 
-def _download_whisper(size: str) -> None:
+def _download_whisper(model_id: str, size: str) -> None:
     """通过 Whisper 库触发模型下载。"""
     try:
         configure_model_cache_env()
@@ -232,7 +268,8 @@ def _download_whisper(size: str) -> None:
         if not url:
             raise RuntimeError(f"Whisper 不支持模型规格: {size}")
         model_path = _whisper_cache() / MODEL_REGISTRY[("whisper", size)]["whisper_file"]
-        _download_with_resume(url, model_path)
+        _download_with_resume(url, model_path, model_id=model_id)
+        _update_download_status(model_id, stage="loading", progress=0.97)
         whisper.load_model(size, device="cpu", download_root=str(_whisper_cache()))
     except ImportError as exc:
         raise RuntimeError(f"Whisper 未安装: {exc}") from exc
@@ -246,7 +283,12 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _download_with_resume(url: str, target: Path, retries: int = 8) -> None:
+def _download_with_resume(
+    url: str,
+    target: Path,
+    retries: int = 8,
+    model_id: str | None = None,
+) -> None:
     """Download a model with bounded reads and byte-range resume."""
     expected_sha256 = url.rstrip("/").split("/")[-2]
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -267,12 +309,42 @@ def _download_with_resume(url: str, target: Path, retries: int = 8) -> None:
             with urllib.request.urlopen(request, timeout=30) as response:
                 resumed = offset > 0 and response.status == 206
                 mode = "ab" if resumed else "wb"
+                content_range = response.headers.get("Content-Range", "")
+                content_length = int(response.headers.get("Content-Length", "0") or 0)
+                if "/" in content_range:
+                    total_bytes = int(content_range.rsplit("/", 1)[1])
+                else:
+                    total_bytes = content_length + (offset if resumed else 0)
+                downloaded_bytes = offset if resumed else 0
+                if model_id:
+                    _update_download_status(
+                        model_id,
+                        stage="downloading",
+                        progress=(downloaded_bytes / total_bytes) * 0.9 if total_bytes else None,
+                        bytesDownloaded=downloaded_bytes,
+                        totalBytes=total_bytes or None,
+                    )
                 with partial.open(mode) as output:
                     while True:
                         chunk = response.read(1024 * 1024)
                         if not chunk:
                             break
                         output.write(chunk)
+                        downloaded_bytes += len(chunk)
+                        if model_id:
+                            _update_download_status(
+                                model_id,
+                                stage="downloading",
+                                progress=(
+                                    min(0.9, (downloaded_bytes / total_bytes) * 0.9)
+                                    if total_bytes
+                                    else None
+                                ),
+                                bytesDownloaded=downloaded_bytes,
+                                totalBytes=total_bytes or None,
+                            )
+            if model_id:
+                _update_download_status(model_id, stage="verifying", progress=0.93)
             if _file_sha256(partial) == expected_sha256:
                 partial.replace(target)
                 return
@@ -314,8 +386,26 @@ def get_download_status(model_id: str) -> dict[str, Any]:
     with _status_lock:
         status = _download_status.get(model_id)
     if not status:
-        return {"status": "idle", "error": None}
+        return {
+            "status": "idle",
+            "stage": "",
+            "progress": 0.0,
+            "bytesDownloaded": 0,
+            "totalBytes": None,
+            "error": None,
+            "startedAt": None,
+            "updatedAt": None,
+        }
     return dict(status)
+
+
+def list_download_statuses() -> list[dict[str, Any]]:
+    """Return only downloads started in this process; safe for frequent polling."""
+    with _status_lock:
+        return [
+            {"modelId": model_id, **dict(status)}
+            for model_id, status in _download_status.items()
+        ]
 
 
 def is_active_model(model_id: str, engine: str, size: str) -> bool:

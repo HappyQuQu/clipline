@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import threading
 import uuid
 from pathlib import Path
-from typing import TypedDict
+from typing import Callable, TypedDict
 
 from app.core.config import get_settings
 from app.core.settings_store import get_effective, update_settings
@@ -206,7 +207,13 @@ class ASRService:
         except ImportError:
             raise ImportError("Whisper not installed. Run: pip install openai-whisper")
 
-    def extract_audio(self, video_path: str, timeout: int | None = None) -> str:
+    def extract_audio(
+        self,
+        video_path: str,
+        timeout: int | None = None,
+        duration_seconds: float | None = None,
+        progress_callback: Callable[[float], None] | None = None,
+    ) -> str:
         """FFmpeg 提取音频"""
         settings = get_settings()
         config = self._get_runtime_asr_config()
@@ -221,6 +228,8 @@ class ASRService:
             "-nostdin",
             "-hide_banner",
             "-loglevel", "error",
+            "-progress", "pipe:1",
+            "-nostats",
             "-i", video_path,
             "-vn",
             "-acodec", "pcm_s16le",
@@ -231,40 +240,87 @@ class ASRService:
 
         logger.info(f"Extracting audio: {video_path} -> {audio_path}")
 
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise TimeoutError(f"音频提取超时（{timeout} 秒）") from exc
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        output_lines: list[str] = []
+        timed_out = threading.Event()
 
-        if result.returncode != 0:
-            error_msg = result.stderr.strip() or "ffmpeg failed"
+        def terminate_on_timeout() -> None:
+            timed_out.set()
+            process.kill()
+
+        timeout_timer = threading.Timer(timeout, terminate_on_timeout) if timeout else None
+        if timeout_timer:
+            timeout_timer.start()
+        try:
+            if process.stdout:
+                for line in process.stdout:
+                    key, _, raw_value = line.strip().partition("=")
+                    if (
+                        key in {"out_time_us", "out_time_ms"}
+                        and duration_seconds
+                        and progress_callback
+                    ):
+                        try:
+                            elapsed_seconds = int(raw_value) / 1_000_000
+                            progress_callback(
+                                min(0.99, elapsed_seconds / max(duration_seconds, 0.001))
+                            )
+                        except ValueError:
+                            pass
+                    elif key not in {"progress", "bitrate", "speed", "fps"}:
+                        output_lines.append(line.strip())
+                        output_lines = output_lines[-20:]
+            return_code = process.wait()
+        finally:
+            if timeout_timer:
+                timeout_timer.cancel()
+
+        if timed_out.is_set():
+            raise TimeoutError(f"音频提取超时（{timeout} 秒）")
+
+        if return_code != 0:
+            error_msg = "\n".join(output_lines).strip() or "ffmpeg failed"
             logger.error(f"Audio extraction failed: {error_msg}")
             raise RuntimeError(f"Audio extraction failed: {error_msg}")
 
+        if progress_callback:
+            progress_callback(1.0)
+
         return str(audio_path)
 
-    def transcribe(self, audio_path: str, language: str | None = None) -> list[TranscriptionSegment]:
+    def transcribe(
+        self,
+        audio_path: str,
+        language: str | None = None,
+        progress_callback: Callable[[str, float], None] | None = None,
+    ) -> list[TranscriptionSegment]:
         """语音识别，返回带时间戳的文字"""
+        if progress_callback:
+            progress_callback("loading_model", 0.25)
         model = self._load_model()
         config = self._get_runtime_asr_config()
         model_type = config["model"]
         hotwords = config.get("hotwords") or None
 
         logger.info(f"Transcribing audio: {audio_path}")
+        if progress_callback:
+            progress_callback("transcribing", 0.35)
 
         try:
             if model_type in ("funasr", "sensevoice"):
-                return self._transcribe_funasr(model, audio_path, hotwords)
+                result = self._transcribe_funasr(model, audio_path, hotwords)
             elif model_type == "whisper":
-                return self._transcribe_whisper(model, audio_path, language)
+                result = self._transcribe_whisper(model, audio_path, language)
             else:
                 raise ValueError(f"Unknown ASR model: {model_type}")
+            if progress_callback:
+                progress_callback("finalizing", 0.88)
+            return result
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
             raise

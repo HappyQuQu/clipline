@@ -100,6 +100,10 @@ if static_dir.exists():
             },
         )
 
+    @app.get("/clipline-logo.svg", include_in_schema=False)
+    def frontend_logo():
+        return FileResponse(static_dir / "clipline-logo.svg", media_type="image/svg+xml")
+
     @app.get("/favicon.ico")
     def favicon():
-        return Response(status_code=204)
+        return FileResponse(static_dir / "clipline-logo.svg", media_type="image/svg+xml")

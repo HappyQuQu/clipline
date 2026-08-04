@@ -275,9 +275,20 @@ export interface ASRModelInfo {
   downloaded: boolean
   size_bytes: number
   cache_path: string | null
+  download: ASRModelDownloadStatus
 }
 
 export interface ASRModelDownloadStatus {
   status: 'idle' | 'downloading' | 'completed' | 'failed'
+  stage: string
+  progress: number | null
+  bytesDownloaded: number
+  totalBytes: number | null
   error: string | null
+  startedAt: string | null
+  updatedAt: string | null
+}
+
+export interface ASRModelDownloadTask extends ASRModelDownloadStatus {
+  modelId: string
 }

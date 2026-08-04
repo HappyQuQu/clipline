@@ -1,5 +1,6 @@
 import type {
   ASRModelDownloadStatus,
+  ASRModelDownloadTask,
   ASRModelInfo,
   DirectoryNode,
   ExportJob,
@@ -210,6 +211,9 @@ export const api = {
 
   // ASR 模型管理
   getASRModels: () => request<{ models: ASRModelInfo[] }>('/api/settings/asr/models'),
+
+  getASRModelDownloads: () =>
+    request<{ items: ASRModelDownloadTask[] }>('/api/settings/asr/model-downloads'),
 
   downloadASRModel: (modelId: string) =>
     request<{ status: string }>(`/api/settings/asr/models/${encodeURIComponent(modelId)}/download`, {

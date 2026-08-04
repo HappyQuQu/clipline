@@ -5,27 +5,35 @@ on:
     branches:
       - main
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag to publish
+        required: true
+        default: edge
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: dockerhub-${{ github.ref }}
+  group: dockerhub-${{ github.ref }}-${{ inputs.image_tag || 'release' }}
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/clipline
-  DOCKERHUB_DESCRIPTION_TOKEN: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN }}
+  IMAGE_NAME: evanqu/clipline
 
 jobs:
   publish:
     name: Build and push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -42,7 +50,8 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
@@ -52,22 +61,19 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          sbom: true
+          provenance: true
 
       - name: Update Docker Hub overview
-        if: env.DOCKERHUB_DESCRIPTION_TOKEN != ''
         uses: peter-evans/dockerhub-description@e98e4d1628a5f3be2be7c231e50981aee98723ae
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_DESCRIPTION_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN || secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
-          readme-filepath: README.md
+          readme-filepath: README.dockerhub.md
           short-description: Xiaomi NAS backup video segment replay and export workbench.
-
-      - name: Skip Docker Hub overview sync
-        if: env.DOCKERHUB_DESCRIPTION_TOKEN == ''
-        run: |
-          echo "::notice title=Docker Hub overview skipped::Add the repository secret DOCKERHUB_DESCRIPTION_TOKEN with Docker Hub read/write/delete scope to sync README.md to Docker Hub Overview."

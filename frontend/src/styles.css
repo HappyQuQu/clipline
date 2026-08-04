@@ -206,6 +206,9 @@
 .redesignTaskProgress { min-width: 0; }
 .redesignTaskProgress > div { height: 4px; overflow: hidden; border-radius: 3px; background: #ebedf1; }
 .redesignTaskProgress > div span { display: block; height: 100%; border-radius: inherit; background: #2f6df6; }
+.redesignTaskProgress > div.indeterminate span { animation: task-progress-indeterminate 1.2s ease-in-out infinite; }
+@keyframes task-progress-indeterminate { from { transform: translateX(-110%); } to { transform: translateX(310%); } }
+@media (prefers-reduced-motion: reduce) { .redesignTaskProgress > div.indeterminate span { animation: none; } }
 .redesignTaskProgress em { display: block; overflow: hidden; margin-top: 5px; color: #8a929d; font-size: 8px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .redesignTaskProgress a { display: inline-flex; align-items: center; gap: 5px; color: #2f6df6; font-size: 9px; font-weight: 700; text-decoration: none; }
 .redesignTaskProgress .failed { display: block; overflow: hidden; color: #bb4a4a; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }

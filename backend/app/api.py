@@ -475,6 +475,13 @@ def list_asr_models() -> dict:
     return {"models": list_models()}
 
 
+@router.get("/settings/asr/model-downloads")
+def list_asr_model_downloads() -> dict:
+    """List model downloads for task-center polling without scanning cache sizes."""
+    from app.services.model_manager import list_download_statuses
+    return {"items": list_download_statuses()}
+
+
 @router.post("/settings/asr/models/{model_id}/download")
 def download_asr_model(model_id: str) -> dict:
     """触发模型下载"""

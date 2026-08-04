@@ -1,7 +1,7 @@
 import * as Switch from '@radix-ui/react-switch'
 import { Archive, CheckCircle, CircleNotch, DownloadSimple, Eye, Info, Trash } from '@phosphor-icons/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../../api'
 import type { ASRModelInfo } from '../../types'
 import { formatBytes } from '../../utils'
@@ -17,12 +17,16 @@ function isActiveModel(model: ASRModelInfo, engine?: string, size?: string) {
 
 function ModelRow({ model, active }: { model: ASRModelInfo; active: boolean }) {
   const queryClient = useQueryClient()
-  const [polling, setPolling] = useState(false)
   const [rowError, setRowError] = useState<string | null>(null)
 
   const downloadMutation = useMutation({
     mutationFn: () => api.downloadASRModel(model.id),
-    onSuccess: () => setPolling(true),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['asrModels'] }),
+        queryClient.invalidateQueries({ queryKey: ['asrModelDownloads'] }),
+      ])
+    },
     onError: (err: Error) => setRowError(err.message || '下载失败'),
   })
 
@@ -32,24 +36,9 @@ function ModelRow({ model, active }: { model: ASRModelInfo; active: boolean }) {
     onError: (err: Error) => setRowError(err.message || '删除失败'),
   })
 
-  // 轮询下载状态
-  useEffect(() => {
-    if (!polling) return
-    const interval = setInterval(async () => {
-      try {
-        const status = await api.getASRModelStatus(model.id)
-        if (status.status === 'completed' || status.status === 'failed') {
-          setPolling(false)
-          void queryClient.invalidateQueries({ queryKey: ['asrModels'] })
-        }
-      } catch {
-        // 忽略轮询错误
-      }
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [polling, model.id, queryClient])
-
-  const isDownloading = downloadMutation.isPending || polling
+  const isDownloading = downloadMutation.isPending || model.download.status === 'downloading'
+  const downloadCompleted = model.download.status === 'completed'
+  const downloadPercent = model.download.progress == null ? null : Math.round(model.download.progress * 100)
   const descriptions: Record<string, string> = {
     'funasr:medium': '中文场景推荐 · 含 VAD 与标点模型',
     'funasr:large': '更高准确率 · 需要更多内存',
@@ -64,8 +53,8 @@ function ModelRow({ model, active }: { model: ASRModelInfo; active: boolean }) {
   return (
     <div className="redesignModelRow">
       <div className="redesignModelIdentity"><span>{engineName.slice(0, 1)}</span><div><strong>{engineName} · {model.name}</strong><small>{descriptions[model.id] ?? model.size_label}</small></div></div>
-      <span className={`redesignModelStatus ${active ? 'active' : model.downloaded ? 'downloaded' : isDownloading ? 'downloading' : ''}`}>{active ? '使用中' : model.downloaded ? '已下载' : isDownloading ? '下载中' : '未下载'}</span>
-      <span className="redesignModelSize">{model.downloaded ? formatBytes(model.size_bytes) : `${model.size_label} 规格`}</span>
+      <span className={`redesignModelStatus ${active && (model.downloaded || downloadCompleted) ? 'active' : model.downloaded || downloadCompleted ? 'downloaded' : isDownloading ? 'downloading' : ''}`}>{isDownloading ? `下载中${downloadPercent == null ? '' : ` ${downloadPercent}%`}` : active && (model.downloaded || downloadCompleted) ? '使用中' : model.downloaded || downloadCompleted ? '已下载' : model.download.status === 'failed' ? '下载失败' : '未下载'}</span>
+      <span className="redesignModelSize">{model.downloaded ? formatBytes(model.size_bytes) : (isDownloading || downloadCompleted) && model.download.bytesDownloaded ? `${formatBytes(model.download.bytesDownloaded)}${model.download.totalBytes ? ` / ${formatBytes(model.download.totalBytes)}` : ''}` : `${model.size_label} 规格`}</span>
       <div>
         {model.downloaded ? (
           <button
@@ -89,8 +78,8 @@ function ModelRow({ model, active }: { model: ASRModelInfo; active: boolean }) {
           </button>
         )}
       </div>
-      {rowError && (
-        <div className="settingsError redesignModelError">{rowError}</div>
+      {(rowError || model.download.error) && (
+        <div className="settingsError redesignModelError">{rowError || model.download.error}</div>
       )}
     </div>
   )
@@ -107,8 +96,22 @@ export function ASRTab({ mode = 'settings' }: { mode?: 'settings' | 'models' }) 
     queryFn: () => api.getASRModels(),
     refetchInterval: 10000,
   })
+  const downloadsQuery = useQuery({
+    queryKey: ['asrModelDownloads'],
+    queryFn: () => api.getASRModelDownloads(),
+    refetchInterval: 2000,
+  })
 
-  const allModels = modelsQuery.data?.models ?? []
+  const downloadByModel = new Map((downloadsQuery.data?.items ?? []).map((item) => [item.modelId, item]))
+  const allModels = (modelsQuery.data?.models ?? []).map((model) => {
+    const download = downloadByModel.get(model.id) ?? model.download
+    return {
+      ...model,
+      downloaded: model.downloaded || download.status === 'completed',
+      size_bytes: model.size_bytes || download.bytesDownloaded,
+      download,
+    }
+  })
   const displayModels = allModels.filter((model) => modelFilter === 'all' || (modelFilter === 'downloaded' ? model.downloaded : !model.downloaded))
   const downloadedModels = allModels.filter((model) => model.downloaded)
   const downloadedBytes = downloadedModels.reduce((total, model) => total + model.size_bytes, 0)

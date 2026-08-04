@@ -195,7 +195,18 @@ def run_transcription_job(job_id: str) -> None:
         # 提取音频
         asr_service = get_asr_service()
         timeout_seconds = int(get_effective("asr_timeout_seconds", 600))
-        audio_path = asr_service.extract_audio(str(video_path), timeout=timeout_seconds)
+        def update_audio_progress(value: float) -> None:
+            job.stage = "extracting_audio"
+            job.progress = 0.05 + min(1.0, max(0.0, value)) * 0.15
+            job.updated_at = now_iso()
+            db.commit()
+
+        audio_path = asr_service.extract_audio(
+            str(video_path),
+            timeout=timeout_seconds,
+            duration_seconds=float(segment.duration_seconds or 0),
+            progress_callback=update_audio_progress,
+        )
 
         # 更新进度：音频提取完成，开始识别
         job.stage = "transcribing"
@@ -204,7 +215,17 @@ def run_transcription_job(job_id: str) -> None:
         db.commit()
 
         # 执行识别
-        asr_segments = asr_service.transcribe(audio_path, language=language)
+        def update_transcription_progress(stage: str, value: float) -> None:
+            job.stage = stage
+            job.progress = value
+            job.updated_at = now_iso()
+            db.commit()
+
+        asr_segments = asr_service.transcribe(
+            audio_path,
+            language=language,
+            progress_callback=update_transcription_progress,
+        )
 
         # 更新进度：识别完成，开始保存
         job.stage = "saving"

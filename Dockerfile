@@ -24,8 +24,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY backend/pyproject.toml backend/README.md /tmp/clipline-backend/
+COPY docker/backend-package-stub/app /tmp/clipline-backend/app
+RUN set -eu; \
+    pip_args="--no-cache-dir --index-url ${PIP_INDEX_URL}"; \
+    if [ -n "${PIP_TRUSTED_HOST}" ]; then \
+        pip_args="${pip_args} --trusted-host ${PIP_TRUSTED_HOST}"; \
+    fi; \
+    pip install ${pip_args} '/tmp/clipline-backend[asr,vision]'; \
+    rm -rf /tmp/clipline-backend
 COPY backend /app/backend
-RUN pip install --no-cache-dir --index-url ${PIP_INDEX_URL} --trusted-host ${PIP_TRUSTED_HOST} /app/backend[asr,vision]
 RUN cp -R /app/backend/app /app/app
 COPY --from=frontend-build /src/frontend/dist /app/static
 

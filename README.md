@@ -1,118 +1,104 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/assets/clipline-logo.svg" width="112" alt="Clipline logo" />
-</p>
-
-<h1 align="center">Clipline</h1>
+# Clipline
 
 <p align="center">
-  <strong>小米 NAS 备份视频片段的扫描、回放、时间线定位和区间导出工作台。</strong>
+  <a href="README.zh-CN.md">简体中文</a> · <strong>English</strong>
 </p>
 
 <p align="center">
-  <a href="#快速启动">快速启动</a>
-  ·
-  <a href="#小米-nas-目录怎么挂载">小米 NAS 挂载</a>
-  ·
-  <a href="#界面预览">界面预览</a>
-  ·
-  <a href="#导出模式">导出模式</a>
-  ·
-  <a href="#自动发布">自动发布</a>
-  ·
-  <a href="#本地开发">本地开发</a>
+  <img src="docs/assets/clipline-logo.svg" width="112" alt="Clipline logo">
 </p>
 
 <p align="center">
-  <img alt="Docker Hub" src="https://img.shields.io/badge/Docker%20Hub-evanqu%2Fclipline-2496ED?style=flat-square&logo=docker&logoColor=white" />
-  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-backend-009688?style=flat-square&logo=fastapi&logoColor=white" />
-  <img alt="React" src="https://img.shields.io/badge/React-frontend-61DAFB?style=flat-square&logo=react&logoColor=0F172A" />
-  <img alt="FFmpeg" src="https://img.shields.io/badge/FFmpeg-media-22C55E?style=flat-square&logo=ffmpeg&logoColor=white" />
+  <strong>A timeline workspace for scanning, replaying, searching, and exporting video segments backed up to a Xiaomi NAS.</strong>
 </p>
 
----
+<p align="center">
+  <a href="https://hub.docker.com/r/evanqu/clipline"><img alt="Docker Hub" src="https://img.shields.io/badge/docker-evanqu%2Fclipline-2496ED?logo=docker&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <img alt="Platforms: Linux amd64 and arm64" src="https://img.shields.io/badge/platform-linux%2Famd64%20%7C%20linux%2Farm64-lightgrey.svg">
+</p>
 
-Clipline 用来管理小米 NAS、家庭 NAS 或本地硬盘里持续备份的视频片段。它适合行车记录仪、监控摄像头、停车监控、执法记录仪等按时间切片保存的视频目录：挂载目录后，Clipline 会扫描片段、建立索引、生成缩略图，并提供统一的录像回放、时间线定位、片段库浏览和后台导出。
+Clipline organizes the continuously growing video segments stored on a Xiaomi NAS, home NAS, or local disk. It is designed for dashcams, surveillance cameras, parking monitors, body cameras, and other devices that save recordings as short time-based files.
 
-## 适合什么场景
+Mount the recording directory and Clipline will scan the segments, build an index, generate thumbnails, and provide one place for replay, timeline navigation, full-text transcript search, and background export.
 
-| 场景 | Clipline 做什么 |
+## Preview
+
+| Playback and timeline | Range export |
 | --- | --- |
-| 小米 NAS 自动备份了一堆短视频 | 按录像源扫描入库，统一浏览和检索 |
-| 行车记录仪按 1 分钟/3 分钟切片 | 用时间线连续查看，不用一个文件一个文件点 |
-| 想截取某一段证据视频 | 在时间线上拖动区间，后台导出 |
-| NAS 目录长期增长 | 定时扫描新片段，跳过仍在写入的文件 |
-| 多个备份目录 | 每个目录作为一个录像源独立管理 |
+| ![Clipline playback workspace](docs/screenshots/playback.png) | ![Clipline export range](docs/screenshots/export-range.png) |
+| Segment library | Recording sources |
+| ![Clipline segment library](docs/screenshots/clips.png) | ![Clipline recording sources](docs/screenshots/sources.png) |
 
-## 快速启动
+## Highlights
 
-推荐直接使用 Docker Hub 镜像：
+- Manage multiple NAS or local recording directories as independent sources.
+- Scan new segments on a schedule while skipping files that are still being written.
+- Browse recordings through a synchronized player and timeline.
+- Generate thumbnails for quick recognition in the segment library.
+- Export a selected time range in fast or precise mode without interrupting playback.
+- Transcribe speech, search conversations, jump to matching timestamps, and export SRT or TXT subtitles.
+- Track export, transcription, vision, and model-download progress from one task center.
+- Run the React frontend, FastAPI backend, SQLite, FFmpeg, and media tooling in one container.
 
-```powershell
-docker pull evanqu/clipline:latest
-```
+## Quick Start
 
-### 1. 准备两个目录
+Clipline requires Docker on Linux `amd64` or `arm64`. Prepare one writable directory for application data and one recording directory that can be mounted read-only.
 
-Clipline 需要两个挂载：
-
-| 用途 | 宿主机目录示例 | 容器目录 |
-| --- | --- | --- |
-| Clipline 数据库、缩略图、导出文件 | `D:\clipline\data` | `/app/data` |
-| 小米 NAS 备份视频目录 | `Z:\XiaomiNAS\CameraBackup` | `/recordings/xiaomi-nas` |
-
-如果你的小米 NAS 是 SMB 共享，建议先在 Windows 里映射成盘符，比如 `Z:`，再给 Docker Desktop 挂载。容器内统一使用 `/recordings/...` 这种 Linux 路径。
-
-### 2. 直接运行
-
-把下面命令里的 `D:\clipline\data` 和 `Z:\XiaomiNAS\CameraBackup` 改成你自己的路径：
-
-```powershell
-docker run -d --name clipline --restart unless-stopped `
-  -p 8080:8080 `
-  -v "D:\clipline\data:/app/data" `
-  -v "Z:\XiaomiNAS\CameraBackup:/recordings/xiaomi-nas:ro" `
-  -e TZ=Asia/Shanghai `
+```bash
+docker run -d \
+  --name clipline \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v /path/to/clipline-data:/app/data \
+  -v /path/to/recordings:/recordings/xiaomi-nas:ro \
+  -e TZ=Asia/Shanghai \
   evanqu/clipline:latest
 ```
 
-打开：
-
-```text
-http://127.0.0.1:8080
-```
-
-### 3. 在页面里添加录像源
-
-进入“录像源”页面，点击“添加录像源”，填：
-
-```text
-名称：小米NAS备份
-路径：/recordings/xiaomi-nas
-```
-
-保存后点击扫描。扫描完成后，回到“录像回放”选择这个源即可浏览视频片段。
-
-## 小米 NAS 目录怎么挂载
-
-### Windows + Docker Desktop
-
-1. 在 Windows 文件资源管理器中打开小米 NAS 共享目录。
-2. 右键“映射网络驱动器”，映射成 `Z:` 这类盘符。
-3. Docker 运行时把这个盘符挂载进容器：
-
-```powershell
--v "Z:\XiaomiNAS\CameraBackup:/recordings/xiaomi-nas:ro"
-```
-
-页面里添加的录像源路径是容器路径：
+Open `http://<server-address>:8080`, go to **Recording Sources**, and add the container path:
 
 ```text
 /recordings/xiaomi-nas
 ```
 
-### Linux / NAS 主机
+Start a scan, then select the source from the playback workspace when indexing finishes.
 
-如果你在 Linux 或 NAS 主机上运行 Docker，可以直接挂载本机目录：
+## Docker Compose
+
+Create a `compose.yaml` file:
+
+```yaml
+services:
+  clipline:
+    image: evanqu/clipline:latest
+    container_name: clipline
+    restart: unless-stopped
+    ports:
+      - "${CLIPLINE_HTTP_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      CLIPLINE_RECORDINGS_ROOT: /recordings
+      CLIPLINE_SKIP_RECENT_SECONDS: ${CLIPLINE_SKIP_RECENT_SECONDS:-30}
+      CLIPLINE_MAX_EXPORT_MINUTES: ${CLIPLINE_MAX_EXPORT_MINUTES:-30}
+    volumes:
+      - "${CLIPLINE_DATA_HOST:-./data}:/app/data"
+      - "${CLIPLINE_RECORDINGS_HOST:-./recordings}:/recordings/xiaomi-nas:ro"
+```
+
+Start the service:
+
+```bash
+docker compose up -d
+```
+
+The repository also includes an editable [Docker Compose configuration](docker-compose.yml) for local source builds.
+
+## Mounting a Xiaomi NAS Directory
+
+### Linux or a NAS host
+
+Mount the host directory directly:
 
 ```bash
 docker run -d --name clipline --restart unless-stopped \
@@ -123,132 +109,60 @@ docker run -d --name clipline --restart unless-stopped \
   evanqu/clipline:latest
 ```
 
-## Docker Compose
+### Windows with Docker Desktop
 
-如果你用仓库里的 `docker-compose.yml`，推荐用环境变量指定路径：
+Map the SMB share to a drive letter such as `Z:`, then mount that path into the container:
 
 ```powershell
-$env:CLIPLINE_DATA_HOST = "D:\clipline\data"
-$env:CLIPLINE_RECORDINGS_HOST = "Z:\XiaomiNAS\CameraBackup"
-$env:CLIPLINE_HTTP_PORT = "8080"
-docker compose up -d
+docker run -d --name clipline --restart unless-stopped `
+  -p 8080:8080 `
+  -v "D:\clipline\data:/app/data" `
+  -v "Z:\XiaomiNAS\CameraBackup:/recordings/xiaomi-nas:ro" `
+  -e TZ=Asia/Shanghai `
+  evanqu/clipline:latest
 ```
 
-等价的完整配置如下：
+Paths configured in the UI are always container paths. Keep source recordings mounted read-only; Clipline stores its database, thumbnails, exports, playback proxies, and model cache under `/app/data`.
 
-```yaml
-services:
-  clipline:
-    image: evanqu/clipline:latest
-    container_name: clipline
-    ports:
-      - "${CLIPLINE_HTTP_PORT:-8080}:8080"
-    volumes:
-      - "${CLIPLINE_DATA_HOST:-./data}:/app/data"
-      - "${CLIPLINE_RECORDINGS_HOST:-./recordings}:/recordings/xiaomi-nas:ro"
-    environment:
-      - TZ=${TZ:-Asia/Shanghai}
-      - CLIPLINE_RECORDINGS_ROOT=/recordings
-      - CLIPLINE_SKIP_RECENT_SECONDS=${CLIPLINE_SKIP_RECENT_SECONDS:-30}
-      - CLIPLINE_MAX_EXPORT_MINUTES=${CLIPLINE_MAX_EXPORT_MINUTES:-30}
-    restart: unless-stopped
-```
+## Export Modes
 
-如果你要从源码构建，把 `image: evanqu/clipline:latest` 换成：
-
-```yaml
-build: .
-```
-
-## 界面预览
-
-正式界面正在按 [Full Redesign 对齐与开发方案](docs/FULL_REDESIGN_ALIGNMENT.md) 收敛，具体执行项见 [Full Redesign 开发任务清单](docs/FULL_REDESIGN_TASKS.md)。页面结构、文案、视觉 token 和交互以 `frontend/prototypes/clipline-full-redesign` 为开发与验收基准；下方截图仅用于说明当前业务能力。
-
-<table>
-  <tr>
-    <td width="50%">
-      <strong>录像回放</strong><br />
-      视频和时间线在同一工作区，选择片段后自动定位到对应时间段。
-    </td>
-    <td width="50%">
-      <strong>时间线导出</strong><br />
-      点击导出后显示滑块，拖动左右把手选择区间，再确认创建任务。
-    </td>
-  </tr>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/playback.png" alt="录像回放界面" /></td>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/export-range.png" alt="时间线导出区间" /></td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <strong>片段库</strong><br />
-      按录像时间倒序展示缩略图，适合快速筛选和切换片段。
-    </td>
-    <td width="50%">
-      <strong>录像源管理</strong><br />
-      管理目录、扫描状态、定时扫描策略和扫描进度。
-    </td>
-  </tr>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/clips.png" alt="片段库" /></td>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/sources.png" alt="录像源管理" /></td>
-  </tr>
-</table>
-
-## 核心能力
-
-| 能力 | 说明 |
-| --- | --- |
-| 小米 NAS 备份目录管理 | 将 NAS 备份目录挂载为录像源，统一扫描和浏览。 |
-| 自动扫描 | 使用 FFmpeg / ffprobe 读取视频元数据，保存片段索引。 |
-| 缩略图索引 | 为片段生成缩略图，片段库可快速识别内容。 |
-| 同步时间线 | 视频播放时间和时间线光标同步，选择片段后自动缩放定位。 |
-| 区间导出 | 在时间线上通过滑块选择范围，支持快速和精准两种模式。 |
-| 后台任务 | 确认导出后创建任务，完成后提示下载，不打断当前回放页面。 |
-| 状态与日志 | 查看系统状态、扫描任务、导出任务和错误信息。 |
-| 语音识别 | 识别视频中的对话内容，支持全文检索和字幕导出。 |
-| Docker 优先 | 前后端打包到同一个镜像，适合 NAS 或家庭服务器部署。 |
-
-## 使用流程
-
-```text
-挂载小米 NAS 备份目录 -> 添加录像源 -> 扫描入库 -> 选择片段 -> 时间线定位 -> 选择导出区间 -> 创建导出任务 -> 下载结果
-```
-
-1. 启动 Docker 服务。
-2. 在”录像源”中添加容器内的视频目录。
-3. 等待扫描完成，片段进入索引。
-4. 在”录像回放”中选择源和片段。
-5. 使用时间线定位当前播放点，或切换上一个、下一个事件。
-6. 点击”导出”显示导出区间滑块。
-7. 拖动左右滑块选择范围。
-8. 选择”快速”或”精准”模式。
-9. 点击”确认导出”创建后台导出任务。
-10. 导出完成后根据提示下载文件，或进入”导出任务”查看历史。
-
-### 语音识别使用流程
-
-```text
-触发识别 -> 等待完成 -> 搜索对话 -> 点击跳转 -> 导出字幕
-```
-
-1. 在视频播放器中点击 🔍 按钮触发语音识别。
-2. 或在片段库中批量选择后点击”批量识别”。
-3. 等待识别任务完成（可在日志页面查看进度）。
-4. 在顶部搜索框输入关键词进行搜索。
-5. 点击搜索结果跳转到对应时间点。
-6. 可导出 SRT 或 TXT 格式的字幕文件。
-
-## 导出模式
-
-| 模式 | 说明 | 适用场景 |
+| Mode | Behavior | Best for |
 | --- | --- | --- |
-| 快速 | 尽量不重新编码，导出速度更快，边界可能贴近关键帧。 | 临时取证、快速分享、长片段导出 |
-| 精准 | 重新编码，起止时间更准确，但速度更慢。 | 对起止点要求更高的短片段 |
+| Fast | Avoids re-encoding where possible; boundaries may align to nearby keyframes. | Quick evidence capture, sharing, and longer ranges |
+| Precise | Re-encodes for more accurate start and end boundaries. | Short ranges that require exact timing |
 
-## 自动发布
+## Configuration
 
-仓库内置 GitHub Actions 流程，推送到 `main` 或推送 `v*.*.*` 标签时会自动构建并发布 Docker Hub 镜像：
+Clipline reads environment variables with the `CLIPLINE_` prefix.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CLIPLINE_PORT` | `8080` | Backend listening port |
+| `CLIPLINE_DATA` | `/app/data` | Application data directory |
+| `CLIPLINE_DB` | `/app/data/clipline.db` | SQLite database path |
+| `CLIPLINE_RECORDINGS_ROOT` | `/recordings` | Allowed recording root |
+| `CLIPLINE_RECORDINGS_ROOTS` | Empty | Comma-separated recording roots |
+| `CLIPLINE_SCAN_INTERVAL_SECONDS` | `300` | Scheduler scan interval |
+| `CLIPLINE_SKIP_RECENT_SECONDS` | `30` | Ignore recently modified, potentially incomplete files |
+| `CLIPLINE_MAX_EXPORT_MINUTES` | `30` | Maximum duration of one export |
+| `CLIPLINE_MAX_CONCURRENT_EXPORTS` | `1` | Maximum concurrent exports |
+| `CLIPLINE_EXPORT_TTL_HOURS` | `24` | Export retention period |
+| `CLIPLINE_MODEL_CACHE_DIR` | `/app/data/models` | Speech and vision model cache |
+| `CLIPLINE_ASR_MODEL` | `funasr` | ASR engine: `funasr`, `sensevoice`, or `whisper` |
+| `CLIPLINE_ASR_MODEL_SIZE` | `base` | ASR model size |
+| `CLIPLINE_ASR_DEVICE` | `auto` | Compute device: `auto`, `cpu`, `cuda`, or `mps` |
+| `CLIPLINE_ASR_LANGUAGE` | `zh` | Recognition language: `zh`, `en`, or `mixed` |
+| `CLIPLINE_ASR_AUTO_TRANSCRIBE` | `false` | Automatically transcribe new recordings |
+| `CLIPLINE_PLAYBACK_PROXY_MAX_WIDTH` | `1920` | Maximum width of browser-compatible playback proxies |
+| `CLIPLINE_PLAYBACK_PROXY_TIMEOUT_SECONDS` | `1800` | Initial playback proxy generation timeout |
+
+See the [Simplified Chinese README](README.zh-CN.md#配置项) for the complete configuration table and model cache layout.
+
+## Automatic Docker Hub Publishing
+
+The [GitHub Actions workflow](.github/workflows/dockerhub.yml) builds and pushes `linux/amd64` and `linux/arm64` images when `main` or a `v*.*.*` tag is pushed. It also synchronizes [README.dockerhub.md](README.dockerhub.md) to the Docker Hub Overview.
+
+Published tags include:
 
 ```text
 evanqu/clipline:latest
@@ -256,176 +170,68 @@ evanqu/clipline:sha-<commit>
 evanqu/clipline:<version>
 ```
 
-需要在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 中配置：
+Configure these GitHub Actions secrets:
 
-| Secret | 用途 | 必填 |
+| Secret | Required | Purpose |
 | --- | --- | --- |
-| `DOCKERHUB_USERNAME` | Docker Hub 用户名，例如 `evanqu` | 是 |
-| `DOCKERHUB_TOKEN` | Docker Hub Access Token，用于登录并推送镜像 | 是 |
-| `DOCKERHUB_DESCRIPTION_TOKEN` | 用于把 GitHub `README.md` 同步到 Docker Hub Overview | 否 |
+| `DOCKERHUB_USERNAME` | Yes | Docker Hub account name |
+| `DOCKERHUB_TOKEN` | Yes | Push images and, as a fallback, update the Overview |
+| `DOCKERHUB_DESCRIPTION_TOKEN` | No | Optional dedicated token for Overview updates |
 
-`DOCKERHUB_DESCRIPTION_TOKEN` 建议单独创建，只用于 Overview 同步。没有配置它时，Actions 仍会正常发布镜像，并跳过 Docker Hub Overview 更新，避免因为文档同步权限不足导致整个发布失败。
+The workflow can also be run manually with a custom image tag; the default manual tag is `edge`.
 
-如果你希望 Docker Hub 页面也显示这份 README，需要给 `DOCKERHUB_DESCRIPTION_TOKEN` 使用可以更新仓库描述的 Docker Hub Access Token。配置完成后重新运行一次发布流程，Docker Hub 的 Overview 会和 GitHub README 保持一致。
+## Local Development
 
-## 配置项
+### Backend
 
-服务通过 `CLIPLINE_` 前缀读取环境变量。
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `CLIPLINE_PORT` | `8080` | 后端监听端口 |
-| `CLIPLINE_DATA` | `/app/data` | 数据目录 |
-| `CLIPLINE_DB` | `/app/data/clipline.db` | SQLite 数据库路径 |
-| `CLIPLINE_RECORDINGS_ROOT` | `/recordings` | 可浏览的录像根目录 |
-| `CLIPLINE_RECORDINGS_ROOTS` | 空 | 多个录像根目录，使用英文逗号分隔 |
-| `CLIPLINE_SCAN_INTERVAL_SECONDS` | `300` | 调度器扫描间隔 |
-| `CLIPLINE_EXPORT_TTL_HOURS` | `24` | 导出文件保留时间 |
-| `CLIPLINE_MAX_EXPORT_MINUTES` | `30` | 单次最大导出分钟数 |
-| `CLIPLINE_MAX_CONCURRENT_EXPORTS` | `1` | 最大并发导出数 |
-| `CLIPLINE_THUMBNAIL_MODE` | `middle` | 缩略图截取策略 |
-| `CLIPLINE_TIMEZONE` | `Asia/Shanghai` | 时间显示和扫描时区 |
-| `CLIPLINE_SKIP_RECENT_SECONDS` | `30` | 扫描时跳过最近写入的文件，避免读取未写完片段 |
-| `CLIPLINE_LOG_LEVEL` | `INFO` | 日志级别 |
-| `CLIPLINE_LOG_FILE` | `/app/data/logs/clipline.log` | 日志文件路径 |
-| `CLIPLINE_MODEL_CACHE_DIR` | `/app/data/models` | 模型缓存目录；建议和 `CLIPLINE_DATA` 一起映射到 NAS |
-| `CLIPLINE_PLAYBACK_PROXY_MAX_WIDTH` | `1920` | HEVC/Opus 浏览器播放代理的最大视频宽度 |
-| `CLIPLINE_PLAYBACK_PROXY_TIMEOUT_SECONDS` | `1800` | 首次生成浏览器播放代理的超时时间（秒） |
-| `CLIPLINE_ASR_MODEL` | `funasr` | ASR 模型选择：`funasr` / `sensevoice` / `whisper` |
-| `CLIPLINE_ASR_MODEL_SIZE` | `base` | 模型大小：`tiny` / `base` / `medium` / `large` |
-| `CLIPLINE_ASR_DEVICE` | `auto` | 运行设备：`auto` / `cpu` / `cuda` / `mps` |
-| `CLIPLINE_ASR_LANGUAGE` | `zh` | 识别语言：`zh` / `en` / `mixed` |
-| `CLIPLINE_ASR_AUTO_TRANSCRIBE` | `false` | 自动识别新视频 |
-| `CLIPLINE_ASR_HOTWORDS` | 空 | 热词配置，逗号分隔 |
-
-模型、数据库、导出缓存、缩略图和浏览器播放代理等运行数据默认都在 `CLIPLINE_DATA` 下。HEVC/Opus 录像首次播放时会在 `/app/data/playback-proxies` 生成 H.264/AAC MP4 缓存，不会修改只读挂载的源录像；同一源文件后续播放复用缓存。模型目录结构如下，下载困难时可以提前把模型文件放到对应目录后再启动：
-
-- FunASR / SenseVoice: `/app/data/models/modelscope/hub/models/...`
-- Whisper: `/app/data/models/whisper/*.pt`
-- 视觉识别 YOLO ONNX: `/app/data/models/vision/yolov8n.onnx`
-- Hugging Face 辅助缓存: `/app/data/models/huggingface`
-- Torch 缓存: `/app/data/models/torch`
-
-## 本地开发
-
-### 后端
-
-```powershell
+```bash
 cd backend
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
-
-# 如果需要语音识别功能，安装 ASR 依赖
-pip install -e ".[asr]"
-
-# 如果需要视频视觉识别功能，安装 ONNX 视觉依赖
-pip install -e ".[vision]"
-
-$env:CLIPLINE_DATA = "../data"
-$env:CLIPLINE_DB = "../data/clipline.db"
-$env:CLIPLINE_RECORDINGS_ROOT = "C:/Users/EvanQ/Desktop/200video"
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8080
 ```
 
-### 前端
+Install `.[asr]` for speech recognition or `.[vision]` for ONNX-based video analysis.
 
-```powershell
+### Frontend
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-前端开发服务器默认运行在：
+The Vite development server runs at `http://127.0.0.1:5173` and proxies `/api` to `http://127.0.0.1:8080` by default. Set `VITE_API_TARGET` to use another backend address.
 
-```text
-http://127.0.0.1:5173
-```
-
-`frontend/vite.config.ts` 会把 `/api` 代理到 `VITE_API_TARGET`，默认是：
-
-```text
-http://127.0.0.1:8080
-```
-
-需要改后端地址时：
-
-```powershell
-$env:VITE_API_TARGET = "http://127.0.0.1:28080"
-npm run dev
-```
-
-## 构建验证
-
-```powershell
-cd frontend
-npm run build
-
-cd ..
-docker build -t clipline-clipline:latest .
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/system/status
-```
-
-## API 概览
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/health` | 健康检查 |
-| `GET` | `/api/system/status` | 系统状态、数据库、数据目录和统计信息 |
-| `GET` | `/api/sources` | 录像源列表 |
-| `POST` | `/api/sources` | 创建录像源 |
-| `PATCH` | `/api/sources/{source_id}` | 更新录像源 |
-| `POST` | `/api/sources/{source_id}/scan` | 手动触发扫描 |
-| `GET` | `/api/recording-directories` | 浏览容器内录像目录 |
-| `GET` | `/api/scan-jobs` | 扫描任务列表 |
-| `GET` | `/api/timeline` | 指定源和日期的时间线 |
-| `GET` | `/api/segments` | 片段列表 |
-| `GET` | `/api/segments/{segment_id}/stream` | 视频流 |
-| `GET` | `/api/segments/{segment_id}/thumbnail` | 片段缩略图 |
-| `POST` | `/api/exports` | 创建导出任务 |
-| `GET` | `/api/exports` | 导出任务列表 |
-| `GET` | `/api/exports/{export_id}/download` | 下载导出文件 |
-| `POST` | `/api/segments/{segment_id}/transcribe` | 触发语音识别 |
-| `GET` | `/api/segments/{segment_id}/transcription` | 获取识别结果 |
-| `GET` | `/api/segments/{segment_id}/transcription/export` | 导出字幕（SRT/TXT） |
-| `GET` | `/api/search` | 全文检索 |
-
-更完整的接口和数据结构说明见 [docs/API_AND_DB.md](https://github.com/HappyQuQu/clipline/blob/main/docs/API_AND_DB.md)。
-
-## 项目结构
+## Project Layout
 
 ```text
 clipline/
-├─ backend/                 # FastAPI 后端、扫描、导出、调度、数据库模型
-├─ frontend/                # React + Vite 前端
-├─ docs/                    # 产品、技术、接口和截图文档
-│  ├─ assets/               # README 和品牌素材
-│  └─ screenshots/          # README 截图
-├─ data/                    # 本地数据库、缩略图、导出文件和日志
-├─ Dockerfile               # 前端构建 + 后端运行的一体化镜像
-└─ docker-compose.yml       # Docker Compose 示例
+├── backend/             # FastAPI API, scanning, export, scheduling, and database
+├── frontend/            # React and Vite frontend
+├── docs/                # Product, technical, API, and screenshot documentation
+├── Dockerfile           # Multi-stage frontend and backend image
+└── docker-compose.yml   # Local Compose configuration
 ```
 
-## 技术栈
+## Technology
 
-| 层 | 技术 |
+| Layer | Technology |
 | --- | --- |
-| 前端 | React 19、Vite、TypeScript、TanStack Query、Radix UI、Lucide Icons |
-| 后端 | FastAPI、SQLAlchemy、SQLite、Pydantic Settings |
-| 媒体 | FFmpeg、ffprobe |
-| 语音识别 | FunASR、SenseVoice、Whisper（可选） |
-| 部署 | Docker 单容器，静态前端由 FastAPI 同进程托管 |
+| Frontend | React 19, Vite, TypeScript, TanStack Query, Radix UI |
+| Backend | FastAPI, SQLAlchemy, SQLite, Pydantic Settings |
+| Media | FFmpeg and ffprobe |
+| Speech recognition | FunASR, SenseVoice, and Whisper |
+| Deployment | Single Docker container with the SPA served by FastAPI |
 
-## 注意事项
+## Documentation and Support
 
-- Docker 中配置的是容器路径，不是 Windows 主机路径。
-- 小米 NAS / SMB 共享目录建议先映射为本机路径，再挂载给 Docker。
-- 录像目录建议只读挂载，避免服务误改原始文件。
-- 扫描会跳过最近写入的文件，避免索引未写完的视频片段。
-- 大文件导出会占用 CPU 和磁盘空间，建议根据机器性能调整并发数。
-- 如果页面没有加载片段，先确认已经选择录像源，并且该源扫描完成。
-- 语音识别功能需要安装额外的 ASR 依赖（`pip install -e ".[asr]"`）。
-- 首次使用语音识别时会自动下载模型文件，请确保网络连接正常。
-- 语音识别是 CPU/GPU 密集型任务，建议在系统空闲时运行。
-- 视频视觉识别功能需要安装额外的 ONNX 依赖（`pip install -e ".[vision]"`），模型文件放在 `/app/data/models/vision/yolov8n.onnx`。
-- 视觉识别默认按低频抽帧和单并发运行，适合 NAS 离线慢速处理，不建议全帧率实时分析。
+- [简体中文项目说明](README.zh-CN.md)
+- [API and database design](docs/API_AND_DB.md)
+- [Issue tracker](https://github.com/HappyQuQu/clipline/issues)
+- [License](LICENSE)
+
+---
+
+<p align="center"><strong>Turn scattered recording segments into a searchable, navigable, and exportable timeline.</strong></p>

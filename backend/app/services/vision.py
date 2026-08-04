@@ -181,6 +181,19 @@ def run_vision_job(job_id: str) -> None:
 
         labels = json.loads(job.labels_json)
         detector = get_vision_detector()
+        last_reported_progress = job.progress
+
+        def update_detection_progress(stage: str, value: float) -> None:
+            nonlocal last_reported_progress
+            value = min(0.89, max(job.progress, value))
+            if value - last_reported_progress < 0.01 and stage == job.stage:
+                return
+            job.stage = stage
+            job.progress = value
+            job.updated_at = now_iso()
+            db.commit()
+            last_reported_progress = value
+
         spans = detector.detect_video(
             video_path=video_path,
             labels=labels,
@@ -188,6 +201,7 @@ def run_vision_job(job_id: str) -> None:
             sample_interval_seconds=job.sample_interval_seconds,
             image_size=job.image_size,
             timeout=900,
+            progress_callback=update_detection_progress,
         )
 
         job.stage = "saving"

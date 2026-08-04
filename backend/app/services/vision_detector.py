@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.core.config import get_settings
 from app.core.settings_store import get_effective
@@ -96,6 +96,7 @@ class VisionDetector:
         sample_interval_seconds: float,
         image_size: int,
         timeout: int = 900,
+        progress_callback: Callable[[str, float], None] | None = None,
     ) -> list[DetectionSpan]:
         if not video_path.exists():
             raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -109,10 +110,14 @@ class VisionDetector:
 
         with tempfile.TemporaryDirectory(prefix="clipline_vision_") as tmp:
             frame_dir = Path(tmp)
+            if progress_callback:
+                progress_callback("extracting_frames", 0.12)
             self._extract_frames(video_path, frame_dir, sample_interval_seconds, timeout)
             frames = sorted(frame_dir.glob("frame_*.jpg"))
             if not frames:
                 return []
+            if progress_callback:
+                progress_callback("detecting", 0.30)
 
             raw: list[RawDetection] = []
             for index, frame in enumerate(frames):
@@ -126,6 +131,8 @@ class VisionDetector:
                         image_size,
                     )
                 )
+                if progress_callback:
+                    progress_callback("detecting", 0.30 + 0.58 * ((index + 1) / len(frames)))
             return merge_detections(raw, sample_interval_seconds)
 
     def _extract_frames(
