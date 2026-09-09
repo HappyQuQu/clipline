@@ -8026,3 +8026,263 @@ summary:focus-visible,
     transition-duration: .01ms !important;
   }
 }
+
+/* Playback workspace · focused command bar + theatre */
+.redesignPlaybackPage {
+  display: grid;
+  grid-template: auto minmax(0, 1fr) / minmax(0, 1fr);
+  min-height: 100%;
+  overflow: auto;
+  background: #f3f5f8;
+}
+
+.playbackCommandBar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 82px;
+  border-bottom: 1px solid #dfe3e9;
+  background: rgba(255, 255, 255, .96);
+  padding: 12px clamp(18px, 2.4vw, 36px);
+  box-shadow: 0 1px 0 rgba(20, 31, 48, .02);
+  backdrop-filter: blur(14px);
+}
+
+.playbackPageTitle {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 190px;
+}
+
+.playbackTitleIcon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: #e8f1ff;
+  color: #2563eb;
+}
+
+.playbackPageTitle h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 17px;
+  letter-spacing: -.2px;
+}
+
+.playbackPageTitle p {
+  overflow: hidden;
+  max-width: 210px;
+  margin: 3px 0 0;
+  color: #7a8493;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playbackCommandControls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.playbackCommandField {
+  display: grid;
+  gap: 4px;
+}
+
+.playbackCommandField > span,
+.playbackCommandBar .playbackSourceSelect > span {
+  display: block;
+  color: #7a8493;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.playbackCommandField select,
+.playbackCommandField input,
+.playbackCommandBar .playbackSourceSelect select {
+  width: auto;
+  height: 36px;
+  min-height: 36px;
+  border: 1px solid #d9dee6;
+  border-radius: 8px;
+  background: #fff;
+  color: #303846;
+  padding: 0 10px;
+  font-size: 11px;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.playbackCommandBar .playbackSourceSelect select { width: 168px; }
+.playbackCommandBar .playbackDateBlock input { width: 132px; }
+.playbackCommandBar .playbackRangeBlock select { width: 132px; }
+
+.playbackCommandBar .playbackScanButton,
+.playbackCommandBar .playbackManageLink {
+  min-height: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid #d9dee6;
+  border-radius: 8px;
+  background: #fff;
+  color: #4b5565;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+
+.playbackCommandBar .playbackScanButton:hover,
+.playbackCommandBar .playbackManageLink:hover {
+  border-color: #b9c7dc;
+  background: #f6f8fb;
+  color: #245fcd;
+}
+
+.playbackCommandBar .playbackContextAlert {
+  flex: 0 0 auto;
+  margin: 17px 0 0;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
+.playbackWorkspace {
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 24px clamp(18px, 2.4vw, 36px) 52px;
+  background: transparent;
+}
+
+.playbackViewerShell {
+  overflow: hidden;
+  border: 1px solid #242c38;
+  border-radius: 15px 15px 0 0;
+  background: #0b0f15;
+  box-shadow: 0 18px 45px rgba(19, 29, 44, .14);
+}
+
+.playbackViewerHeader {
+  display: flex;
+  min-height: 50px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  background: #111720;
+  padding: 0 16px;
+}
+
+.playbackViewerHeader span { color: #8793a4; }
+.playbackViewerHeader strong { color: #f1f5f9; }
+.playbackViewerHeader button { color: #9ca8b8; }
+.playbackViewerHeader button:hover { background: rgba(255,255,255,.08); color: #fff; }
+
+.prototypeViewer {
+  height: clamp(360px, 52vh, 650px);
+  min-height: 360px;
+  aspect-ratio: auto;
+  background: radial-gradient(circle at center, #171d26 0, #080b10 72%);
+}
+
+.prototypeViewer .viewerVideo { object-fit: contain; }
+
+.prototypePlayerControls {
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(15, 21, 29, .88);
+  box-shadow: 0 10px 30px rgba(0,0,0,.22);
+}
+
+.prototypeProgress { height: 4px; }
+.prototypeProgress span { background: #4f8cff; }
+
+.playbackTimelinePanel {
+  margin-top: 0;
+  border: 1px solid #dfe3e9;
+  border-top: 0;
+  border-radius: 0 0 15px 15px;
+  box-shadow: 0 12px 35px rgba(31, 44, 64, .07);
+}
+
+.playbackTimelineToolbar { min-height: 48px; }
+.playbackTimelineRuler { background: #fbfcfd; }
+.playbackTimelineTrack { height: 46px; }
+.playbackExportRow { min-height: 48px; }
+
+.playbackClipSection {
+  margin-top: 24px;
+  border: 1px solid #e0e4ea;
+  border-radius: 14px;
+  background: #fff;
+  padding: 18px;
+}
+
+.playbackClipHeader { margin-bottom: 14px; }
+.playbackClipHeader h2 { font-size: 15px; }
+.playbackClipCard { border-radius: 10px; transition: border-color .18s ease, box-shadow .18s ease; }
+.playbackTranscriptDetails { border-radius: 12px; }
+
+@media (max-width: 1120px) {
+  .playbackCommandBar { gap: 14px; }
+  .playbackPageTitle p { display: none; }
+  .playbackCommandBar .playbackManageLink { display: none; }
+  .playbackCommandBar .playbackSourceSelect select { width: 148px; }
+  .playbackCommandBar .playbackDateBlock input { width: 126px; }
+}
+
+@media (max-width: 900px) {
+  .playbackCommandBar {
+    position: static;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding-block: 12px;
+  }
+  .playbackPageTitle { min-width: 0; }
+  .playbackCommandControls {
+    width: 100%;
+    margin-left: 0;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .playbackCommandControls::-webkit-scrollbar { display: none; }
+  .playbackCommandField,
+  .playbackCommandBar .playbackScanButton { flex: 0 0 auto; }
+  .playbackCommandBar .playbackContextAlert { margin: 0; }
+  .prototypeViewer { height: clamp(320px, 56vw, 520px); min-height: 320px; }
+}
+
+@media (max-width: 660px) {
+  .playbackCommandBar { padding: 10px; }
+  .playbackPageTitle h1 { font-size: 15px; }
+  .playbackTitleIcon { width: 34px; height: 34px; }
+  .playbackCommandField > span,
+  .playbackCommandBar .playbackSourceSelect > span { display: none; }
+  .playbackCommandField select,
+  .playbackCommandField input,
+  .playbackCommandBar .playbackSourceSelect select,
+  .playbackCommandBar .playbackScanButton { min-height: 40px; height: 40px; }
+  .playbackCommandBar .playbackSourceSelect select { width: 142px; }
+  .playbackCommandBar .playbackDateBlock input { width: 128px; }
+  .playbackCommandBar .playbackRangeBlock select { width: 124px; }
+  .playbackWorkspace { padding: 10px 10px 22px; }
+  .playbackViewerShell { border-radius: 11px 11px 0 0; }
+  .playbackViewerHeader { display: flex; min-height: 44px; padding-inline: 10px; }
+  .playbackViewerHeader > div:first-child span { display: none; }
+  .playbackViewerHeader button { width: 38px; height: 38px; }
+  .prototypeViewer { height: min(56.25vw, 380px); min-height: 220px; margin-inline: 0; }
+  .prototypeViewerMeta { top: 10px; left: 10px; }
+  .playbackTimelinePanel { border-inline: 1px solid #dfe3e9; border-radius: 0 0 11px 11px; }
+  .playbackClipSection { margin-top: 14px; padding: 14px 12px; }
+}

@@ -192,7 +192,7 @@ input, select { font-family: inherit; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   border-right: 1px solid var(--border-primary);
 }
 
@@ -351,31 +351,34 @@ input, select { font-family: inherit; }
 /* ── Clip Dock ── */
 .clip-dock {
   background: var(--bg-secondary); border-top: 1px solid var(--border-primary);
-  display: flex; flex-direction: column; min-height: 0; height: 210px;
+  display: flex; flex-direction: column; min-height: 0; flex: 0 0 280px;
 }
 .dock-header {
   display: flex; align-items: center; justify-content: space-between; padding: 10px 24px 6px; flex-shrink: 0;
 }
-.dock-header h3 { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.dock-header h3 { font-size: 14px; font-weight: 700; color: var(--text-primary); }
 .dock-header p { font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
 
 .dock-grid {
-  flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px; padding: 4px 24px 12px; overflow-y: auto; align-content: start;
+  flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px; padding: 8px 24px 16px; overflow-y: auto; align-content: start;
 }
 
 .clip-card {
   border-radius: var(--radius-md); background: var(--bg-tertiary); border: 1px solid var(--border-primary);
   overflow: hidden; cursor: pointer; transition: all 0.25s var(--ease);
+  display: flex; flex-direction: column;
 }
 .clip-card:hover { border-color: var(--border-secondary); transform: translateY(-2px); }
 .clip-card.selected { border-color: var(--accent-blue); box-shadow: 0 0 0 1px var(--accent-blue), var(--shadow-glow); }
 .clip-poster { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
-.clip-poster img { width: 100%; height: 100%; object-fit: cover; }
-.clip-time-badge { position: absolute; left: 6px; top: 6px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.65); color: white; font-size: 10px; font-weight: 700; }
-.clip-duration-badge { position: absolute; right: 6px; bottom: 6px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.65); color: rgba(255,255,255,0.8); font-size: 10px; font-weight: 700; }
-.clip-info { padding: 6px 8px; }
-.clip-info-time { font-size: 11px; font-weight: 700; color: var(--text-primary); }
+.clip-poster img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s var(--ease); }
+.clip-card:hover .clip-poster img { transform: scale(1.05); }
+.clip-time-badge { position: absolute; left: 8px; top: 8px; padding: 3px 8px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.65); backdrop-filter: blur(8px); color: white; font-size: 11px; font-weight: 700; }
+.clip-duration-badge { position: absolute; right: 8px; bottom: 8px; padding: 3px 8px; border-radius: var(--radius-sm); background: rgba(0,0,0,0.65); backdrop-filter: blur(8px); color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 700; }
+.clip-info { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.clip-info-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.clip-info-meta { font-size: 10px; font-weight: 500; color: var(--text-tertiary); display: flex; justify-content: space-between; }
 
 /* ============================================
    RIGHT PANEL — Transcription Subtitles (代码同款)
@@ -481,6 +484,53 @@ input, select { font-family: inherit; }
 .transcript-item.active .transcript-text {
   color: #fff;
   font-weight: 600;
+}
+
+/* File Info Box in Right Panel */
+.file-info-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+.file-info-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.file-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.file-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.file-info-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.file-info-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.file-info-full {
+  grid-column: 1 / -1;
+  background: var(--bg-tertiary);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-primary);
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  word-break: break-all;
+  margin-top: 8px;
 }
 
 /* Toast */
@@ -632,12 +682,46 @@ input, select { font-family: inherit; }
     <aside class="transcript-panel" id="transcriptPanel">
       <div class="panel-header">
         <div class="panel-header-title">
-          <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-          语音识别对话 (ASR)
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          片段详情
         </div>
         <div class="panel-header-actions">
-          <button class="export-sub-btn" onclick="exportSub('srt')">导出 SRT</button>
-          <button class="export-sub-btn" onclick="exportSub('txt')">导出 TXT</button>
+          <button class="export-sub-btn" onclick="showToast('正在下载原文件...')">下载原文件</button>
+        </div>
+      </div>
+
+      <!-- File Info Section -->
+      <div class="file-info-section" id="fileInfoSection">
+        <div class="file-info-title">文件元数据</div>
+        <div class="file-info-grid">
+          <div class="file-info-item">
+            <span class="file-info-label">大小</span>
+            <span class="file-info-val" id="fileSize">--</span>
+          </div>
+          <div class="file-info-item">
+            <span class="file-info-label">分辨率</span>
+            <span class="file-info-val" id="fileRes">1920×1080</span>
+          </div>
+          <div class="file-info-item">
+            <span class="file-info-label">编码</span>
+            <span class="file-info-val" id="fileCodec">H.264 / AAC</span>
+          </div>
+          <div class="file-info-item">
+            <span class="file-info-label">时长</span>
+            <span class="file-info-val" id="fileDur">--</span>
+          </div>
+        </div>
+        <div class="file-info-full" id="filePath">/recordings/...</div>
+      </div>
+
+      <div class="panel-header" style="border-top: 1px solid var(--border-primary);">
+        <div class="panel-header-title">
+          <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+          语音识别 (ASR)
+        </div>
+        <div class="panel-header-actions">
+          <button class="export-sub-btn" onclick="exportSub('srt')">SRT</button>
+          <button class="export-sub-btn" onclick="exportSub('txt')">TXT</button>
         </div>
       </div>
 
@@ -658,9 +742,11 @@ const dialogues = [
 ];
 
 const segments = [
-  { id:1, start:'14:22:30', end:'14:24:00', dur:'1:30' },
-  { id:2, start:'14:24:00', end:'14:25:15', dur:'1:15' },
-  { id:3, start:'14:26:00', end:'14:27:30', dur:'1:30' }
+  { id:1, start:'14:22:30', end:'14:24:00', dur:'1m 30s', size:'42.5 MB', name:'clip_142230.mp4', path:'/recordings/front-door/2026-07-29/clip_142230.mp4' },
+  { id:2, start:'14:24:00', end:'14:25:15', dur:'1m 15s', size:'35.2 MB', name:'clip_142400.mp4', path:'/recordings/front-door/2026-07-29/clip_142400.mp4' },
+  { id:3, start:'14:26:00', end:'14:27:30', dur:'1m 30s', size:'41.8 MB', name:'clip_142600.mp4', path:'/recordings/front-door/2026-07-29/clip_142600.mp4' },
+  { id:4, start:'14:28:10', end:'14:30:00', dur:'1m 50s', size:'50.1 MB', name:'clip_142810.mp4', path:'/recordings/front-door/2026-07-29/clip_142810.mp4' },
+  { id:5, start:'14:35:00', end:'14:36:20', dur:'1m 20s', size:'38.4 MB', name:'clip_143500.mp4', path:'/recordings/front-door/2026-07-29/clip_143500.mp4' }
 ];
 
 let currentDialogueId = 1;
@@ -690,17 +776,28 @@ function jumpDialogue(id) {
   renderTranscripts();
 }
 
+function updateFileInfo() {
+  const seg = segments.find(x => x.id === selectedSegId) || segments[0];
+  document.getElementById('fileSize').textContent = seg.size;
+  document.getElementById('fileDur').textContent = seg.dur;
+  document.getElementById('filePath').textContent = seg.path;
+}
+
 function renderClips() {
   const grid = document.getElementById('clipGrid');
   grid.innerHTML = segments.map((seg, i) => `
-    <div class="clip-card${seg.id === selectedSegId ? ' selected' : ''}" onclick="selectedSegId=${seg.id};renderClips()">
+    <div class="clip-card${seg.id === selectedSegId ? ' selected' : ''}" onclick="selectedSegId=${seg.id};renderClips();updateFileInfo()">
       <div class="clip-poster">
         <img src="https://picsum.photos/seed/clip${seg.id}/300/170" alt="">
         <span class="clip-time-badge">${seg.start}</span>
         <span class="clip-duration-badge">${seg.dur}</span>
       </div>
       <div class="clip-info">
-        <div class="clip-info-time">7/29 ${seg.start}</div>
+        <span class="clip-info-title">${seg.name}</span>
+        <div class="clip-info-meta">
+          <span>${seg.size}</span>
+          <span>H.264</span>
+        </div>
       </div>
     </div>
   `).join('');
@@ -744,6 +841,7 @@ function showToast(msg) {
 
 renderTranscripts();
 renderClips();
+updateFileInfo();
 </script>
 </body>
 </html>

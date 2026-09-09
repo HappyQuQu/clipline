@@ -62,15 +62,15 @@ const taskRows = [
 ];
 
 const sourceRows = [
-  { name: "xiaomi", path: "/Users/qu/Desktop/XiaomiCamera_00_B88880972E7E", status: "已启用", scan: "手动扫描", segments: 123, failed: 0, updated: "6月2日 12:07" },
+  { name: "工作室", path: "/recordings/xiaomi-nas", status: "已启用", scan: "手动扫描", segments: 123, failed: 0, updated: "6月2日 12:07" },
 ];
 
 const logs = [
-  { time: "6月2日 12:24", level: "导出", event: "创建精准导出任务", source: "xiaomi", detail: "09:35:48 – 09:41:10 · 转码中" },
-  { time: "6月2日 12:20", level: "识别", event: "视觉识别任务失败", source: "xiaomi", detail: "00_20260602092458… · 模型不可用" },
-  { time: "6月2日 12:19", level: "识别", event: "视觉识别完成", source: "xiaomi", detail: "17 个标注 · chair、laptop" },
-  { time: "6月2日 12:18", level: "识别", event: "语音识别完成", source: "xiaomi", detail: "生成字幕 36 条" },
-  { time: "6月2日 12:07", level: "扫描", event: "手动扫描已完成", source: "xiaomi", detail: "123/123 文件 · 123 入库 · 0 错误" },
+  { time: "6月2日 12:24", level: "导出", event: "创建精准导出任务", source: "工作室", detail: "09:35:48 – 09:41:10 · 转码中" },
+  { time: "6月2日 12:20", level: "识别", event: "视觉识别任务失败", source: "工作室", detail: "00_20260602092458… · 模型不可用" },
+  { time: "6月2日 12:19", level: "识别", event: "视觉识别完成", source: "工作室", detail: "画面标签 · 3D 打印机、工作台" },
+  { time: "6月2日 12:18", level: "识别", event: "语音识别完成", source: "工作室", detail: "生成字幕 6 条" },
+  { time: "6月2日 12:07", level: "扫描", event: "手动扫描已完成", source: "工作室", detail: "123/123 文件 · 123 入库 · 0 错误" },
 ];
 
 function AppShell({ page, setPage, children }) {
@@ -128,8 +128,29 @@ function AppShell({ page, setPage, children }) {
   );
 }
 
-function SelectButton({ children, icon: Icon }) {
-  return <button className="select-button">{Icon && <Icon size={18} />}<span>{children}</span><CaretDown size={15} /></button>;
+function SelectButton({ children, icon: Icon, options, value, onChange, label, disabled = false }) {
+  const optionSets = {
+    "全部状态": ["全部状态", "已启用", "已停用"],
+    "全部类型": ["全部类型", "扫描", "识别", "导出"],
+    "手动扫描": ["手动扫描", "定时扫描", "自动监听"],
+    "按需运行": ["按需运行", "扫描后自动运行", "关闭"],
+    "每 30 分钟": ["每 15 分钟", "每 30 分钟", "每 60 分钟"],
+    "片段 30% 位置": ["片段开头", "片段 30% 位置", "片段中间"],
+    "最多 2 次": ["不重试", "最多 2 次", "最多 3 次"],
+    "快速 · 关键帧切割": ["快速 · 关键帧切割", "精准 · 重新编码"],
+    "30 分钟": ["15 分钟", "30 分钟", "60 分钟", "不限制"],
+    "10 GB": ["5 GB", "10 GB", "20 GB"],
+    "24 小时": ["6 小时", "24 小时", "7 天"],
+    "Whisper · small": ["Whisper · tiny", "Whisper · small", "FunASR · paraformer-zh"],
+    "自动检测": ["自动检测", "中文", "英语"],
+    "1 个任务": ["1 个任务", "2 个任务", "4 个任务"],
+    "SRT + TXT": ["SRT + TXT", "SRT", "VTT"],
+    "本地模型 · 默认": ["本地模型 · 默认", "YOLOv8n"],
+    "INFO · 推荐": ["DEBUG · 调试", "INFO · 推荐", "WARNING · 警告", "ERROR · 错误"],
+    "30 天": ["7 天", "30 天", "90 天"],
+  };
+  const available = options || optionSets[String(children)] || [String(children)];
+  return <span className={`select-button native-select${disabled ? " is-disabled" : ""}`}>{Icon && <Icon size={18} />}<select aria-label={label || String(children)} value={value} defaultValue={value === undefined ? String(children) : undefined} disabled={disabled} onChange={(event) => onChange?.(event.target.value)}>{available.map((option) => <option key={option} value={option}>{option}</option>)}</select><CaretDown size={15} /></span>;
 }
 
 function ReviewPage({ onExport }) {
@@ -340,7 +361,7 @@ function TasksPage() {
   );
 }
 
-function ManagePage() {
+export function ManagePage() {
   const [section, setSection] = useState("sources");
   const [settingsSection, setSettingsSection] = useState("overview");
   const settingsNav = [
@@ -355,7 +376,7 @@ function ManagePage() {
   return (
     <div className="manage-page">
       <aside className="manage-sidebar">
-        <div><small>管理</small><h1>系统管理</h1></div>
+        <div><small>工作区</small><h1>管理</h1></div>
         <nav>
           <button className={section === "sources" ? "active" : ""} onClick={() => setSection("sources")}><VideoCamera />录像源<CaretRight /></button>
           <button className={section === "logs" ? "active" : ""} onClick={() => setSection("logs")}><FileText />日志<CaretRight /></button>
@@ -371,51 +392,125 @@ function ManagePage() {
             ))}
           </div>
         )}
-        <div className="manage-help"><HardDrives /><strong>索引状态</strong><p>xiaomi · 123 个片段</p><div><span /></div><button>查看系统状态</button></div>
+        <div className="manage-help"><span className="manage-system-dot" /><strong>原型工作区</strong><p>使用示例数据体验管理流程</p><button onClick={() => { setSection("settings"); setSettingsSection("overview"); }}>查看系统概览<CaretRight size={14} /></button></div>
       </aside>
       <section className="manage-content">
         {section === "sources" && <SourcesPanel />}
         {section === "logs" && <LogsPanel />}
-        {section === "settings" && <SettingsPanel activeSection={settingsSection} />}
+        {section === "settings" && <SettingsPanel activeSection={settingsSection} onOpenSources={() => setSection("sources")} onOpenLogs={() => setSection("logs")} />}
       </section>
     </div>
   );
 }
 
 function SourcesPanel() {
-  const [selected, setSelected] = useState(0);
+  const [sources, setSources] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("clipline-prototype-sources"));
+      if (stored) return stored.map((source) => source.name === "xiaomi" && source.path === "/Users/qu/Desktop/XiaomiCamera_00_B88880972E7E" ? { ...source, name: "工作室", path: "/recordings/xiaomi-nas" } : source);
+      return sourceRows.map((source, index) => ({ ...source, id: index + 1, asr: "按需运行", vision: "按需运行" }));
+    }
+    catch { return sourceRows.map((source, index) => ({ ...source, id: index + 1, asr: "按需运行", vision: "按需运行" })); }
+  });
+  const [selected, setSelected] = useState(sources[0]?.id);
+  const [draft, setDraft] = useState(sources[0]);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("全部状态");
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPath, setNewPath] = useState("");
+  const [error, setError] = useState("");
+  const [scanning, setScanning] = useState([]);
   const [notice, setNotice] = useState("");
+  const notify = (message) => { setNotice(message); window.setTimeout(() => setNotice(""), 3000); };
+  const persist = (items) => { setSources(items); localStorage.setItem("clipline-prototype-sources", JSON.stringify(items)); };
+  const visible = sources.filter((source) => (status === "全部状态" || source.status === status) && `${source.name} ${source.path}`.toLowerCase().includes(query.toLowerCase()));
+  const updateDraft = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  const scan = (ids) => {
+    const enabled = sources.filter((source) => ids.includes(source.id) && source.status === "已启用");
+    if (!enabled.length) { notify("请先启用一个录像源"); return; }
+    const scanIds = enabled.map((source) => source.id);
+    setScanning((current) => [...new Set([...current, ...scanIds])]);
+    notify(`正在扫描 ${enabled.length} 个录像源…`);
+    window.setTimeout(() => {
+      setScanning((current) => current.filter((id) => !scanIds.includes(id)));
+      setSources((current) => {
+        const next = current.map((source) => scanIds.includes(source.id) ? { ...source, updated: "刚刚", segments: source.segments || 12 } : source);
+        localStorage.setItem("clipline-prototype-sources", JSON.stringify(next));
+        return next;
+      });
+      notify("模拟扫描完成，录像索引已更新");
+    }, 1400);
+  };
+  const save = () => {
+    if (!draft.name.trim() || !draft.path.trim().startsWith("/")) { notify("请填写名称和以 / 开头的目录路径"); return; }
+    if (sources.some((source) => source.id !== selected && source.name === draft.name.trim())) { notify("录像源名称已存在，请使用其他名称"); return; }
+    persist(sources.map((source) => source.id === selected ? { ...source, ...draft, name: draft.name.trim(), path: draft.path.trim(), segments: source.segments, updated: source.updated } : source));
+    notify("录像源配置已保存到此浏览器");
+  };
+  const addSource = (event) => {
+    event.preventDefault();
+    if (!newPath.trim().startsWith("/")) { setError("目录路径需要以 / 开头，例如 /recordings/living-room"); return; }
+    if (sources.some((source) => source.name === newName.trim())) { setError("此名称已存在，请换一个名称"); return; }
+    const source = { id: Date.now(), name: newName.trim(), path: newPath.trim(), status: "已启用", scan: "手动扫描", segments: 0, failed: 0, updated: "尚未扫描", asr: "按需运行", vision: "按需运行" };
+    persist([...sources, source]); setSelected(source.id); setDraft(source); setAdding(false); setNewName(""); setNewPath(""); setQuery(""); setStatus("全部状态");
+    notify("录像源已添加，可以开始模拟扫描");
+  };
+  const setEnabled = () => {
+    const nextStatus = draft.status === "已启用" ? "已停用" : "已启用";
+    updateDraft("status", nextStatus);
+    persist(sources.map((source) => source.id === selected ? { ...source, status: nextStatus } : source));
+    notify(`录像源${nextStatus}`);
+  };
   return (
     <>
-      <PageHeader eyebrow="管理 / 录像源" title="录像源" subtitle="管理已挂载视频目录、扫描规则与识别配置"><button className="primary"><Plus />添加目录</button></PageHeader>
-      <div className="page-toolbar"><div className="inline-search"><MagnifyingGlass /><input placeholder="搜索名称或目录路径" /></div><SelectButton>全部状态</SelectButton><div className="toolbar-spacer" /><button className="secondary" onClick={() => setNotice("扫描任务已创建：xiaomi")}><Scan />扫描全部</button></div>
+      <PageHeader eyebrow="工作区 / 管理" title="录像源" subtitle="连接录像目录，管理扫描与识别方式。"><button className="primary" onClick={() => { setAdding(true); setError(""); }}><Plus />添加录像源</button></PageHeader>
+      <div className="manage-metrics"><div><span>录像源</span><strong>{sources.length}<small>个目录</small></strong></div><div><span>已索引</span><strong>{sources.reduce((total, source) => total + source.segments, 0)}<small>个片段</small></strong></div><div><span>可用状态</span><strong><i />{sources.filter((source) => source.status === "已启用").length}<small>个已启用</small></strong></div></div>
+      <div className="page-toolbar"><div className="inline-search"><MagnifyingGlass /><input aria-label="搜索录像源" placeholder="搜索名称或目录路径" value={query} onChange={(event) => setQuery(event.target.value)} /></div><SelectButton value={status} onChange={setStatus}>全部状态</SelectButton><div className="toolbar-spacer" /><button className="secondary" disabled={scanning.length > 0} onClick={() => scan(sources.map((source) => source.id))}><Scan className={scanning.length ? "manage-scanning" : ""} />{scanning.length ? "扫描中…" : "扫描全部"}</button></div>
       <section className="sources-table">
-        <div className="source-head"><span>录像源</span><span>目录路径</span><span>状态</span><span>片段 / 错误</span><span>最后扫描</span><span /></div>
-        {sourceRows.map((source, index) => (
-          <button key={source.name} className={selected === index ? "source-row selected" : "source-row"} onClick={() => setSelected(index)}>
+        <div className="source-head"><span>录像源</span><span>目录路径</span><span>状态</span><span>已索引</span><span>最后扫描</span><span /></div>
+        {visible.map((source) => (
+          <button key={source.id} className={selected === source.id ? "source-row selected" : "source-row"} onClick={() => { setSelected(source.id); setDraft(source); }}>
             <span className="source-name"><span className="camera-tile"><FolderOpen /></span><span><strong>{source.name}</strong><small>{source.scan}</small></span></span>
-            <span className="source-path">{source.path}</span><span className={`source-status ${source.status}`}><i />{source.status}</span><span>{source.segments} / {source.failed}</span><span>{source.updated}</span><DotsIcon />
+            <span className="source-path" title={source.path}>{source.path}</span><span className={`source-status ${source.status}`}><i />{source.status}</span><span>{source.segments} 个片段</span><span>{scanning.includes(source.id) ? "扫描中…" : source.updated}</span><CaretRight size={16} />
           </button>
         ))}
+        {!visible.length && <div className="manage-empty"><MagnifyingGlass size={28} /><strong>没有找到录像源</strong><p>试试其他名称，或调整状态筛选。</p><button className="secondary" onClick={() => { setQuery(""); setStatus("全部状态"); }}>清除筛选</button></div>}
       </section>
-      <div className="source-detail">
-        <div className="source-preview" style={{ backgroundImage: "url('/assets/printer-main.png')" }}><span><FilmStrip />最近索引片段 · 09:35:48</span></div>
-        <div className="source-config"><small>当前选择</small><h2>{sourceRows[selected].name}</h2><p>{sourceRows[selected].path}</p><div className="config-grid"><label>显示名称<input defaultValue={sourceRows[selected].name} /></label><label>扫描方式<SelectButton>手动扫描</SelectButton></label><label className="wide">目录路径<input defaultValue={sourceRows[selected].path} /></label><label>语音识别<SelectButton>按需运行</SelectButton></label><label>视觉识别<SelectButton>按需运行</SelectButton></label></div><p className="safe-note"><Info />Clipline 仅读取目录并建立索引，不会改写或删除源视频。</p><div className="config-actions"><button className="danger">停用录像源</button><div /><button className="secondary" onClick={() => setNotice("扫描任务已创建：xiaomi")}><Scan />立即扫描</button><button className="primary">保存更改</button></div></div>
-      </div>
-      {notice && <div className="toast"><CheckCircle weight="fill" />{notice}</div>}
+      {draft && <div className="source-detail">
+        <div className="source-detail-heading"><span className="camera-tile"><VideoCamera size={23} /></span><div><small>录像源配置</small><h2>{sources.find((source) => source.id === selected)?.name}</h2></div><span className={`source-status ${draft.status}`}><i />{draft.status}</span></div>
+        <div className="source-config"><div className="config-grid"><label>显示名称<input value={draft.name} onChange={(event) => updateDraft("name", event.target.value)} /></label><label>扫描方式<SelectButton value={draft.scan} onChange={(value) => updateDraft("scan", value)}>手动扫描</SelectButton></label><label className="wide">目录路径<input value={draft.path} onChange={(event) => updateDraft("path", event.target.value)} /></label><label>语音识别<SelectButton value={draft.asr || "按需运行"} onChange={(value) => updateDraft("asr", value)}>按需运行</SelectButton></label><label>视觉识别<SelectButton value={draft.vision || "按需运行"} onChange={(value) => updateDraft("vision", value)}>按需运行</SelectButton></label></div><p className="safe-note"><Info size={17} />只读取目录并建立索引，源视频始终保留。</p><div className="config-actions"><button className={draft.status === "已启用" ? "danger" : "secondary"} onClick={setEnabled}>{draft.status === "已启用" ? "停用录像源" : "启用录像源"}</button><div /><button className="secondary" disabled={scanning.includes(selected) || draft.status !== "已启用"} onClick={() => scan([selected])}><Scan />{scanning.includes(selected) ? "扫描中…" : "立即扫描"}</button><button className="primary" onClick={save}>保存更改</button></div></div>
+        <aside className="source-detail-aside"><div className="source-preview" style={{ backgroundImage: "url('/assets/printer-main.png')" }}><span><FilmStrip />示例画面</span></div><h3>让录像可以被找到</h3><p>添加目录后，扫描会读取视频的时间与信息，生成可回看的录像索引。</p><span className="manage-prototype-note">原型演示 · 配置仅保存在此浏览器</span></aside>
+      </div>}
+      {adding && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setAdding(false)} onKeyDown={(event) => event.key === "Escape" && setAdding(false)}><form className="manage-source-modal" onSubmit={addSource} role="dialog" aria-modal="true" aria-labelledby="add-source-title"><div className="modal-heading"><div><small>连接一个新目录</small><h2 id="add-source-title">添加录像源</h2></div><button type="button" className="icon-button" aria-label="关闭添加录像源" onClick={() => setAdding(false)}><X /></button></div><p>为录像目录设置一个容易辨认的名称。</p><label>显示名称<input autoFocus required maxLength={40} value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="例如：工作室" /></label><label>目录路径<input required value={newPath} onChange={(event) => setNewPath(event.target.value)} placeholder="/recordings/studio" /></label><p className="manage-prototype-note"><Info size={16} />原型演示不会访问或更改本地目录。</p>{error && <p className="manage-form-error" role="alert">{error}</p>}<div className="modal-footer"><button type="button" className="secondary" onClick={() => setAdding(false)}>取消</button><button type="submit" className="primary"><Plus size={17} />添加录像源</button></div></form></div>}
+      {notice && <div className="toast" role="status"><CheckCircle weight="fill" />{notice}</div>}
     </>
   );
 }
 
 function LogsPanel() {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("全部类型");
+  const [source, setSource] = useState("全部录像源");
+  const [date, setDate] = useState("2026-06-02");
+  const [notice, setNotice] = useState("");
+  const visible = logs.filter((log) => (type === "全部类型" || log.level === type) && (source === "全部录像源" || log.source === source) && (!date || date === "2026-06-02") && `${log.event} ${log.detail} ${log.source}`.toLowerCase().includes(query.toLowerCase()));
+  const exportLogs = () => {
+    const csv = ["时间,类型,事件,录像源,详情", ...visible.map((log) => [log.time, log.level, log.event, log.source, log.detail].map((cell) => `"${cell.replaceAll('"', '""')}"`).join(","))].join("\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = "clipline-demo-logs.csv"; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice(`已导出 ${visible.length} 条示例日志`); window.setTimeout(() => setNotice(""), 3000);
+  };
   return (
     <>
-      <PageHeader eyebrow="管理 / 活动日志" title="活动日志" subtitle="查看扫描、导出、识别和失败片段记录"><button className="secondary"><DownloadSimple />导出日志</button></PageHeader>
-      <div className="page-toolbar"><div className="inline-search"><MagnifyingGlass /><input placeholder="搜索事件、文件或详情" /></div><SelectButton>全部类型</SelectButton><SelectButton>xiaomi</SelectButton><button className="filter-button"><CalendarBlank />2026年6月2日</button></div>
+      <PageHeader eyebrow="工作区 / 管理" title="活动日志" subtitle="每一次扫描、识别和导出，都有迹可循。"><button className="secondary" onClick={exportLogs}><DownloadSimple />导出日志</button></PageHeader>
+      <div className="page-toolbar"><div className="inline-search"><MagnifyingGlass /><input aria-label="搜索活动日志" placeholder="搜索事件、文件或详情" value={query} onChange={(event) => setQuery(event.target.value)} /></div><SelectButton value={type} onChange={setType}>全部类型</SelectButton><SelectButton options={["全部录像源", "工作室"]} value={source} onChange={setSource}>全部录像源</SelectButton><label className="filter-button manage-date-filter"><CalendarBlank /><input aria-label="日志日期" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label></div>
       <section className="logs-table"><div className="log-head"><span>时间</span><span>类型</span><span>事件</span><span>录像源</span><span>详情</span></div>
-        {logs.map((log) => <div className="log-row" key={`${log.time}-${log.event}`}><span>{log.time}</span><span className={`log-level ${log.level}`}>{log.level}</span><strong>{log.event}</strong><span>{log.source}</span><span>{log.detail}</span></div>)}
+        {visible.map((log) => <div className="log-row" key={`${log.time}-${log.event}`}><span>{log.time}</span><span className={`log-level ${log.level}`}>{log.level}</span><strong>{log.event}</strong><span>{log.source}</span><span>{log.detail}</span></div>)}
+        {!visible.length && <div className="manage-empty"><FileText size={28} /><strong>没有符合条件的活动</strong><p>调整筛选条件，查看其他活动记录。</p><button className="secondary" onClick={() => { setQuery(""); setType("全部类型"); setSource("全部录像源"); setDate("2026-06-02"); }}>重置筛选</button></div>}
       </section>
-      <div className="pagination"><span>显示 1–5，共 5 条</span><button disabled><CaretLeft /></button><button className="active">1</button><button disabled><CaretRight /></button></div>
+      <div className="pagination"><span>共 {visible.length} 条活动 · 原型示例数据</span><button disabled aria-label="上一页"><CaretLeft /></button><button className="active" aria-current="page">1</button><button disabled aria-label="下一页"><CaretRight /></button></div>
+      {notice && <div className="toast" role="status"><CheckCircle weight="fill" />{notice}</div>}
     </>
   );
 }
@@ -430,9 +525,9 @@ const settingCopy = {
   about: ["关于", "查看版本、运行环境和开源组件信息"],
 };
 
-function SettingsPanel({ activeSection }) {
+function SettingsPanel({ activeSection, onOpenSources, onOpenLogs }) {
   const [saved, setSaved] = useState(false);
-  const [toggles, setToggles] = useState({
+  const defaults = {
     autoThumb: true,
     verifyProbe: true,
     skipRecent: true,
@@ -441,16 +536,41 @@ function SettingsPanel({ activeSection }) {
     autoVision: false,
     detailedLogs: false,
     anonymizePaths: true,
+  };
+  const [toggles, setToggles] = useState(() => {
+    try { return { ...defaults, ...JSON.parse(localStorage.getItem("clipline-prototype-settings") || "{}").toggles }; } catch { return defaults; }
   });
-  const toggle = (id) => setToggles((current) => ({ ...current, [id]: !current[id] }));
+  const [values, setValues] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("clipline-prototype-settings") || "{}").values || {}; } catch { return {}; }
+  });
+  const [notice, setNotice] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [dialog, setDialog] = useState(null);
+  const notify = (message) => { setNotice(message); window.setTimeout(() => setNotice(""), 3200); };
+  const toggle = (id) => { setToggles((current) => ({ ...current, [id]: !current[id] })); setSaved(false); };
+  const choice = (initial, field = initial) => <SelectButton value={values[`${activeSection}:${field}`] || initial} onChange={(value) => { setValues((current) => ({ ...current, [`${activeSection}:${field}`]: value })); setSaved(false); }}>{initial}</SelectButton>;
+  const save = () => { localStorage.setItem("clipline-prototype-settings", JSON.stringify({ toggles, values })); setSaved(true); notify("设置已保存到此浏览器"); };
+  const restore = () => {
+    const keys = { scan: ["autoThumb", "verifyProbe", "skipRecent"], export: ["cleanupExport"], recognition: ["autoTranscript", "autoVision"], diagnostics: ["detailedLogs", "anonymizePaths"] }[activeSection] || [];
+    setToggles((current) => ({ ...current, ...Object.fromEntries(keys.map((key) => [key, defaults[key]])) }));
+    setValues((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${activeSection}:`))));
+    setSaved(false); notify("本页已恢复默认值，保存后生效");
+  };
+  const runCheck = () => { setChecking(true); window.setTimeout(() => { setChecking(false); notify("模拟检查完成：所有组件状态正常"); }, 900); };
+  const downloadDiagnostics = () => {
+    const content = JSON.stringify({ prototype: true, checkedAt: new Date().toISOString(), status: "healthy", checks: ["ffmpeg", "ffprobe", "database", "recordings"], settings: { toggles, values } }, null, 2);
+    const url = URL.createObjectURL(new Blob([content], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = "clipline-demo-diagnostics.json"; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); notify("示例诊断报告已下载");
+  };
   const [title, subtitle] = settingCopy[activeSection];
   const editable = !["overview", "models", "about"].includes(activeSection);
 
   return (
     <>
-      <PageHeader eyebrow={`管理 / 设置 / ${title}`} title={title} subtitle={subtitle}>
-        {activeSection === "overview" && <button className="secondary"><SpinnerGap />刷新状态</button>}
+      <PageHeader eyebrow="工作区 / 设置" title={title} subtitle={subtitle}>
+        {activeSection === "overview" && <button className="secondary" disabled={checking} onClick={runCheck}><SpinnerGap className={checking ? "manage-scanning" : ""} />{checking ? "检查中…" : "刷新状态"}</button>}
       </PageHeader>
+      <div className="manage-settings-note"><Info size={16} />原型工作区 · 以下为示例配置，保存仅影响此浏览器。</div>
 
       {activeSection === "overview" && (
         <div className="settings-overview">
@@ -474,20 +594,20 @@ function SettingsPanel({ activeSection }) {
               ["可用空间", "178 GB"],
             ]} />
           </div>
-          <section className="overview-callout"><Info /><div><strong>设置作用范围</strong><p>这里修改系统默认值；单个录像源的覆盖项仍在“录像源”中设置。</p></div><button className="secondary">打开录像源</button></section>
+          <section className="overview-callout"><Info /><div><strong>设置作用范围</strong><p>这里修改系统默认值；单个录像源的覆盖项仍在“录像源”中设置。</p></div><button className="secondary" onClick={onOpenSources}>打开录像源</button></section>
         </div>
       )}
 
       {activeSection === "scan" && (
         <SettingsForm>
           <SettingsGroup title="发现新文件" description="控制 Clipline 什么时候扫描已挂载目录">
-            <div className="field-grid"><Field label="默认扫描方式"><SelectButton>手动扫描</SelectButton></Field><Field label="定时扫描间隔" help="只对启用了定时扫描的录像源生效"><SelectButton>每 30 分钟</SelectButton></Field></div>
+            <div className="field-grid"><Field label="默认扫描方式">{choice("手动扫描")}</Field><Field label="定时扫描间隔" help="只对启用了定时扫描的录像源生效">{choice("每 30 分钟")}</Field></div>
             <ToggleRow value={toggles.skipRecent} onClick={() => toggle("skipRecent")} title="跳过仍在写入的文件" body="忽略最近 30 秒内仍有变化的视频，避免索引不完整片段" />
           </SettingsGroup>
           <SettingsGroup title="索引与缩略图" description="新片段入库时执行的处理步骤">
             <ToggleRow value={toggles.verifyProbe} onClick={() => toggle("verifyProbe")} title="使用 ffprobe 校验片段" body="读取时长、编码和分辨率，并记录无法解析的文件" />
             <ToggleRow value={toggles.autoThumb} onClick={() => toggle("autoThumb")} title="自动生成缩略图" body="为片段墙和时间线生成预览图" />
-            <div className="field-grid"><Field label="缩略图时间点"><SelectButton>片段 30% 位置</SelectButton></Field><Field label="失败重试"><SelectButton>最多 2 次</SelectButton></Field></div>
+            <div className="field-grid"><Field label="缩略图时间点">{choice("片段 30% 位置")}</Field><Field label="失败重试">{choice("最多 2 次")}</Field></div>
           </SettingsGroup>
         </SettingsForm>
       )}
@@ -495,12 +615,12 @@ function SettingsPanel({ activeSection }) {
       {activeSection === "export" && (
         <SettingsForm>
           <SettingsGroup title="默认导出行为" description="创建新导出任务时预先选择的选项">
-            <div className="field-grid"><Field label="默认模式"><SelectButton>快速 · 关键帧切割</SelectButton></Field><Field label="最长导出时长"><SelectButton>30 分钟</SelectButton></Field></div>
+            <div className="field-grid"><Field label="默认模式">{choice("快速 · 关键帧切割")}</Field><Field label="最长导出时长">{choice("30 分钟")}</Field></div>
             <p className="settings-note"><Info />快速模式速度更快，但起止时间会贴近关键帧；精准模式会重新编码。</p>
           </SettingsGroup>
           <SettingsGroup title="服务端暂存与清理" description="导出任务先在服务器生成文件，完成后由浏览器下载">
             <div className="server-storage-row"><span className="summary-icon blue"><HardDrives /></span><div><small>服务器暂存目录</small><strong>data/exports</strong><p>仅供 Clipline 生成和提供下载，不是用户电脑的保存位置。</p></div><span className="readonly-badge">只读</span></div>
-            <div className="field-grid"><Field label="暂存缓存上限"><SelectButton>10 GB</SelectButton></Field><Field label="完成后保留"><SelectButton>24 小时</SelectButton></Field></div>
+            <div className="field-grid"><Field label="暂存缓存上限">{choice("10 GB")}</Field><Field label="完成后保留">{choice("24 小时")}</Field></div>
             <ToggleRow value={toggles.cleanupExport} onClick={() => toggle("cleanupExport")} title="自动清理已完成的导出" body="超过保留时间后删除服务器暂存文件；已经下载到用户电脑的文件不受影响" />
             <p className="browser-download-note"><DownloadSimple /><span><strong>下载位置由浏览器决定</strong><br />任务完成后在“任务”中点击下载，浏览器会保存到默认下载目录或询问保存位置。</span></p>
           </SettingsGroup>
@@ -510,11 +630,11 @@ function SettingsPanel({ activeSection }) {
       {activeSection === "recognition" && (
         <SettingsForm>
           <SettingsGroup title="语音识别" description="控制字幕生成模型与默认运行方式">
-            <div className="field-grid"><Field label="ASR 模型"><SelectButton>Whisper · small</SelectButton></Field><Field label="语言"><SelectButton>自动检测</SelectButton></Field><Field label="最大并发"><SelectButton>1 个任务</SelectButton></Field><Field label="字幕格式"><SelectButton>SRT + TXT</SelectButton></Field></div>
+            <div className="field-grid"><Field label="ASR 模型">{choice("Whisper · small")}</Field><Field label="语言">{choice("自动检测")}</Field><Field label="最大并发">{choice("1 个任务", "asrConcurrency")}</Field><Field label="字幕格式">{choice("SRT + TXT")}</Field></div>
             <ToggleRow value={toggles.autoTranscript} onClick={() => toggle("autoTranscript")} title="扫描后自动识别字幕" body="新片段入库后自动创建语音识别任务，会持续占用计算资源" />
           </SettingsGroup>
           <SettingsGroup title="视觉识别" description="为片段生成可搜索的画面标签">
-            <div className="field-grid"><Field label="视觉模型"><SelectButton>本地模型 · 默认</SelectButton></Field><Field label="最大并发"><SelectButton>1 个任务</SelectButton></Field></div>
+            <div className="field-grid"><Field label="视觉模型">{choice("本地模型 · 默认")}</Field><Field label="最大并发">{choice("1 个任务", "visionConcurrency")}</Field></div>
             <ToggleRow value={toggles.autoVision} onClick={() => toggle("autoVision")} title="扫描后自动运行视觉识别" body="默认关闭；可在片段库中按需批量创建任务" />
             <p className="restart-note"><WarningCircle weight="fill" /><span><strong>修改并发数量后需要重启后台服务</strong><br />当前运行中的任务不会被中断。</span></p>
           </SettingsGroup>
@@ -526,12 +646,12 @@ function SettingsPanel({ activeSection }) {
       {activeSection === "diagnostics" && (
         <SettingsForm>
           <SettingsGroup title="运行日志" description="控制日志详细程度和保留周期">
-            <div className="field-grid"><Field label="日志级别"><SelectButton>INFO · 推荐</SelectButton></Field><Field label="保留周期"><SelectButton>30 天</SelectButton></Field></div>
+            <div className="field-grid"><Field label="日志级别">{choice("INFO · 推荐")}</Field><Field label="保留周期">{choice("30 天")}</Field></div>
             <ToggleRow value={toggles.detailedLogs} onClick={() => toggle("detailedLogs")} title="记录详细识别日志" body="用于排查本地模型加载与任务失败，可能显著增加日志体积" />
             <ToggleRow value={toggles.anonymizePaths} onClick={() => toggle("anonymizePaths")} title="导出诊断时隐藏绝对路径" body="生成诊断包时仅保留目录末级名称" />
           </SettingsGroup>
           <SettingsGroup title="诊断工具" description="用于排查扫描、媒体工具和数据库问题">
-            <div className="diagnostic-actions"><button className="secondary"><CheckCircle />运行系统检查</button><button className="secondary"><DownloadSimple />下载诊断包</button><button className="secondary"><FileText />打开日志目录</button></div>
+            <div className="diagnostic-actions"><button className="secondary" disabled={checking} onClick={runCheck}><CheckCircle />{checking ? "检查中…" : "运行系统检查"}</button><button className="secondary" onClick={downloadDiagnostics}><DownloadSimple />下载诊断报告</button><button className="secondary" onClick={onOpenLogs}><FileText />查看活动日志</button></div>
             <div className="diagnostic-result"><CheckCircle weight="fill" /><span><strong>最近检查通过</strong><small>FFmpeg、ffprobe、数据库和录像根路径均可用 · 6月2日 12:07</small></span></div>
           </SettingsGroup>
         </SettingsForm>
@@ -546,11 +666,13 @@ function SettingsPanel({ activeSection }) {
             ["数据库", "SQLite"],
             ["媒体工具", "FFmpeg / ffprobe"],
           ]} />
-          <section className="about-links"><button className="secondary">查看项目文档</button><button className="secondary">开源许可</button><button className="secondary">检查更新</button></section>
+          <section className="about-links"><button className="secondary" onClick={() => setDialog({ title: "Clipline 使用说明", body: "从“录像源”添加一个视频目录，扫描生成索引后，即可在“回看”中定位录像、选择时间范围并导出。片段库支持搜索、筛选和批量创建识别任务。“任务”集中展示处理进度与结果。本工作区为交互原型，使用示例数据。" })}>查看使用说明</button><button className="secondary" onClick={() => setDialog({ title: "开源组件", body: "此原型使用 React、Vite 与 Phosphor Icons 构建。实际项目的完整开源许可请以各组件的 LICENSE 文件为准。" })}>开源组件</button><button className="secondary" onClick={() => notify("当前为交互原型 v0.1.0，无在线更新服务")}>检查更新</button></section>
         </div>
       )}
 
-      {editable && <div className="settings-footer sticky">{saved && <span><CheckCircle weight="fill" />设置已保存</span>}<button className="secondary">恢复本页默认值</button><button className="primary" onClick={() => { setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>保存更改</button></div>}
+      {editable && <div className="settings-footer sticky">{saved && <span><CheckCircle weight="fill" />设置已保存</span>}<button className="secondary" onClick={restore}>恢复本页默认值</button><button className="primary" onClick={save}>保存更改</button></div>}
+      {notice && <div className="toast" role="status"><CheckCircle weight="fill" />{notice}</div>}
+      {dialog && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDialog(null)}><section className="manage-source-modal" role="dialog" aria-modal="true" aria-label={dialog.title}><div className="modal-heading"><h2>{dialog.title}</h2><button className="icon-button" aria-label="关闭" onClick={() => setDialog(null)}><X /></button></div><p>{dialog.body}</p><div className="modal-footer"><button className="primary" onClick={() => setDialog(null)}>知道了</button></div></section></div>}
     </>
   );
 }
@@ -569,6 +691,7 @@ function ModelManagement() {
   const [models, setModels] = useState(initialModels);
   const [filter, setFilter] = useState("全部");
   const [notice, setNotice] = useState("");
+  const [reloading, setReloading] = useState(false);
   const visibleModels = models.filter((model) => filter === "全部" || (filter === "已下载" ? model.installed : !model.installed));
 
   const download = (id) => {
@@ -576,15 +699,23 @@ function ModelManagement() {
     window.setTimeout(() => setModels((items) => items.map((model) => model.id === id ? { ...model, progress: 64 } : model)), 650);
     window.setTimeout(() => {
       setModels((items) => items.map((model) => model.id === id ? { ...model, downloading: false, installed: true, progress: 100 } : model));
-      setNotice("模型下载完成，可在“识别与任务”中选择使用");
+      setNotice("演示下载完成，示例模型已标记为可用");
       window.setTimeout(() => setNotice(""), 2200);
     }, 1400);
   };
 
   const remove = (id) => {
     setModels((items) => items.map((model) => model.id === id ? { ...model, installed: false, active: false } : model));
-    setNotice("模型缓存已删除");
+    setNotice("演示删除完成，未改动本地模型文件");
     window.setTimeout(() => setNotice(""), 2200);
+  };
+  const reload = () => {
+    setReloading(true);
+    window.setTimeout(() => {
+      setReloading(false);
+      setNotice("演示加载完成，视觉模型状态已更新");
+      window.setTimeout(() => setNotice(""), 2600);
+    }, 1100);
   };
 
   return (
@@ -613,10 +744,10 @@ function ModelManagement() {
       <section className="vision-model-card">
         <div className="vision-model-icon"><Eye /></div>
         <div><small>视觉识别模型</small><h2>YOLOv8n</h2><p>data/models/vision/yolov8n.pt</p></div>
-        <dl><div><dt>状态</dt><dd><span className="status-dot green" />可用</dd></div><div><dt>设备</dt><dd>CPU</dd></div><div><dt>输入尺寸</dt><dd>416 px</dd></div></dl>
-        <button className="secondary"><SpinnerGap />重新加载</button>
+        <dl><div><dt>状态</dt><dd><span className="status-dot green" />{reloading ? "加载中" : "可用"}</dd></div><div><dt>设备</dt><dd>CPU</dd></div><div><dt>输入尺寸</dt><dd>416 px</dd></div></dl>
+        <button className="secondary" disabled={reloading} onClick={reload}><SpinnerGap />{reloading ? "加载中…" : "重新加载"}</button>
       </section>
-      <p className="model-boundary"><Info />当前后端支持语音模型下载与删除；视觉模型由本地文件或部署配置提供，因此这里只显示状态和重新加载操作。</p>
+      <p className="model-boundary"><Info />模型在本地处理语音与画面，录像无需上传。此页面为原型演示，下载、删除和重新加载仅模拟状态变化。</p>
       {notice && <div className="toast"><CheckCircle weight="fill" />{notice}</div>}
     </div>
   );

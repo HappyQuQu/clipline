@@ -1,6 +1,5 @@
 import * as Toast from '@radix-ui/react-toast'
 import {
-  Pulse as Activity,
   Archive as ArchiveIcon,
   ArrowClockwise as RefreshCw,
   Bell,
@@ -1100,53 +1099,48 @@ export function App() {
             />
           ) : (
             <div className="redesignPlaybackPage">
-              <aside className="playbackSourceContext">
-                <div className="playbackContextEyebrow">回看上下文</div>
-                <h1>录像源</h1>
-                <label className="playbackSourceSelect">
-                  <span>当前录像源</span>
-                  <select value={sourceId} onChange={(event) => handleSourceChange(event.target.value)}>
-                    <option value="">选择录像源</option>
-                    {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
-                  </select>
-                </label>
-                <div className="playbackSourceCard">
-                  <div className="playbackSourceStatus">
-                    <strong>{selectedSource?.name ?? '暂无录像源'}</strong>
-                    <small>{selectedSource?.enabled ? '已启用' : '未连接'}</small>
+              <header className="playbackCommandBar">
+                <div className="playbackPageTitle">
+                  <span className="playbackTitleIcon"><Play size={18} weight="fill" /></span>
+                  <div>
+                    <h1>录像回看</h1>
+                    <p>{selectedSource ? `${currentSourceSegmentCount} 个片段 · ${selectedSource.enabled ? '录像源已连接' : '录像源未启用'}` : '选择录像源后开始回看'}</p>
                   </div>
-                  <p>{selectedSource?.path ?? '请在管理中添加录像目录'}</p>
-                  <dl>
-                    <div><dt>录像片段</dt><dd>{currentSourceSegmentCount} 个片段</dd></div>
-                    <div><dt>最近扫描</dt><dd>{selectedSource?.lastScanAt ? formatClipDateTime(selectedSource.lastScanAt) : '尚未扫描'}</dd></div>
-                  </dl>
                 </div>
-                <div className="playbackContextBlock playbackDateBlock">
-                  <span>日期</span>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(event) => setPlaybackWindow(event.target.value, playbackHour)}
-                  />
+                <div className="playbackCommandControls">
+                  <label className="playbackCommandField playbackSourceSelect">
+                    <span>录像源</span>
+                    <select value={sourceId} onChange={(event) => handleSourceChange(event.target.value)}>
+                      <option value="">选择录像源</option>
+                      {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="playbackCommandField playbackDateBlock">
+                    <span>日期</span>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(event) => setPlaybackWindow(event.target.value, playbackHour)}
+                    />
+                  </label>
+                  <label className="playbackCommandField playbackRangeBlock">
+                    <span>时段</span>
+                    <select value={playbackHour} onChange={(event) => setPlaybackWindow(date, Number(event.target.value))}>
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00 – {String((hour + 1) % 24).padStart(2, '0')}:00</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="playbackScanButton" type="button" onClick={handleScan} disabled={!sourceId || scanMutation.isPending}>
+                    <RefreshCw size={17} className={scanMutation.isPending ? 'spinning' : ''} />
+                    {scanMutation.isPending ? '扫描中…' : '扫描录像'}
+                  </button>
+                  <button className="playbackManageLink" type="button" onClick={() => { setManageSection('sources'); setActiveView('manage') }}>
+                    管理录像源
+                  </button>
                 </div>
-                <label className="playbackContextBlock playbackRangeBlock">
-                  <span>显示范围</span>
-                  <select value={playbackHour} onChange={(event) => setPlaybackWindow(date, Number(event.target.value))}>
-                    {Array.from({ length: 24 }, (_, hour) => (
-                      <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00 – {String((hour + 1) % 24).padStart(2, '0')}:00</option>
-                    ))}
-                  </select>
-                </label>
-                {(selectedSource?.failedCount ?? 0) > 0 && <p className="playbackContextAlert" role="status">当前录像源有 {selectedSource?.failedCount} 个扫描失败文件，可在活动日志查看原因。</p>}
-                <button className="playbackScanButton" type="button" onClick={handleScan} disabled={!sourceId || scanMutation.isPending}>
-                  <RefreshCw size={17} className={scanMutation.isPending ? 'spinning' : ''} />
-                  {scanMutation.isPending ? '扫描中…' : '立即扫描'}
-                </button>
-                <p className="playbackContextNote"><Activity size={15} />录像源是已连接的摄像目录。扫描只建立索引，不修改源文件。</p>
-                <button className="playbackManageLink" type="button" onClick={() => { setManageSection('sources'); setActiveView('manage') }}>
-                  管理录像源
-                </button>
-              </aside>
+                {(selectedSource?.failedCount ?? 0) > 0 && <p className="playbackContextAlert" role="status">有 {selectedSource?.failedCount} 个文件扫描失败</p>}
+              </header>
 
               <section className="playbackWorkspace">
                 <div className="playbackViewerShell">
@@ -1231,7 +1225,7 @@ export function App() {
                       <div className={`prototypeViewerEmpty${timelineQuery.isError ? ' error' : ''}`} role={timelineQuery.isError ? 'alert' : 'status'}>
                         {timelineQuery.isFetching ? <RefreshCw size={36} className="spinning" /> : <VideoCamera size={42} />}
                         <strong>{timelineQuery.isFetching ? '正在加载回看数据' : timelineQuery.isError ? '回看数据加载失败' : '选择录像片段开始回看'}</strong>
-                        <span>{timelineQuery.isError ? '请检查后端连接后重试刷新。' : sourceId ? '当前日期暂无可播放片段' : '请先从左侧选择录像源'}</span>
+                        <span>{timelineQuery.isError ? '请检查后端连接后重试刷新。' : sourceId ? '当前日期暂无可播放片段' : '请先从上方选择录像源'}</span>
                       </div>
                     )}
                   </div>
