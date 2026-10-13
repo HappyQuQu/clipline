@@ -28,6 +28,10 @@ class AppConfig(BaseSettings):
     probe_timeout_seconds: float = Field(default=30, gt=0)
     thumbnail_timeout_seconds: float = Field(default=30, gt=0)
     playback_max_width: int = Field(default=1920, ge=320, le=1920)
+    export_fps: int = Field(default=25, ge=1, le=60)
+    export_max_width: int = Field(default=3840, ge=320, le=7680)
+    export_max_pieces: int = Field(default=500, ge=1, le=500)
+    export_timeout_seconds: float = Field(default=3600, gt=0)
     playback_timeout_seconds: float = Field(default=3600, gt=0)
 
     @field_validator("timezone")

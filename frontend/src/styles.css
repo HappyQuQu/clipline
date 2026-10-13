@@ -4153,3 +4153,8 @@ td {
 .real-settings p { color: var(--muted); margin: 12px 0 24px; }
 .real-settings dl > div { display: flex; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .real-settings .phase-two-placeholder { margin-top: 24px; }
+.export-plan { margin: 20px 0; padding: 16px; background: var(--surface-subtle, #f5f7fa); border-radius: 8px; }
+.export-plan dl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.export-plan dt { color: #7b8794; font-size: 12px; }
+.export-plan dd { margin: 4px 0; font-weight: 600; }
+.task-name details { margin-top: 8px; font-size: 12px; color: #7b8794; }

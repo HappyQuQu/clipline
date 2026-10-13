@@ -102,6 +102,10 @@ def stream(request: Request, segment_id: str, fingerprint: str = Query(..., max_
             etag = f'"{fingerprint}"'
         else:
             raise AppError("PLAYBACK_NOT_READY", "请先准备浏览器兼容的播放版本。", 409)
+    return serve_file(request, path, expected_size, expected_mtime, etag)
+
+
+def serve_file(request, path, expected_size, expected_mtime, etag, extra_headers=None):
     try:
         handle = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
         info = os.fstat(handle.fileno())
@@ -119,6 +123,7 @@ def stream(request: Request, segment_id: str, fingerprint: str = Query(..., max_
         "Cache-Control": "private, no-cache",
         "Content-Type": "video/mp4",
     }
+    headers.update(extra_headers or {})
     if request.headers.get("if-none-match") == etag:
         handle.close()
         return Response(status_code=304, headers=headers)

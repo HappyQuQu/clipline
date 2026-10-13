@@ -54,10 +54,10 @@ def ready(request: Request):
 @router.get("/capabilities")
 def capabilities():
     return {
-        "backendStage": "playback",
+        "backendStage": "exports",
         "recordingDirectories": True,
         "scan": True,
-        "export": False,
+        "export": True,
         "reindex": True,
         "prepare": True,
         "playback": True,
@@ -111,7 +111,7 @@ def system_status(request: Request):
     return {
         "version": __version__,
         "arch": platform.machine(),
-        "backendStage": "playback",
+        "backendStage": "exports",
         "health": readiness(request),
         "queue": {"executionEnabled": True, "counts": counts},
         "storage": {"totalBytes": disk.total, "freeBytes": disk.free},

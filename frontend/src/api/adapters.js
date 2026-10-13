@@ -22,9 +22,16 @@ export function localSeconds(at, timezone) {
 }
 export function taskView(row, sources) {
   const labels = { scan: '目录扫描', reindex: '索引重建', prepare: '播放准备', export: '录像导出' };
-  return { ...row, real: true, title: `${sources.find(source => source.id === row.sourceId)?.name || '录像源'} · ${labels[row.kind]}`, error: row.errorMessage, created: new Date(row.createdAt).toLocaleString('zh-CN'), demo: false };
+  return { ...row, real: true, mode: row.payload?.mode, rangeLabel: row.kind === "export" ? `${new Date(row.payload.startAt).toLocaleString("zh-CN", {timeZone: row.payload.viewTimezone})} – ${new Date(row.payload.endAt).toLocaleTimeString("zh-CN", {timeZone: row.payload.viewTimezone, hour12: false})}` : "", title: row.kind === "export" ? row.payload.name : `${sources.find(source => source.id === row.sourceId)?.name || '录像源'} · ${labels[row.kind]}`, error: row.errorMessage, created: new Date(row.createdAt).toLocaleString('zh-CN'), demo: false };
 }
 
 export function reviewContext({ sourceId, date, generation = 0 }) {
   return `${sourceId}:${date}:${generation}`;
+}
+
+export function exportRequest(range, day, mode, name, timezone) {
+  const left = Date.parse(day.dayStartAt), right = Date.parse(day.dayEndAt);
+  const start = range.startAt ? Date.parse(range.startAt) : left + range.start * 1000;
+  const end = range.endAt ? Date.parse(range.endAt) : left + range.end * 1000;
+  return { sourceId: range.sourceId, date: range.date, viewTimezone: timezone, startAt: new Date(Math.max(left, start)).toISOString(), endAt: new Date(Math.min(right, end)).toISOString(), ...(range.clipIds ? { segmentIds: range.clipIds } : {}), mode, name };
 }

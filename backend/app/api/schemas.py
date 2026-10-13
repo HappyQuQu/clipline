@@ -1,3 +1,5 @@
+from datetime import date as Date
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -73,3 +75,30 @@ class TaskCreate(APIModel):
 
 class PrepareRequest(APIModel):
     force: StrictBool = False
+
+
+class ExportRequest(APIModel):
+    plan_hash: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")] | None = None
+    source_id: Annotated[str, StringConstraints(min_length=1, max_length=80)]
+    start_at: datetime
+    end_at: datetime
+    date: Date | None = None
+    view_timezone: Annotated[str, StringConstraints(min_length=1, max_length=80)] | None = None
+    mode: Literal["fast", "precise"] = "fast"
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)] = (
+        "Clipline录像"
+    )
+    segment_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=80)]] | None = (
+        Field(None, max_length=500)
+    )
+
+    @field_validator("name")
+    @classmethod
+    def valid_export_name(cls, value):
+        if any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError("File name cannot contain control characters")
+        return value
+
+
+class RetryRequest(APIModel):
+    mode: Literal["fast", "precise"] | None = None

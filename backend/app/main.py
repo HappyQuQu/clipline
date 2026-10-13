@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 
 from app import __version__
+from app.api.exports import router as exports_router
 from app.api.foundation import router
 from app.api.indexing import router as indexing_router
 from app.api.playback import router as playback_router
@@ -92,6 +93,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(router)
     app.include_router(indexing_router)
     app.include_router(playback_router)
+    app.include_router(exports_router)
     if (config.static_dir / "index.html").is_file():
         app.mount("/", StaticFiles(directory=config.static_dir, html=True), name="frontend")
     return app

@@ -35,7 +35,7 @@ def main():
         assert time.monotonic() < deadline
         time.sleep(0.5)
     flags = call("/capabilities")
-    assert flags["playback"] and flags["prepare"] and not flags["export"]
+    assert flags["playback"] and flags["prepare"]
     assert not any(flags[key] for key in ("transcription", "visualRecognition", "semanticSearch"))
     info = json.loads(subprocess.check_output(["docker", "inspect", args.container], text=True))[0]
     mapping = next(row for row in info["Mounts"] if row["Destination"] == "/recordings")

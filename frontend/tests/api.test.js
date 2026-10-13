@@ -41,3 +41,15 @@ test('快速切换后返回相同源与日期，也使用新的回看上下文�
   assert.notEqual(reviewContext(first), reviewContext({ ...first, generation: 3 }));
   assert.equal(reviewContext(first), reviewContext({ ...first, offset: 120 }));
 });
+
+// Server day boundaries also handle cross-midnight files and daylight-saving days.
+test('导出区间按服务端日期边界裁剪，选中 ID 和 UTC 精度保留', async () => {
+  const { exportRequest } = await import('../src/api/adapters.js');
+  const day = { dayStartAt: '2026-06-01T16:00:00Z', dayEndAt: '2026-06-02T16:00:00Z' };
+  const result = exportRequest({ sourceId: 'one', date: '2026-06-02', startAt: '2026-06-01T15:42:00Z', endAt: '2026-06-01T16:04:56.123Z', clipIds: ['a'] }, day, 'precise', 'file', 'Asia/Shanghai');
+  assert.equal(result.startAt, '2026-06-01T16:00:00.000Z');
+  assert.equal(result.endAt, '2026-06-01T16:04:56.123Z');
+  assert.deepEqual(result.segmentIds, ['a']);
+  const fall = exportRequest({ sourceId: 'one', date: '2026-11-01', start: 89000, end: 91000 }, { dayStartAt: '2026-11-01T04:00:00Z', dayEndAt: '2026-11-02T05:00:00Z' }, 'fast', 'file', 'America/New_York');
+  assert.equal(fall.endAt, '2026-11-02T05:00:00.000Z');
+});

@@ -12,7 +12,7 @@ from app.services.idempotency import lookup, remember
 
 ACTIVE = ("queued", "running", "cancelling")
 TERMINAL = ("completed", "failed", "cancelled")
-HANDLERS = ("scan", "reindex", "prepare")
+HANDLERS = ("scan", "reindex", "prepare", "export")
 
 
 class Cancelled(Exception):
@@ -164,6 +164,10 @@ def submit(engine, source_id, kind, key=None, *, retry_of=None):
 
 
 def task_resource(kind, source_id, payload):
+    if kind == "export":
+        from app.services.export_plan import digest
+
+        return "export:" + digest(payload)
     return f"prepare:{payload['segmentId']}" if kind == "prepare" else f"index:{source_id}"
 
 
@@ -327,7 +331,9 @@ class Queue:
             )
             for task in tasks:
                 source = session.get(Source, task.source_id)
-                if source is None or (not source.enabled and task.kind != "prepare"):
+                if source is None or (
+                    not source.enabled and task.kind not in ("prepare", "export")
+                ):
                     finish(
                         session,
                         task,

@@ -64,7 +64,11 @@ def main():
 
     ready()
     flags = call("/capabilities")
-    assert flags["backendStage"] in ("indexing", "playback") and flags["scan"] and flags["reindex"]
+    assert (
+        flags["backendStage"] in ("indexing", "playback", "exports")
+        and flags["scan"]
+        and flags["reindex"]
+    )
     assert not any(flags[name] for name in ("transcription", "visualRecognition", "semanticSearch"))
     inspect = json.loads(subprocess.check_output(["docker", "inspect", args.container], text=True))[
         0

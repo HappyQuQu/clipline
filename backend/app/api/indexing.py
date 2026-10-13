@@ -7,12 +7,13 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.schemas import RequestKey, SourceCreate, SourcePatch, TaskCreate
+from app.api.schemas import RequestKey, RetryRequest, SourceCreate, SourcePatch, TaskCreate
 from app.core.errors import AppError
 from app.core.pagination import decode_cursor, encode_cursor
 from app.core.time import iso_utc
 from app.db.models import Artifact, BusinessLog, Segment, Source, Task
 from app.services.catalog import list_segments, segment_dto
+from app.services.exports import submit_export
 from app.services.sources import create_source, source_dto, update_source
 from app.tasks.queue import ACTIVE, cancel, submit, submit_prepare, task_dto
 
@@ -124,15 +125,23 @@ def cancel_task(request: Request, task_id: str):
 
 @router.post("/tasks/{task_id}/retry", status_code=202)
 def retry_task(
-    request: Request, task_id: str, key: KeyHeader = None, body: Annotated[dict, Body()] = None
+    request: Request, task_id: str, key: KeyHeader = None, body: RetryRequest | None = None
 ):
-    if body:
-        raise AppError("INVALID_TASK_PAYLOAD", "当前扫描重试不接受额外的执行参数。")
     with Session(request.app.state.engine) as session:
         task = session.get(Task, task_id)
         if task is None:
             raise AppError("TASK_NOT_FOUND", "任务不存在。", 404)
         source_id, kind, payload = task.source_id, task.kind, task.payload_json
+    if kind == "export":
+        return submit_export(
+            request.app.state.engine,
+            request.app.state.config,
+            key=key,
+            retry_of=task_id,
+            mode=body.mode if body else None,
+        )
+    if body and body.mode:
+        raise AppError("INVALID_TASK_PAYLOAD", "只有导出任务可以切换重试模式。")
     if kind == "prepare":
         return submit_prepare(
             request.app.state.engine,
