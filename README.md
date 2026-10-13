@@ -30,3 +30,13 @@ npm run dev
 一期不加载语音转写、视频内容识别、字幕或语义检索功能。识别结果与事件时间点统一在片段详情中预留；搜索、任务中心及设置保留对应的「二期预留」区域。添加和编辑录像源均预留自动语音转写与自动画面识别策略，默认关闭；时间轴扩展插槽保留在代码中，一期不显示识别占位。二期接入方案见 [开发与扩展说明](docs/PROTOTYPE_ARCHITECTURE.md)。
 
 检查记录见 [原型 QA](frontend/design-qa.md)，截图保存在 `frontend/qa/`。
+
+## 正式版方案与开发文档
+
+- [方案与需求文档](docs/REQUIREMENTS.md)：一期/二期范围、页面流程、后台任务、设置、NAS 部署要求与验收标准。
+- [开发文档](docs/DEVELOPMENT.md)：双架构 Docker、API/Worker、数据库、接口、媒体处理、任务恢复与开发里程碑。
+- [开发任务清单](docs/TASKS.md)：按 D1–D6 拆分可勾选任务、依赖和完成标准，附发布验收及独立二期清单。
+
+文档以 NAS Docker 部署及 `linux/amd64`、`linux/arm64` 支持为基线，区分已有原型与待实现正式版；不会把演示扫描或示例下载视为真实后端能力。
+
+本地真实录像测试固定使用 `/Volumes/extended/clipline`，容器只读映射到 `/recordings`；新测试数据库、缓存和输出独立放在项目的 `data/local-test`，详见开发文档。
