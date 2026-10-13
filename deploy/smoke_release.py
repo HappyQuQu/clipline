@@ -49,9 +49,19 @@ class Smoke:
         for filename, codec, length, size in (
             ("20261013_091500.mp4", "libx264", 2, "160x90"),
             ("20261013_091503.mp4", "libx264", 2, "160x90"),
-            ("20261013_091510.mp4", "mpeg4", 4, "320x180"),
+            ("20261013_091510.mp4", "libx265", 4, "320x180"),
             ("20261013_091520.mp4", "libx264", 60, "1280x720"),
         ):
+            audio = (
+                ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000"] if length > 2 else []
+            )
+            options = (
+                ["-x265-params", "pools=none:frame-threads=1:log-level=error"]
+                if codec == "libx265"
+                else []
+            )
+            if audio:
+                options += ["-c:a", "libopus" if codec == "libx265" else "aac"]
             self.docker(
                 "run",
                 "--rm",
@@ -72,6 +82,7 @@ class Smoke:
                 "lavfi",
                 "-i",
                 f"testsrc2=s={size}:r=25",
+                *audio,
                 "-t",
                 str(length),
                 "-c:v",
@@ -84,6 +95,7 @@ class Smoke:
                 "0",
                 "-pix_fmt",
                 "yuv420p",
+                *options,
                 "-y",
                 "/fixtures/" + filename,
             )
@@ -288,6 +300,7 @@ class Smoke:
         assert self.wait(proxy_id)["status"] == "completed"
         prepared = self.call(f"/segments/{rows[2]['id']}/playback")
         assert prepared["status"] == "ready" and prepared["proxy"]
+        assert rows[2]["videoCodec"] == "hevc" and rows[2]["audioCodec"] == "opus"
         assert self.call(f"/segments/{rows[2]['id']}/prepare", {})["taskId"] is None
         self.check("browser-compatible-proxy-and-cache")
         body = {
@@ -367,16 +380,19 @@ class Smoke:
             )
         )
         self.check("saved-settings-full-logs-consistent-backup", {"backup": backup})
-        self.exec_py(
+        cleanup_code = (
             "from app.core.config import AppConfig;from app.db.session import make_engine;"
             "from app.db.transactions import write_session;from app.db.models import Artifact;"
             "from sqlalchemy import select;from app.services.maintenance import maintain;"
             "import sys;c=AppConfig();e=make_engine(c);"
             "\nwith write_session(e) as s:\n"
             " a=s.scalar(select(Artifact).where(Artifact.task_id==sys.argv[1]));a.expires_at=1\n"
-            "maintain(e,c)",
-            restart_id,
+            "p=c.data/a.relative_path\nmaintain(e,c)\nprint(int(p.exists()))"
         )
+        deadline = time.monotonic() + 10
+        while self.exec_py(cleanup_code, restart_id) != "0":
+            assert time.monotonic() < deadline, "Expired result remained after stream closed"
+            time.sleep(0.2)
         self.error(f"/exports/{restart_id}/download", 410)
         assert self.call("/tasks/" + restart_id)["downloadStatus"] == "expired"
         assert self.signature() == before
@@ -387,7 +403,8 @@ class Smoke:
         self.results["finishedAt"] = datetime.now().astimezone().isoformat()
         if self.base:
             try:
-                (self.root / "container.log").write_text(self.docker("logs", self.name))
+                logs = subprocess.run(["docker", "logs", self.name], capture_output=True, text=True)
+                (self.root / "container.log").write_text(logs.stdout + logs.stderr)
             except subprocess.CalledProcessError:
                 pass
             subprocess.run(["docker", "rm", "-f", self.name], check=False, capture_output=True)
