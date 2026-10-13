@@ -6,7 +6,7 @@
 
 本文中的目录、数据库、API、Docker 配置和测试为拟实现的正式版契约，除明确标注“已有”外均不代表已完成。
 
-当前已完成 D1–D3，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)及 [D3](qa/D3_PLAYBACK.md)。scan/reindex/prepare 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；导出与完整设置/日志运维仍待 D4/D5。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
+当前已完成 D1–D4，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)、[D3](qa/D3_PLAYBACK.md)及 [D4](qa/D4_EXPORTS.md)。scan/reindex/prepare/export 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；真实裁剪、跨片段拼接和下载已接通，完整设置/日志运维仍待 D5。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
 
 ## 1. 架构与技术选择
 
@@ -52,7 +52,7 @@ clipline/
 │       ├── hooks/                # 已有播放状态；订阅在 D5
 │       ├── pages/                # 已有：Review/Library/Tasks/Logs/Sources/Settings
 │       └── capabilities.js       # 已有：二期能力及插槽
-├── backend/                      # 已建立 D1–D3；old/backend 不直接作为运行目录
+├── backend/                      # 已建立 D1–D4；old/backend 不直接作为运行目录
 │   ├── app/
 │   │   ├── main.py               # API 入口，不启动扫描循环或识别服务
 │   │   ├── core/                 # 配置、路径约束、错误、时间规则
@@ -237,7 +237,9 @@ CLIPLINE_IMAGE_TAG=d1-local
 | GET `/tasks/{id}` | — | 状态、阶段、进度、尝试和关联结果 |
 | POST `/tasks/{id}/cancel` | — | 返回实际状态；运行任务先进入 cancelling；重复取消幂等 |
 | POST `/tasks/{id}/retry` | 可选 mode=precise | 202 新任务 ID，retryOfTaskId 指向原任务；重新校验源文件 |
-| POST `/exports` | sourceId, startAt, endAt, segmentIds?, mode | 202 统一 export taskId，参数快照入库 |
+| POST `/exports/plan` | 与提交相同的参数 | 预览覆盖、断档、未选中时长、片段数及 planHash |
+| POST `/exports/{taskId}/resubmit` | Idempotency-Key | 完成结果新 ID 重导出，保留原记录；输入变化须重新选区间 |
+| POST `/exports` | sourceId, startAt, endAt, date?, viewTimezone?, segmentIds?, mode, name?, planHash? | 202 统一 export taskId，参数快照入库 |
 | GET `/exports/{taskId}/download` | HTTP Range，可选 | 下载完成且未过期的结果；未完成 409，过期 410 |
 | GET `/logs` | level, kind, sourceId, taskId, q, cursor | 筛选业务日志 |
 | GET `/logs/export` | 与列表相同筛选 | JSON 下载；固定查询快照，遍历全部匹配项，不能只导出当前页 |
@@ -325,7 +327,7 @@ outputTargetMs  = length(selectedCoverage)
 
 先按 startAt、id 稳定排序，通过游标去除重叠部分，生成每个输入文件的 offsetStartMs/offsetEndMs。无 selectedCoverage 则拒绝；不将断档或未选中区间补入输出。
 
-提交时保存计划摘要与输入指纹；执行时重新校验，文件变化则失败为 `INPUT_CHANGED`，不能继续使用过期偏移静默生成错误录像。
+提交时保存计划摘要、源目录、UTC 时间、输入指纹及输出 profile；前端带 planHash 复核预览和提交一致性。执行及发布时重新校验，文件变化则失败为 `INPUT_CHANGED`，不能继续使用过期偏移静默生成错误录像。
 
 ### 7.2 模式与结果
 
@@ -336,11 +338,15 @@ outputTargetMs  = length(selectedCoverage)
 | 不兼容 | 返回清晰原因，提供精准重试 | 支持可解码格式，异常明确失败 |
 | 资源 | 主要为读取和封装；仍受总任务限额 | 占用唯一重型转码资源槽 |
 
+D4 的 fast 单片段实际时长偏差大于 5 秒时返回 `FAST_BOUNDARY_UNSAFE`，参数不一致返回 `FAST_INCOMPATIBLE`；均可显式精准重试。普通重试保留模式，新任务 ID 关联原任务，不能在输入变化后静默重算计划。
+
+precise 使用默认 25 fps（配置范围 1–60）、最大宽度 3840 的等比例 H.264 输出。按累计时长四舍五入分配各片段帧数，避免每段舍入累积误差。顺序生成 NUT/PCM 中间文件，用明确帧时长拼接，最终只编码一次 AAC；有声和无声混合时补静音，全无音轨不建音轨。校验输出帧数、逐包连续时间戳、音轨时长和起点（AAC 填充容差 50 ms），并完整解码精准结果。
+
 一期统一 mode 为 `fast | precise`；旧后端使用 `accurate`，如提取旧服务代码需显式转换。旧版 timelapse 不属于一期契约。
 
 FFmpeg 通过进程调用并解析 `-progress`，百分比以预期媒体处理时长估算，阶段切换另有明确名称。完成后 FFprobe 检查容器、音视频轨、时间戳与实际时长，保存 expected/actual duration。精度验证不能只依赖命令退出码或完整秒数。
 
-结果写入任务尝试目录；验证后发布到 exports，DB 记录 completed 与 artifact。下载接口只访问已登记结果，不把 tmp 或 exports 整目录作为静态文件公开。参考 [FFmpeg 官方文档](https://ffmpeg.org/ffmpeg.html)。
+结果写入 task/attempt 暂存目录；验证后 fsync 文件和 manifest（计划 hash、结果 SHA256/大小/媒体参数、路径），终态事务复核所有权、取消和输入后原子发布，DB 同事务记录 completed 与 artifact。若重命名后数据库提交前崩溃，恢复时按 manifest 对账 SHA256 和计划，可复用已验证结果；不开放未登记文件。导出 TTL 在发布时固定，D4 下载接口执行过期检查，物理清理在 D5。下载接口只访问已登记结果，不把 tmp 或 exports 整目录作为静态文件公开。参考 [FFmpeg 官方文档](https://ffmpeg.org/ffmpeg.html)。
 
 ## 8. 持久化任务与恢复
 
