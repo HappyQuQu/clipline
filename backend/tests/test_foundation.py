@@ -32,7 +32,7 @@ def test_bootstrap_creates_versioned_schema_and_preserves_settings(config, datab
     assert set(inspect(database).get_table_names()) == set(Base.metadata.tables) | {
         "alembic_version"
     }
-    assert current_revision(database) == expected_revision() == "0002_event_sequence"
+    assert current_revision(database) == expected_revision()
     with database.connect() as connection:
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
@@ -93,11 +93,12 @@ def test_backup_contains_committed_wal_data(config, database):
 def test_failed_upgrade_preserves_database_and_creates_backup(
     config, database, tmp_path, monkeypatch
 ):
+    base_revision = current_revision(database)
     scripts = tmp_path / "migrations"
     shutil.copytree(Path(__file__).resolve().parents[1] / "migrations", scripts)
-    (scripts / "versions" / "0003_failure.py").write_text(
-        "revision = '0003_failure'\n"
-        "down_revision = '0002_event_sequence'\n"
+    (scripts / "versions" / "next_failure.py").write_text(
+        "revision = 'next_failure'\n"
+        f"down_revision = {base_revision!r}\n"
         "def upgrade():\n    raise RuntimeError('deliberate migration failure')\n"
         "def downgrade():\n    pass\n"
     )
@@ -110,12 +111,12 @@ def test_failed_upgrade_preserves_database_and_creates_backup(
     )
     with pytest.raises(RuntimeError, match="deliberate migration failure"):
         bootstrap(config, check_media=False)
-    assert current_revision(database) == "0002_event_sequence"
+    assert current_revision(database) == base_revision
     backups = list((config.data / "backups").glob("*.sqlite3"))
     assert len(backups) == 1
     with sqlite3.connect(backups[0]) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
-            "0002_event_sequence"
+            base_revision
         )
         assert connection.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 4
 
@@ -295,18 +296,17 @@ def test_readiness_requires_current_worker_and_source_offline_does_not_fail(
 
 def test_capabilities_are_truthful_and_recognition_is_unavailable(client):
     flags = client.get("/api/capabilities").json()
-    assert flags["backendStage"] == "foundation"
+    assert flags["backendStage"] == "indexing"
+    assert flags["scan"] is True and flags["reindex"] is True
     for key in (
-        "scan",
         "export",
         "prepare",
-        "reindex",
         "transcription",
         "visualRecognition",
         "semanticSearch",
     ):
         assert flags[key] is False
-    assert client.post("/api/tasks", json={"kind": "transcription"}).status_code == 404
+    assert client.post("/api/tasks", json={"kind": "transcription"}).status_code == 422
     assert not any(
         name.startswith(("torch", "funasr", "whisper", "onnxruntime")) for name in sys.modules
     )
@@ -320,7 +320,7 @@ def test_readonly_settings_and_status_use_persisted_values(client, database):
         }
     assert client.get("/api/settings").json()["groups"]["export"]["values"]["maxDuration"] == 10
     status = client.get("/api/system/status").json()
-    assert status["queue"]["executionEnabled"] is False
+    assert status["queue"]["executionEnabled"] is True
     assert status["storage"]["freeBytes"] > 0
 
 

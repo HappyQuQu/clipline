@@ -22,6 +22,11 @@ class AppConfig(BaseSettings):
     heartbeat_interval_seconds: float = Field(default=5, gt=0)
     worker_lease_seconds: float = Field(default=30, gt=0)
     shutdown_grace_seconds: float = Field(default=10, gt=0)
+    worker_poll_seconds: float = Field(default=0.2, ge=0.05, le=5)
+    scheduler_interval_seconds: float = Field(default=5, ge=0.1)
+    max_task_recoveries: int = Field(default=3, ge=1, le=10)
+    probe_timeout_seconds: float = Field(default=30, gt=0)
+    thumbnail_timeout_seconds: float = Field(default=30, gt=0)
 
     @field_validator("timezone")
     @classmethod

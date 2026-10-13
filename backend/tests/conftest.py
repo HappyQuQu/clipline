@@ -1,3 +1,8 @@
+import os
+import shutil
+import subprocess
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -29,3 +34,47 @@ def database(config):
 def client(config, database):
     with TestClient(create_app(config)) as client:
         yield client
+
+
+@pytest.fixture(scope="session")
+def video_sample(tmp_path_factory):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is required for media integration tests")
+    path = tmp_path_factory.mktemp("synthetic-video") / "sample.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=160x90:r=10",
+            "-t",
+            "1",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "1",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    return path
+
+
+@pytest.fixture
+def put_video(video_sample):
+    def put(directory, name="20261013_091500.mp4"):
+        path = directory / name
+        shutil.copyfile(video_sample, path)
+        os.utime(path, (time.time() - 120, time.time() - 120))
+        return path
+
+    return put

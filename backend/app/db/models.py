@@ -48,6 +48,7 @@ class Source(Entity, Timestamped, Base):
     auto_detect: Mapped[bool] = mapped_column(Boolean, default=False)
     last_scan_at: Mapped[int | None] = mapped_column(BigInteger)
     next_scan_at: Mapped[int | None] = mapped_column(BigInteger)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 class Segment(Entity, Timestamped, Base):
@@ -83,6 +84,7 @@ class Segment(Entity, Timestamped, Base):
     playback_status: Mapped[str] = mapped_column(String(30), default="needs_prepare")
     error_code: Mapped[str | None] = mapped_column(String(80))
     index_revision: Mapped[int] = mapped_column(Integer, default=1)
+    last_seen_scan: Mapped[str | None] = mapped_column(String(80))
 
 
 class Task(Entity, Base):
@@ -107,6 +109,7 @@ class Task(Entity, Base):
     error_message: Mapped[str | None] = mapped_column(String)
     retry_of_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"))
     attempt_no: Mapped[int] = mapped_column(Integer, default=0)
+    recovery_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     idempotency_key: Mapped[str | None] = mapped_column(String(200), unique=True)
     active_key: Mapped[str | None] = mapped_column(String(300), unique=True)
     available_at: Mapped[int] = mapped_column(BigInteger, default=utc_now_ms)
@@ -194,4 +197,15 @@ class Event(Base):
     event_type: Mapped[str] = mapped_column(String(80))
     entity_id: Mapped[str] = mapped_column(String(80))
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[int] = mapped_column(BigInteger, default=utc_now_ms)
+
+
+class TaskRequest(Base):
+    __tablename__ = "task_requests"
+
+    scope: Mapped[str] = mapped_column(String(120), primary_key=True)
+    request_key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    response_json: Mapped[dict] = mapped_column(JSON)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"))
     created_at: Mapped[int] = mapped_column(BigInteger, default=utc_now_ms)

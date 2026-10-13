@@ -11,6 +11,12 @@ def make_engine(config: AppConfig) -> Engine:
 
     @event.listens_for(engine, "connect")
     def configure_connection(connection, _):
+        from app.services.catalog import clock
+
+        connection.create_function(
+            "casefold", 1, lambda value: str(value or "").casefold(), deterministic=True
+        )
+        connection.create_function("recording_clock", 2, clock, deterministic=True)
         cursor = connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=5000")

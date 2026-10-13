@@ -6,7 +6,7 @@
 
 本文中的目录、数据库、API、Docker 配置和测试为拟实现的正式版契约，除明确标注“已有”外均不代表已完成。
 
-当前已完成 D1 运行基础，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1 记录](qa/D1_FOUNDATION.md)。业务扫描、回看与导出仍待接入；本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
+当前已完成 D1 运行基础及 D2 后台索引，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1 记录](qa/D1_FOUNDATION.md)及 [D2 记录](qa/D2_INDEXING.md)。scan/reindex 已执行真实媒体工作；回看、播放准备、导出和前端 API 接入仍待 D3/D4。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
 
 ## 1. 架构与技术选择
 
@@ -52,7 +52,7 @@ clipline/
 │       ├── hooks/                # 拟新增：查询、订阅、播放器状态
 │       ├── pages/                # 已有：Review/Library/Tasks/Logs/Sources/Settings
 │       └── capabilities.js       # 已有：二期能力及插槽
-├── backend/                      # 已建立 D1 基础；old/backend 不直接作为运行目录
+├── backend/                      # 已建立 D1/D2；old/backend 不直接作为运行目录
 │   ├── app/
 │   │   ├── main.py               # API 入口，不启动扫描循环或识别服务
 │   │   ├── core/                 # 配置、路径约束、错误、时间规则
@@ -65,7 +65,7 @@ clipline/
 │   └── tests/
 ├── deploy/                       # 已有本地测试配置与 smoke 脚本；运行管理在 app.runtime
 ├── Dockerfile                    # 已实现 D1 双架构构建
-├── compose.yaml                  # 已实现基础部署，业务能力仍待接入
+├── compose.yaml                  # 已支持后台索引，前端仍是原型
 ├── docs/
 └── old/                          # 只读参考，不进入正式镜像
 ```
@@ -88,7 +88,7 @@ clipline/
 
 SQLite WAL 依赖同机共享内存机制，不适合跨主机网络文件系统；本方案要求数据库及其 WAL/SHM 文件处于同一持久化本地目录。参考 [SQLite WAL 文档](https://www.sqlite.org/wal.html)。
 
-以下是设计中的部署参数示例；实际已实现的 D1 配置以仓库 `compose.yaml` 为准，尚不提供业务任务处理。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
+以下是设计中的部署参数示例；实际配置以仓库 `compose.yaml` 为准，当前可执行 scan/reindex。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
 
 ```yaml
 services:
@@ -173,9 +173,10 @@ CLIPLINE_IMAGE_TAG=d1-local
 
 | 表 | 核心字段 | 关键约束 / 索引 |
 | --- | --- | --- |
-| `sources` | id, name, canonical_path, enabled, scan_interval_minutes, recording_timezone, auto_transcribe, auto_detect, last_scan_at, next_scan_at, created_at, updated_at | canonical_path 唯一；manual 用 null；识别字段 false |
-| `segments` | id, source_id, relative_path, filename, size_bytes, mtime_ns, fingerprint, start_at, end_at, duration_ms, time_source, time_confidence, container, video_codec, audio_codec, width, height, fps_num/fps_den, availability, playback_status, error_code, index_revision | unique(source_id, relative_path)；索引(source_id, start_at)、(source_id, end_at)；duration > 0 |
-| `tasks` | id, kind, source_id, payload_json, status, stage, progress, result_json, error_code, error_message, retry_of_task_id, attempt_no, idempotency_key, active_key, available_at, lease_owner, lease_token, lease_until, cancel_requested_at, created_at, started_at, finished_at | active_key 非空时唯一；幂等键按工作空间和操作唯一；队列索引(status, available_at, created_at) |
+| `sources` | id, name, canonical_path, enabled, scan_interval_minutes, recording_timezone, auto_transcribe, auto_detect, last_scan_at, next_scan_at, created_at, updated_at, revision | canonical_path 唯一；manual 用 null；识别字段 false；revision 仅配置变化递增 |
+| `segments` | id, source_id, relative_path, filename, size_bytes, mtime_ns, fingerprint, start_at, end_at, duration_ms, time_source, time_confidence, container, video_codec, audio_codec, width, height, fps_num/fps_den, availability, playback_status, error_code, index_revision, last_seen_scan | unique(source_id, relative_path)；索引(source_id, start_at)、(source_id, end_at)；duration > 0；last_seen_scan 保存逻辑任务 ID |
+| `tasks` | id, kind, source_id, payload_json, status, stage, progress, result_json, error_code, error_message, retry_of_task_id, attempt_no, recovery_count, idempotency_key, active_key, available_at, lease_owner, lease_token, lease_until, cancel_requested_at, created_at, started_at, finished_at | active_key 非空时唯一；队列索引(status, available_at, created_at) |
+| `task_requests` | scope, request_key, request_hash, response_json, task_id, created_at | 联合主键(scope, request_key)；活动工作复用的请求别名也持久化；参数不同返回冲突 |
 | `task_attempts` | id, task_id, attempt_no, lease_token, status, started_at, finished_at, checkpoint_json, error_code | unique(task_id, attempt_no)；保留中断历史 |
 | `artifacts` | id, task_id, segment_id, kind, relative_path, profile_hash, input_fingerprint, size_bytes, duration_ms, status, expires_at, last_access_at | 文件仅位于 data 内；下载必须检查完成状态与有效期 |
 | `business_logs` | id, created_at, level, kind, source_id, task_id, event_code, title, detail_json | 索引(created_at, id)、(task_id, created_at)、(source_id, created_at) |
@@ -183,7 +184,7 @@ CLIPLINE_IMAGE_TAG=d1-local
 | `runtime_leases` | resource_key, owner, token, expires_at | 单协调器、源索引锁与媒体资源租约 |
 | `events` | id, event_type, entity_id, payload_json, created_at | 单调递增 ID；用于任务变化订阅和断线恢复 |
 
-`availability` 至少区分 available、missing、unreadable、invalid；`playback_status` 区分 direct、needs_prepare、preparing、ready、failed。任务成功只表示执行过程完成，逐文件失败数量必须单独返回。
+`availability` 至少区分 available、pending、missing、unreadable、invalid；`playback_status` 区分 direct、needs_prepare、preparing、ready、failed。任务成功只表示执行过程完成，逐文件失败数量必须单独返回。D2 迁移为 `0003_indexing_queue`，升版本前继续使用 D1 的一致性备份策略。
 
 源目录在存在索引后锁定；名称、频率和启停可编辑。已有索引的目录变更请求返回 `SOURCE_PATH_LOCKED`，前端提示添加新源。原型可以编辑路径，接正式版时需补这个校验和提示。
 
@@ -371,7 +372,7 @@ running/cancelling -> 异常中断后由恢复流程处理
 
 ### 8.3 并发和调度
 
-总活动任务初始上限 2；精准导出与实际代理转码合计上限 1；FFmpeg 线程建议 2，可按 NAS 配置调低。扫描缩略图为短时处理，仍设置超时和线程限额，不能借扫描启动大量并行转码。
+总活动任务初始上限 2；媒体资源槽初始上限 1；FFmpeg 线程建议 2，可按 NAS 配置调低。D2 缩略图已使用持久化媒体槽和超时；D3/D4 播放代理与导出转码复用同一限额。短时扫描不能绕过限额启动大量并行转码。
 
 任务顺序以提交时间为主，暂时无法获得源锁的任务继续排队。避免定时扫描无限插队；只允许每源一个未完成的周期扫描。降低并行设置不杀正在执行任务，只限制之后开始的任务。
 
@@ -387,7 +388,7 @@ running/cancelling -> 异常中断后由恢复流程处理
 
 运行取消先写 cancelRequestedAt；Worker 发送 SIGTERM，超过有限宽限（建议 5 秒）后 SIGKILL，确认子进程退出再写 cancelled。终态任务不能再次取消；失败/取消允许创建重试。
 
-Worker 恢复时检查过期租约、实例和协调器锁，确认旧执行器已死亡后再领取中断任务。排队任务继续；中断任务按上述策略恢复，尝试次数建议最多 3 次，超过后失败并记录原因。取消中的中断任务恢复为取消，不能重新执行用户已取消的工作。
+Worker 恢复先获得 worker.lock 独占，确认旧执行器已退出后再清理旧租约。排队任务继续；中断任务默认最多自动恢复 3 次，第四次异常中断后失败；正常停机不消耗故障恢复预算。取消中的中断任务恢复为取消，不能重新执行用户已取消的工作。恢复沿用逻辑 taskId，生成新 attempt/leaseToken，已完成索引可复用；用户重试则生成新 taskId。
 
 队列提供至少一次执行和幂等发布，不承诺严格 exactly-once。每次输出按 taskId/attempt/leaseToken 隔离，防止旧执行器误发布。
 

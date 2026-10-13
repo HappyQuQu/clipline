@@ -25,8 +25,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --locked
-      - run: uv run --frozen ruff check . ../deploy/smoke_foundation.py
-      - run: uv run --frozen ruff format --check . ../deploy/smoke_foundation.py
+      - name: Install FFmpeg for media integration tests
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: uv run --frozen ruff check . ../deploy
+      - run: uv run --frozen ruff format --check . ../deploy
       - run: uv run --frozen pytest -q
       - name: Check Docker dependency export
         run: |

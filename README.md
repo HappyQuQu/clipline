@@ -43,6 +43,6 @@ npm run dev
 
 ## 后端开发进度
 
-D1 运行基础已实现：新 FastAPI 后端、SQLite/Alembic、真实目录浏览、健康检查、独立 Worker 心跳及双架构 Docker。后端支持 Python 3.11/3.12，现有 32 项测试；前端 11 项测试与构建通过。
+D1 运行基础和 D2 后台索引已实现：FastAPI、SQLite/Alembic、真实目录浏览、持久化扫描/重建队列、增量索引、缩略图、取消/重试/重启恢复及双架构 Docker。后端支持 Python 3.11/3.12，64 项测试在两种 Python 版本均通过。
 
-使用方法见 [后端说明](backend/README.md)，验证结果见 [D1 记录](docs/qa/D1_FOUNDATION.md)。本地测试接口文档为 <http://127.0.0.1:8088/docs>。当前 Worker 尚未执行业务任务，页面仍为原型；真实扫描、回看与导出按任务清单继续接入。
+使用方法见 [后端说明](backend/README.md)，验证结果见 [D1 记录](docs/qa/D1_FOUNDATION.md)和 [D2 记录](docs/qa/D2_INDEXING.md)。本地接口文档为 <http://127.0.0.1:8088/docs>。指定目录中的 123 个真实文件已建立索引并生成缩略图；页面仍为原型，真实回看与片段库在 D3 接入，导出在 D4 接入，识别继续占位。
