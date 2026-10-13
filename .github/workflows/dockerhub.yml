@@ -2,73 +2,83 @@ name: Publish Docker image
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*.*.*"
+    branches: [main]
+    tags: ["v*.*.*"]
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: Docker image tag to publish
-        required: true
-        default: edge
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: dockerhub-${{ github.ref }}-${{ inputs.image_tag || 'release' }}
-  cancel-in-progress: true
+  group: dockerhub-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: evanqu/clipline
 
 jobs:
+  checks:
+    uses: ./.github/workflows/phase-one-checks.yml
+
   publish:
-    name: Build and push
+    name: Promote tested candidates
+    needs: checks
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+      - uses: actions/checkout@v4
+      - name: Validate release version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            VERSION=$(python3 deploy/validate_release.py --tag "$REF_NAME")
+          else
+            VERSION=$(python3 deploy/validate_release.py)
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: candidate-*
+          path: candidates
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          sbom: true
-          provenance: true
-
+      - name: Push exact tested architecture images and candidate manifest
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          for ARCH in amd64 arm64; do
+            docker load -i "candidates/candidate-$ARCH/image.tar"
+            ACTUAL=$(docker image inspect clipline:ci --format '{{.Id}}')
+            test "$ACTUAL" = "$(cat "candidates/candidate-$ARCH/image-id.txt")"
+            docker tag clipline:ci "$IMAGE_NAME:candidate-$REVISION-$ARCH"
+            docker push "$IMAGE_NAME:candidate-$REVISION-$ARCH"
+          done
+          docker buildx imagetools create -t "$IMAGE_NAME:candidate-$REVISION" \
+            "$IMAGE_NAME:candidate-$REVISION-amd64" "$IMAGE_NAME:candidate-$REVISION-arm64"
+          docker buildx imagetools inspect "$IMAGE_NAME:candidate-$REVISION" --raw > candidate-manifest.json
+          python3 deploy/check_manifest.py candidate-manifest.json
+      - name: Promote candidate after manifest verification
+        env:
+          REVISION: ${{ github.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            # Publish immutable version first; stable pointer is the final operation.
+            if docker buildx imagetools inspect "$IMAGE_NAME:$VERSION" --raw > existing-manifest.json 2>/dev/null; then
+              python3 deploy/check_manifest.py candidate-manifest.json --existing existing-manifest.json
+            else
+              docker buildx imagetools create -t "$IMAGE_NAME:$VERSION" "$IMAGE_NAME:candidate-$REVISION"
+            fi
+            docker buildx imagetools create -t "$IMAGE_NAME:latest" "$IMAGE_NAME:$VERSION"
+          else
+            docker buildx imagetools create -t "$IMAGE_NAME:edge" "$IMAGE_NAME:candidate-$REVISION"
+          fi
       - name: Update Docker Hub overview
         uses: peter-evans/dockerhub-description@e98e4d1628a5f3be2be7c231e50981aee98723ae
         with:
@@ -76,4 +86,4 @@ jobs:
           password: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN || secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
           readme-filepath: README.dockerhub.md
-          short-description: Xiaomi NAS backup video segment replay and export workbench.
+          short-description: NAS recording replay and export workbench for amd64 and arm64.

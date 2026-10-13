@@ -53,3 +53,9 @@ test('导出区间按服务端日期边界裁剪，选中 ID 和 UTC 精度保�
   const fall = exportRequest({ sourceId: 'one', date: '2026-11-01', start: 89000, end: 91000 }, { dayStartAt: '2026-11-01T04:00:00Z', dayEndAt: '2026-11-02T05:00:00Z' }, 'fast', 'file', 'America/New_York');
   assert.equal(fall.endAt, '2026-11-02T05:00:00.000Z');
 });
+
+test('切换日期先在全天定位已有录像，手动时间窗不被自动跳回首段', async () => {
+  const { timelineWindow } = await import('../src/api/adapters.js');
+  assert.deepEqual(timelineWindow(true, 0, 900), { startSeconds: 0, endSeconds: 90000 });
+  assert.deepEqual(timelineWindow(false, 43200, 44100), { startSeconds: 43200, endSeconds: 44100 });
+});

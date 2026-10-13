@@ -13,7 +13,7 @@ import { SETTINGS_FIELDS } from './domain';
 import ExportDialog from './components/ExportDialog';
 import SourceDialog from './components/SourceDialog';
 import { pages, queryString, request } from './api/client';
-import { bytes, clipView, dateInZone, sourceView, taskView, reviewContext } from './api/adapters';
+import { bytes, clipView, dateInZone, sourceView, taskView, reviewContext, timelineWindow } from './api/adapters';
 import { clock } from './domain';
 const nav = [['review', '录像回看', PlayCircle], ['library', '片段库', SquaresFour], ['tasks', '任务中心', Stack], ['logs', '日志中心', FileText], ['sources', '录像源', FolderSimple], ['settings', '设置', GearSix]];
 const defaults = initialSettings;
@@ -74,17 +74,19 @@ export default function App() {
   }, [selection.sourceId, refresh, timezone, indexStamp]);
   const startSeconds = windowRange?.context === context ? windowRange.start : 0;
   const endSeconds = windowRange?.context === context ? windowRange.end : 90000;
+  const needsInitialClip = !selection.clipId && active?.context !== context;
   useEffect(() => {
     if (!selection.sourceId || !selection.date) return;
     const controller = new AbortController(); setTimelineError('');
-    request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, startSeconds, endSeconds, limit: 200 })}`, { signal: controller.signal }).then(data => {
+    const range = timelineWindow(needsInitialClip, startSeconds, endSeconds);
+    request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, ...range, limit: 200 })}`, { signal: controller.signal }).then(data => {
       if (controller.signal.aborted) return;
       setTimeline({ ...data, context, windowKey: `${context}:${startSeconds}:${endSeconds}` });
       setActive(current => { const row = data.items.find(item => item.id === (selection.clipId || current?.clip?.id)) || (!selection.clipId && current?.context !== context ? data.items[0] : null); return row ? { context, clip: clipView(row, data.dayStartAt, timezone) } : current?.context === context ? current : null; });
       if (!selection.clipId && data.items[0] && active?.context !== context) { const first = clipView(data.items[0], data.dayStartAt, timezone); setSelection(current => current.sourceId === selection.sourceId && current.date === selection.date ? { ...current, offset: Math.max(0, -first.start) } : current); }
     }).catch(failure => { if (failure.name !== 'AbortError') { setTimelineError(failure.message); setTimeline(null); } });
     return () => controller.abort();
-  }, [context, startSeconds, endSeconds, refresh, timezone, indexStamp]);
+  }, [context, startSeconds, endSeconds, needsInitialClip, refresh, timezone, indexStamp]);
   useEffect(() => {
     if (!selection.clipId || !visibleTimeline?.dayStartAt) return;
     const controller = new AbortController();
@@ -148,7 +150,7 @@ export default function App() {
       <button className="brand" onClick={() => navigate('review')}><img src="/assets/clipline-logo.svg" alt="" /><span>Clipline<span className="brand-caption">你的录像，有迹可循。</span></span></button>
       <div className="sidebar-source-picker"><div className="source-picker-label"><label htmlFor="workspace-source">录像源</label><IconButton icon={Plus} label="添加录像源" onClick={() => setDialog(true)} /></div><div className="source-picker-control"><span className="source-dot blue" /><select id="workspace-source" aria-label="当前录像源" value={source?.id || ''} onChange={event => changeSource(event.target.value)}>{!source && <option value="">{loading ? '加载录像源…' : '暂无录像源'}</option>}{sources.map(row => <option key={row.id} value={row.id}>{row.name}{row.enabled ? '' : ' · 已停用'}</option>)}</select></div><p className="source-picker-summary"><span>{source?.count || 0} 个片段</span><span>{source ? source.enabled ? '已启用' : '已停用' : '添加目录开始'}</span></p></div>
       <nav aria-label="主导航">{nav.map(([id, label, Icon]) => <button key={id} aria-label={label} className={`nav-item ${page === id ? 'active' : ''} ${id === 'sources' ? 'nav-divider' : ''}`} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={21} weight={page === id ? 'fill' : 'regular'} /><span>{label}</span>{id === 'tasks' && activeTasks > 0 && <span className="nav-count">{activeTasks}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="storage-card"><HardDrives size={20} /><div><strong>NAS 录像目录</strong><span>{sources.length} 个目录 · {bytes(sources.reduce((sum, row) => sum + row.totalBytes, 0))}</span></div><Badge tone="blue" dot>只读</Badge></div><div className="prototype-label"><span className="status-dot" />本地录像工作台<span>v0.6</span></div></div>
+      <div className="sidebar-bottom"><div className="storage-card"><HardDrives size={20} /><div><strong>NAS 录像目录</strong><span>{sources.length} 个目录 · {bytes(sources.reduce((sum, row) => sum + row.totalBytes, 0))}</span></div><Badge tone="blue" dot>只读</Badge></div><div className="prototype-label"><span className="status-dot" />本地录像工作台<span>{system.version ? `v${system.version}` : '读取版本…'}</span></div></div>
     </aside>
     <div className="main-shell"><header className="topbar"><div className="topbar-context"><span className="mobile-menu"><IconButton icon={mobileNav ? X : List} label="切换导航" onClick={() => setMobileNav(!mobileNav)} /></span><span className="muted">工作空间</span><CaretRight size={12} /><strong>{nav.find(row => row[0] === page)?.[1]}</strong></div><div className="topbar-right"><button className="search-trigger" aria-label="搜索录像文件" onClick={() => setSearchOpen(true)}><MagnifyingGlass size={17} /><span>搜索录像文件</span><kbd>⌘ K</kbd></button><Badge tone="blue" dot>{changeSignal === "live" ? "实时连接" : "轮询同步"}</Badge></div></header>
       <main className="content">

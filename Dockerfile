@@ -4,7 +4,8 @@ WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+RUN VITE_ENABLE_DEMO=false npm run build \
+    && rm -f dist/assets/studio* dist/assets/front-door*
 
 FROM python:3.11.14-slim-bookworm AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \

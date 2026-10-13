@@ -3,6 +3,7 @@ name: Phase-one checks
 on:
   push:
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -30,6 +31,7 @@ jobs:
       - run: uv run --frozen ruff check . ../deploy
       - run: uv run --frozen ruff format --check . ../deploy
       - run: uv run --frozen pytest -q
+      - run: uv run --frozen python ../deploy/validate_release.py
       - name: Check Docker dependency export
         run: |
           uv export --frozen --no-dev --no-emit-project -o requirements.lock > /dev/null
@@ -47,3 +49,51 @@ jobs:
       - run: npm ci --prefix frontend
       - run: npm test
       - run: npm run build
+
+  native-image:
+    name: Native image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build candidate without publishing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: clipline:ci
+          cache-from: type=gha,scope=native-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=native-${{ matrix.arch }}
+      - name: Inspect and exercise exact candidate on native hardware
+        run: |
+          python3 deploy/check_image.py --image clipline:ci
+          python3 deploy/smoke_release.py --image clipline:ci --require-native --output "$RUNNER_TEMP/d6"
+      - name: Save tested image
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate"
+          docker save clipline:ci -o "$RUNNER_TEMP/candidate/image.tar"
+          docker image inspect clipline:ci --format '{{.Id}}' > "$RUNNER_TEMP/candidate/image-id.txt"
+          cp "$RUNNER_TEMP/d6/results.json" "$RUNNER_TEMP/candidate/acceptance.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-${{ matrix.arch }}
+          path: ${{ runner.temp }}/candidate/
+          retention-days: 3
+          compression-level: 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-evidence-${{ matrix.arch }}
+          path: ${{ runner.temp }}/d6/
+          retention-days: 7
+          if-no-files-found: ignore
