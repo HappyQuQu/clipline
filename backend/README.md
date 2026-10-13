@@ -1,8 +1,8 @@
 # Clipline 一期后端
 
-当前实现 D1–D5：运行基础、后台索引、真实页面接入、本地日时间轴、按时间定位、原文件 Range 播放与后台兼容代理，以及详情/片段库/文件信息搜索、真实区间裁剪、跨片段拼接和导出下载。
+当前实现 D1–D6：运行基础、后台索引、真实页面接入、本地日时间轴、按时间定位、原文件 Range 播放与后台兼容代理，以及详情/片段库/文件信息搜索、真实区间裁剪、跨片段拼接和导出下载。
 
-`/api/capabilities` 中 scan/reindex/playback/prepare/export 为 true，识别能力为 false，backendStage 为 maintenance。默认页面使用真实 API；`?mode=demo` 才进入旧原型。设置保存、日志筛选/导出/诊断、SSE、缓存与到期清理和一致性备份已接入。
+`/api/capabilities` 中 scan/reindex/playback/prepare/export 为 true，识别能力为 false，backendStage 为 maintenance。默认页面使用真实 API；Docker 候选镜像关闭演示模式，开发服务器可显式打开 `?mode=demo`。设置保存、日志筛选/导出/诊断、SSE、缓存与到期清理和一致性备份已接入。
 
 ## 本机开发
 
@@ -46,7 +46,7 @@ uv run --frozen ruff format --check . ../deploy
 uv run --frozen pytest -q
 ```
 
-103 项测试覆盖迁移/升级保护、目录边界、幂等与领取竞争、租约隔离、资源限额、取消/重试/恢复、真实合成媒体探测、文件稳定性、离线/部分扫描保护、跨日搜索/时间轴、Range/HEAD/ETag、代理发布/校验/取消及容量限制。新增导出计划、快速/精准媒体、时间戳/音轨、发布崩溃、过期下载及取消/恢复测试。媒体测试需本机安装 ffmpeg/ffprobe。CI 使用 Python 3.11/3.12；Docker 运行层锁定 Python 3.11，依赖由 `uv.lock` 和带 hash 的 `requirements.lock` 锁定。
+107 项测试覆盖迁移/升级保护、目录边界、幂等与领取竞争、租约隔离、资源限额、取消/重试/恢复、真实合成媒体探测、文件稳定性、离线/部分扫描保护、跨日搜索/时间轴、Range/HEAD/ETag、代理发布/校验/取消及容量限制。新增导出计划、快速/精准媒体、时间戳/音轨、发布崩溃、过期下载及取消/恢复测试。媒体测试需本机安装 ffmpeg/ffprobe。CI 使用 Python 3.11/3.12；Docker 运行层锁定 Python 3.11，依赖由 `uv.lock` 和带 hash 的 `requirements.lock` 锁定。
 
 真实目录验证在仓库根目录执行 `python3 deploy/smoke_indexing.py --restart`，会创建本地测试源，执行扫描、增量、取消、重试并强制结束测试容器内 Worker，验证 Docker 重启后的恢复。仅用于上述独立本地测试容器。
 
@@ -80,7 +80,7 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 
 代理指纹/profile 缓存去重，校验成功后在受租约保护的终态事务中发布；取消不暴露半成品。执行缓存容量限制、按最近使用顺序清理和活跃使用保护。原文件变化或源离线时明确报错，不能按旧索引播放其他文件。
 
-已实现边界和验证结果见 [D1](../docs/qa/D1_FOUNDATION.md)、[D2](../docs/qa/D2_INDEXING.md)、[D3](../docs/qa/D3_PLAYBACK.md)、[D4](../docs/qa/D4_EXPORTS.md)及 [D5](../docs/qa/D5_OPERATIONS.md)，后续任务见 [开发清单](../docs/TASKS.md)。
+已实现边界和验证结果见 [D1](../docs/qa/D1_FOUNDATION.md)、[D2](../docs/qa/D2_INDEXING.md)、[D3](../docs/qa/D3_PLAYBACK.md)、[D4](../docs/qa/D4_EXPORTS.md)、[D5](../docs/qa/D5_OPERATIONS.md)及 [D6](../docs/qa/D6_ACCEPTANCE.md)，后续任务见 [开发清单](../docs/TASKS.md)。
 
 导出始终读取原始文件。fast 检查编码、分辨率、帧率、时间基与 extradata，相容才复制；单个裁剪偏差超过 5 秒报 FAST_BOUNDARY_UNSAFE，不发布结果。precise 默认 25 fps、最大宽度 3840，按累计帧数分配边界、顺序编码 NUT/PCM 中间片段，再一次编码 AAC 音轨；有声/无声混合时补齐对应静音，全无音轨不生成音轨。结果验证帧数、逐包时间戳、音视频时长，并解码精准结果检查错误。
 
@@ -89,3 +89,5 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 维护每 60 秒检查一次。导出默认保留 24 小时，日志 30 天，事件 24 小时且最多 10,000 条；旧尝试与可确认归属的孤立结果至少等待 1 小时。只清理 exports/playback-proxies/thumbnails/tmp 内的应用文件，跳过符号链接和源目录。下载持久租约 + OS 共享文件锁保护慢流，播放页面每 20 秒以内续租，正常关闭后有短暂保护期。旧 Worker 恢复不会清除 API/浏览器租约。
 
 备份与离线恢复步骤见 [运维说明](../docs/OPERATIONS.md)。迁移前自动做 SQLite 一致性备份和 SHA256/schema manifest；恢复要求 API/Worker 全部停止。D5 的 schema 为 `0004_log_sequence`，原日志 UUID 和任务记录保持。
+
+D6 原生候选镜像验收由 `deploy/smoke_release.py` 驱动，涵盖软件媒体流程与真实进程故障；两种架构分别在原生 Ubuntu runner 上执行。NAS 配置、部署预检及发布门禁见 [部署说明](../docs/DEPLOYMENT.md)。应用候选版本 0.7.0，schema 沿用 0004。

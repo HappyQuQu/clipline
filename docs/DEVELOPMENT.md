@@ -1,12 +1,12 @@
 # Clipline 开发文档
 
-版本：v1.0 · 日期：2026-10-13 · 状态：正式版实现方案草案
+版本：v1.0 · 日期：2026-10-13 · 状态：0.7.0 候选实现与验收记录
 
 需求与验收依据：[方案与需求文档](REQUIREMENTS.md)；实施跟踪：[开发任务清单](TASKS.md)。当前前端边界见 [原型结构与二期接入](PROTOTYPE_ARCHITECTURE.md)。
 
 本文中的目录、数据库、API、Docker 配置和测试为拟实现的正式版契约，除明确标注“已有”外均不代表已完成。
 
-当前已完成 D1–D5，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)、[D3](qa/D3_PLAYBACK.md)、[D4](qa/D4_EXPORTS.md)及 [D5](qa/D5_OPERATIONS.md)。scan/reindex/prepare/export 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；真实裁剪、跨片段拼接和下载已接通，设置、日志、SSE、清理和备份已接入；双架构 NAS 验收与发布仍待 D6。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
+当前已完成 D1–D6，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)、[D3](qa/D3_PLAYBACK.md)、[D4](qa/D4_EXPORTS.md)、[D5](qa/D5_OPERATIONS.md)及 [D6](qa/D6_ACCEPTANCE.md)。scan/reindex/prepare/export 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；真实裁剪、跨片段拼接和下载已接通，设置、日志、SSE、清理和备份已接入；原生 Linux 双架构与 x86 NAS 实测通过，发布采用候选门禁。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
 
 ## 1. 架构与技术选择
 
@@ -88,7 +88,7 @@ clipline/
 
 SQLite WAL 依赖同机共享内存机制，不适合跨主机网络文件系统；本方案要求数据库及其 WAL/SHM 文件处于同一持久化本地目录。参考 [SQLite WAL 文档](https://www.sqlite.org/wal.html)。
 
-以下是设计中的部署参数示例；实际配置以仓库 `compose.yaml` 为准，当前可执行 scan/reindex/prepare。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
+以下是设计中的部署参数示例；实际配置以仓库 `compose.yaml` 为准，当前可执行 scan/reindex/prepare/export。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
 
 ```yaml
 services:
@@ -466,7 +466,7 @@ provider 接口负责能力描述、任务 payload 校验、资源需求、执�
 | `old/backend/app/main.py` | 包含模型与识别初始化流程 | 一期 API 启动移除所有识别加载 |
 | `old/backend/app/db.py` | 手工补字段迁移 | Alembic + 启动前备份/迁移 |
 | 旧导出 mode=`accurate` | 当前原型采用 `precise` | 统一正式契约，复用代码时明确映射 |
-| `.github/workflows/dockerhub.yml` | 保留旧发布流程；D1 已重建根 Dockerfile | D6 补候选镜像与完整运行验收门禁；构建成功不能证明正式版可发布 |
+| `.github/workflows/dockerhub.yml` | D6 已接入原生候选验收与准确镜像推广 | 先通过全部检查和 manifest，再更新固定版本/稳定指针 |
 
 旧接口只作为参考。正式前端以本文 API 为准；需要兼容时使用显式 adapter，不能让页面分别猜测 scan-job/export-job 等历史结构。
 
@@ -536,3 +536,7 @@ docker buildx build \
 - 下载在同一短写事务中验证 Artifact、取得共享 OS 锁和登记使用租约。租约即使过期，尚未关闭的 FD 锁仍保护慢流；清理取得独占锁才可删除。播放视图独立续租，退出后释放；正常重启不抹掉这些使用租约。
 - 维护在线程中运行，不阻塞 Worker 心跳：过期导出、stale/不可用缓存、LRU 容量、终态旧尝试、已知归属孤立结果/manifest、日志和事件保留。清理不创建顶层任务，聚合写业务日志，保留 Task/Attempt 历史。路径越界和符号链接跳过，不遍历录像挂载。
 - 备份使用 SQLite backup API，验证 integrity/FK/schema/SHA256；迁移前自动备份。恢复同时持有 bootstrap/API/Worker 文件锁，先备份当前库，再原子替换。旧 schema 回滚须明确 target-schema 并启动匹配旧镜像，不在新镜像下自动重迁移。完整操作见 [运维说明](OPERATIONS.md)。
+
+## D6 验收与发布实施
+
+0.7.0 候选版本完成主流程桌面/手机回归、107 项后端与 22 项前端测试；两种镜像分别在 Ubuntu amd64/ARM64 原生 runner 验收。候选镜像内容、版本、Compose 目录映射和双架构 index 均提供检查脚本。发布工作流复用完整检查，发布准确已测试镜像并核验 manifest，固定版本不可覆盖不同内容，最后更新稳定指针；主分支只更新 edge。Docker 关闭演示模式，不含演示媒体或识别模型。详情见 [D6 验收](qa/D6_ACCEPTANCE.md)和 [部署说明](DEPLOYMENT.md)。x86 NAS 的 2 GiB 资源档位已在实际设备验证，共存 HA；长时间 4K 输出仍需按部署资源单独测量。

@@ -5,6 +5,8 @@ services:
       context: .
     image: ${CLIPLINE_IMAGE_NAME:-clipline}:${CLIPLINE_IMAGE_TAG:-dev}
     user: "${CLIPLINE_UID:-1000}:${CLIPLINE_GID:-1000}"
+    cpus: ${CLIPLINE_CPU_LIMIT:-0}
+    mem_limit: ${CLIPLINE_MEMORY_LIMIT:-0}
     init: true
     restart: unless-stopped
     stop_grace_period: 15s

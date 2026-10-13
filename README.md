@@ -47,6 +47,6 @@ npm run dev
 
 ## 后端开发进度
 
-D1–D5 已实现：运行基础、后台索引、真实页面接入和录像导出；包含本地日时间轴、断档、跨日定位、Range 播放、后台兼容准备、取消/重试/恢复、详情和文件信息搜索。快速模式复制兼容编码，精准模式按区间裁剪为 H.264/AAC；任务可取消、新 ID 重试和重启恢复。设置使用分类 revision，日志导出使用一致快照，缓存清理保护正在播放/下载的内容。后端 Python 3.11/3.12 各 103 项测试通过，前端 21 项测试及构建通过。
+D1–D6 已实现并完成软件验收：运行基础、后台索引、真实页面接入和录像导出；包含本地日时间轴、断档、跨日定位、Range 播放、后台兼容准备、取消/重试/恢复、详情和文件信息搜索。快速模式复制兼容编码，精准模式按区间裁剪为 H.264/AAC；任务可取消、新 ID 重试和重启恢复。设置使用分类 revision，日志导出使用一致快照，缓存清理保护正在播放/下载的内容。后端 Python 3.11/3.12 各 107 项测试通过，前端 22 项测试及构建通过。
 
-使用方法见 [后端说明](backend/README.md)，验证见 [D1](docs/qa/D1_FOUNDATION.md)、[D2](docs/qa/D2_INDEXING.md)、[D3](docs/qa/D3_PLAYBACK.md)、[D4](docs/qa/D4_EXPORTS.md)和 [D5](docs/qa/D5_OPERATIONS.md)。本地接口文档为 <http://127.0.0.1:8088/docs>。指定目录中的 123 个真实文件可查询和回看；设置和日志运维已接入，识别继续占位。双架构 NAS 原生验收与发布检查仍在 D6。
+使用方法见 [后端说明](backend/README.md)，验证见 [D1](docs/qa/D1_FOUNDATION.md)、[D2](docs/qa/D2_INDEXING.md)、[D3](docs/qa/D3_PLAYBACK.md)、[D4](docs/qa/D4_EXPORTS.md)、[D5](docs/qa/D5_OPERATIONS.md)及 [D6](docs/qa/D6_ACCEPTANCE.md)。本地接口文档为 <http://127.0.0.1:8088/docs>。指定目录中的 123 个真实文件可查询和回看；设置和日志运维已接入，识别继续占位。amd64/arm64 原生 Linux 镜像验收通过，x86 NAS 实测通过（2 GiB，共存 HA，使用资源上限及 1280 输出档位）。部署与发布门禁见 [部署说明](docs/DEPLOYMENT.md)。当前候选版本 0.7.0，开发分支不更新 Docker Hub 稳定标签；正式镜像关闭演示模式并排除演示媒体。

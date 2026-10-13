@@ -5,7 +5,7 @@
 ## NAS Docker Compose
 
 1. 安装支持 Compose V2 的 Docker。下载仓库的 `compose.yaml` 与 `deploy/nas.env.example`；复制配置为 `.env.nas`，替换宿主机路径、UID/GID、端口和已通过发布检查的固定镜像版本。
-2. 在 NAS 创建应用数据目录，赋予配置的 UID/GID 读写权限；该目录必须与原录像目录独立，不能互相嵌套。确认同一用户可读取录像目录。
+2. 在 NAS 创建应用数据目录，赋予配置的 UID/GID 读写权限；该目录必须与原录像目录独立，不能互相嵌套；SQLite 数据目录应位于 NAS 本地文件系统，不放在 SMB/NFS 共享目录。确认同一用户可读取录像目录。
 3. 预检通过后只拉取镜像启动，无需在 NAS 构建源码。
 
 ```bash
@@ -67,3 +67,27 @@ python3 deploy/smoke_release.py --image clipline:d6-local --platform linux/amd64
 - 发布前由操作者选择版本并推送 tag；本次 D6 开发不创建正式发布 tag。
 
 Actions 中两份 native-evidence 记录证明原生 Linux 软件流程；本机 ARM64 Docker 实测/amd64 仿真与 NAS 实机性能不是同一证据。实际 NAS CPU/内存、挂载权限、长任务耗时和设备故障应在部署后按同一场景记录，不用仿真结果替代设备指标。
+
+## 2 GiB、共存其他服务的实测档位
+
+用户提供的 x86 NAS 主机已验证 1 CPU / 768 MiB 硬上限、1 媒体线程、1280 兼容播放和精准输出，HA 容器前后保持同一启动实例。环境文件可设置：
+
+```dotenv
+CLIPLINE_CPU_LIMIT=1
+CLIPLINE_MEMORY_LIMIT=768m
+CLIPLINE_MEDIA_THREADS=1
+CLIPLINE_PLAYBACK_MAX_WIDTH=1280
+CLIPLINE_EXPORT_MAX_WIDTH=1280
+```
+
+在应用后台任务设置中保存并行 1。`0` 表示不额外设置 Docker CPU/内存限制；镜像内部媒体槽与线程限制仍然生效。该档位支持 4K 原始输入后缩放输出，短真实 HEVC/Opus 与 60 秒控制样本通过，完整长 4K 输出的性能另行记录。
+
+设备验收可从已测试镜像运行以下脚本，root 驱动仅对新建测试目录设置 UID/GID，不修改系统用户。`--real-sample` 应指向用户授权的短 HEVC/Opus 4K 样本；输入复制到独立目录并只读挂载。资源限制同时覆盖样本生成与应用容器。
+
+```bash
+python3 deploy/smoke_release.py --image clipline:tested-candidate --require-native \
+  --uid 1000 --gid 1000 --cpus 1 --memory 768m --playback-width 1280 \
+  --real-sample short-hevc-opus.mp4 --output ~/clipline/qa
+```
+
+测试结束保留结果，移除自身创建的容器。若宿主机已有 HA 等服务，先后只读核对其容器 ID、启动时间、重启次数与运行状态；不对其执行重启、更新或配置操作。

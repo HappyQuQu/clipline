@@ -8,13 +8,14 @@ import hashlib
 import json
 import os
 import platform
+import shutil
 import socket
 import subprocess
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -39,6 +40,15 @@ class Smoke:
         self.base = None
         self.results = {"startedAt": datetime.now().astimezone().isoformat(), "checks": {}}
         self.platform_args = ["--platform", args.platform] if args.platform else []
+        self.uid = args.uid if args.uid is not None else (os.getuid() or 1000)
+        self.gid = args.gid if args.gid is not None else (os.getgid() or 1000)
+        assert self.uid > 0, "Runtime must use a non-root UID"
+        self.resource_args = (["--cpus", args.cpus] if args.cpus else []) + (
+            ["--memory", args.memory] if args.memory else []
+        )
+        if os.getuid() == 0:
+            for directory in (self.recordings, self.data):
+                os.chown(directory, self.uid, self.gid)
 
     def docker(self, *command):
         return run("docker", *command)
@@ -46,6 +56,8 @@ class Smoke:
     def generate(self):
         directory = self.recordings / "camera"
         directory.mkdir()
+        if os.getuid() == 0:
+            os.chown(directory, self.uid, self.gid)
         for filename, codec, length, size in (
             ("20261013_091500.mp4", "libx264", 2, "160x90"),
             ("20261013_091503.mp4", "libx264", 2, "160x90"),
@@ -66,10 +78,11 @@ class Smoke:
                 "run",
                 "--rm",
                 *self.platform_args,
+                *self.resource_args,
                 "--network",
                 "none",
                 "--user",
-                f"{os.getuid()}:{os.getgid()}",
+                f"{self.uid}:{self.gid}",
                 "--mount",
                 f"type=bind,source={directory},target=/fixtures",
                 "--entrypoint",
@@ -100,6 +113,10 @@ class Smoke:
                 "/fixtures/" + filename,
             )
             os.utime(directory / filename, (time.time() - 120, time.time() - 120))
+        if self.args.real_sample:
+            sample = directory / "20261013_091700.mp4"
+            shutil.copyfile(self.args.real_sample, sample)
+            os.utime(sample, (time.time() - 120, time.time() - 120))
 
     def signature(self):
         return {
@@ -197,6 +214,12 @@ class Smoke:
             "image": image,
             "native": host == image_arch,
             "cpuCount": os.cpu_count(),
+            "runtimeLimits": {
+                "cpus": self.args.cpus,
+                "memory": self.args.memory,
+                "uid": self.uid,
+                "gid": self.gid,
+            },
             "memory": Path("/proc/meminfo").read_text().splitlines()[0]
             if Path("/proc/meminfo").exists()
             else "macOS Docker VM",
@@ -210,13 +233,14 @@ class Smoke:
             "run",
             "-d",
             *self.platform_args,
+            *self.resource_args,
             "--name",
             self.name,
             "--init",
             "--restart",
             "unless-stopped",
             "--user",
-            f"{os.getuid()}:{os.getgid()}",
+            f"{self.uid}:{self.gid}",
             "-p",
             f"127.0.0.1:{host_port}:8080",
             "--mount",
@@ -228,7 +252,7 @@ class Smoke:
             "-e",
             "CLIPLINE_EXPORT_MAX_WIDTH=1280",
             "-e",
-            "CLIPLINE_PLAYBACK_MAX_WIDTH=320",
+            f"CLIPLINE_PLAYBACK_MAX_WIDTH={self.args.playback_width}",
             "-e",
             "CLIPLINE_MAINTENANCE_INTERVAL_SECONDS=1",
             "-e",
@@ -269,7 +293,8 @@ class Smoke:
             self.call(f"/segments?sourceId={sid}&limit=200")["items"],
             key=lambda row: row["startAt"],
         )
-        assert len(rows) == 4
+        expected_count = 5 if self.args.real_sample else 4
+        assert len(rows) == expected_count
         timeline = self.call(
             "/timeline?"
             + urllib.parse.urlencode(
@@ -280,7 +305,7 @@ class Smoke:
                 }
             )
         )
-        assert timeline["segmentCount"] == 4 and timeline["coverageMs"] > 0
+        assert timeline["segmentCount"] == expected_count and timeline["coverageMs"] > 0
         assert self.call(f"/sources/{sid}/dates")["items"] == ["2026-10-13"]
         assert (
             self.call(
@@ -303,6 +328,32 @@ class Smoke:
         assert rows[2]["videoCodec"] == "hevc" and rows[2]["audioCodec"] == "opus"
         assert self.call(f"/segments/{rows[2]['id']}/prepare", {})["taskId"] is None
         self.check("browser-compatible-proxy-and-cache")
+        if self.args.real_sample:
+            real = rows[4]
+            assert real["videoCodec"] == "hevc" and real["width"] == 3840
+            prepared_id = self.call(f"/segments/{real['id']}/prepare", {})["taskId"]
+            assert self.wait(prepared_id)["status"] == "completed"
+            assert self.call(f"/segments/{real['id']}/playback")["status"] == "ready"
+            begin = datetime.fromisoformat(real["startAt"].replace("Z", "+00:00"))
+            real_id = self.call(
+                "/exports",
+                {
+                    "sourceId": sid,
+                    "startAt": real["startAt"],
+                    "endAt": (begin + timedelta(seconds=2)).isoformat(),
+                    "segmentIds": [real["id"]],
+                    "mode": "precise",
+                    "name": "D6真实4K样本",
+                },
+            )["taskId"]
+            exported_real = self.wait(real_id)
+            assert exported_real["status"] == "completed", exported_real
+            assert exported_real["result"]["actualDurationMs"] == 2000
+            assert exported_real["result"]["frameCount"] == 50
+            self.check(
+                "real-4k-hevc-opus-prepare-and-precise-export",
+                self.download(exported_real, "real-sample-export"),
+            )
         body = {
             "sourceId": sid,
             "startAt": rows[0]["startAt"],
@@ -397,6 +448,16 @@ class Smoke:
         assert self.call("/tasks/" + restart_id)["downloadStatus"] == "expired"
         assert self.signature() == before
         self.check("expiry-cleanup-original-hashes-phase-two-disabled")
+        self.results["finalLifecycleMemoryPeakBytes"] = json.loads(
+            self.exec_py(
+                "import json;from pathlib import Path;p=Path('/sys/fs/cgroup/memory.peak');"
+                "print(json.dumps(int(p.read_text()) if p.exists() else None))"
+            )
+        )
+        self.results["oomKilled"] = json.loads(
+            self.docker("inspect", "--format", "{{json .State.OOMKilled}}", self.name)
+        )
+        assert not self.results["oomKilled"]
         self.results["passed"] = True
 
     def finish(self):
@@ -416,6 +477,12 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--platform")
     parser.add_argument("--require-native", action="store_true")
+    parser.add_argument("--uid", type=int)
+    parser.add_argument("--gid", type=int)
+    parser.add_argument("--cpus")
+    parser.add_argument("--memory")
+    parser.add_argument("--real-sample")
+    parser.add_argument("--playback-width", type=int, default=320)
     parser.add_argument("--output", default="data/qa/d6-release")
     args = parser.parse_args()
     smoke = Smoke(args)
