@@ -6,7 +6,7 @@
 
 本文中的目录、数据库、API、Docker 配置和测试为拟实现的正式版契约，除明确标注“已有”外均不代表已完成。
 
-当前已完成 D1–D4，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)、[D3](qa/D3_PLAYBACK.md)及 [D4](qa/D4_EXPORTS.md)。scan/reindex/prepare/export 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；真实裁剪、跨片段拼接和下载已接通，完整设置/日志运维仍待 D5。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
+当前已完成 D1–D5，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)、[D3](qa/D3_PLAYBACK.md)、[D4](qa/D4_EXPORTS.md)及 [D5](qa/D5_OPERATIONS.md)。scan/reindex/prepare/export 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；真实裁剪、跨片段拼接和下载已接通，设置、日志、SSE、清理和备份已接入；双架构 NAS 验收与发布仍待 D6。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
 
 ## 1. 架构与技术选择
 
@@ -49,10 +49,10 @@ clipline/
 │   └── src/
 │       ├── api/                  # 已有：HTTP、DTO、错误映射
 │       ├── services/             # 拟新增：源、回看、任务等领域适配
-│       ├── hooks/                # 已有播放状态；订阅在 D5
+│       ├── hooks/                # 播放状态、使用续租与 SSE
 │       ├── pages/                # 已有：Review/Library/Tasks/Logs/Sources/Settings
 │       └── capabilities.js       # 已有：二期能力及插槽
-├── backend/                      # 已建立 D1–D4；old/backend 不直接作为运行目录
+├── backend/                      # 已建立 D1–D5；old/backend 不直接作为运行目录
 │   ├── app/
 │   │   ├── main.py               # API 入口，不启动扫描循环或识别服务
 │   │   ├── core/                 # 配置、路径约束、错误、时间规则
@@ -272,7 +272,7 @@ export payload 示例：
 | GET `/system/status` | 版本、arch、Worker、队列、磁盘、FFmpeg 和缓存统计 |
 | GET `/health/live`、`/health/ready` | 进程与依赖就绪状态 |
 
-`scan`、`playback`、`export`、`tasks` 为可编辑分类。路径、硬件信息和一期识别能力只读。服务端拒绝一期识别任务及策略启用请求，不能依靠前端隐藏按钮保证范围。
+`scan`、`playback`、`export`、`tasks` 为可编辑分类，PATCH body 为 `{revision, values}`，values 包含本分类的完整字段。默认间隔可为 null（仅手动）；maxDuration 仅允许 10/30/60，concurrency 仅允许 1/2/3。路径、硬件信息和一期识别能力只读。服务端拒绝一期识别任务及策略启用请求，不能依靠前端隐藏按钮保证范围。
 
 ## 6. 扫描、时间与回看实现
 
@@ -346,7 +346,7 @@ precise 使用默认 25 fps（配置范围 1–60）、最大宽度 3840 的等�
 
 FFmpeg 通过进程调用并解析 `-progress`，百分比以预期媒体处理时长估算，阶段切换另有明确名称。完成后 FFprobe 检查容器、音视频轨、时间戳与实际时长，保存 expected/actual duration。精度验证不能只依赖命令退出码或完整秒数。
 
-结果写入 task/attempt 暂存目录；验证后 fsync 文件和 manifest（计划 hash、结果 SHA256/大小/媒体参数、路径），终态事务复核所有权、取消和输入后原子发布，DB 同事务记录 completed 与 artifact。若重命名后数据库提交前崩溃，恢复时按 manifest 对账 SHA256 和计划，可复用已验证结果；不开放未登记文件。导出 TTL 在发布时固定，D4 下载接口执行过期检查，物理清理在 D5。下载接口只访问已登记结果，不把 tmp 或 exports 整目录作为静态文件公开。参考 [FFmpeg 官方文档](https://ffmpeg.org/ffmpeg.html)。
+结果写入 task/attempt 暂存目录；验证后 fsync 文件和 manifest（计划 hash、结果 SHA256/大小/媒体参数、路径），终态事务复核所有权、取消和输入后原子发布，DB 同事务记录 completed 与 artifact。若重命名后数据库提交前崩溃，恢复时按 manifest 对账 SHA256 和计划，可复用已验证结果；不开放未登记文件。导出 TTL 在发布时固定，D4 下载接口执行过期检查，D5 已接入受使用保护的物理清理。下载接口只访问已登记结果，不把 tmp 或 exports 整目录作为静态文件公开。参考 [FFmpeg 官方文档](https://ffmpeg.org/ffmpeg.html)。
 
 ## 8. 持久化任务与恢复
 
@@ -411,7 +411,7 @@ Worker 恢复先获得 worker.lock 独占，确认旧执行器已退出后再清
 
 设置按分类保存：`scan`（默认间隔、文件保护）、`playback`（续播、断档）、`export`（模式、跨度）、`tasks`（并行）。PATCH 仅接受该分类字段，使用 revision 比较防止覆盖同分类新值。识别能力由版本与 provider 状态决定，不能通过普通设置绕过。
 
-D3 默认真实模式读取配置，保存按钮在 D5 开放；原型仅在显式 ?mode=demo 启用。前端保留 App 层草稿；保存成功后更新当前分类 saved 值，其他分类草稿不变。保存冲突提示重新读取并保留用户编辑，不能静默覆盖。
+D3 接入真实配置读取，D5 已开放分类保存；原型仅在显式 ?mode=demo 启用。前端保留 App 层草稿；保存成功后更新当前分类 saved 值，其他分类草稿不变。保存冲突提示重新读取并保留用户编辑，不能静默覆盖。
 
 ## 10. 前端接入顺序
 
@@ -527,3 +527,12 @@ docker buildx build \
 真实目录添加、扫描、回看、详情、搜索、导出、后台任务和日志形成闭环；网页关闭与容器重启不丢失任务状态；两种架构均有实际运行结果；原文件不被改变；设置真实生效；二期仅占位。
 
 交付内容包括运行镜像、部署配置、数据库迁移、API 契约、自动化与人工验收记录、升级/备份说明，以及保持同步的本需求和开发文档。未通过真实媒体与双架构运行验收时不得把前端演示标为正式版完成。
+
+
+## D5 实现补充
+
+- `0004_log_sequence` 为业务日志加入 AUTOINCREMENT 插入序号，保留 UUID。日志分页携带筛选与最大序号快照，新增日志不混入后续页；导出持有 SQLite 只读事务，并流式遍历全部匹配记录。断开连接会关闭迭代器和事务。JSON 下载仅包含白名单业务字段，诊断不导出环境变量或任意 provider 字典。
+- SSE 使用已有 Event.id：Last-Event-ID / after 重放，游标过期或高于当前最大 ID 返回 reset；每 15 秒心跳。浏览器重连并保留 lastEventId，服务不可用时显示轮询状态；事件更新不会覆写设置脏分类。
+- 下载在同一短写事务中验证 Artifact、取得共享 OS 锁和登记使用租约。租约即使过期，尚未关闭的 FD 锁仍保护慢流；清理取得独占锁才可删除。播放视图独立续租，退出后释放；正常重启不抹掉这些使用租约。
+- 维护在线程中运行，不阻塞 Worker 心跳：过期导出、stale/不可用缓存、LRU 容量、终态旧尝试、已知归属孤立结果/manifest、日志和事件保留。清理不创建顶层任务，聚合写业务日志，保留 Task/Attempt 历史。路径越界和符号链接跳过，不遍历录像挂载。
+- 备份使用 SQLite backup API，验证 integrity/FK/schema/SHA256；迁移前自动备份。恢复同时持有 bootstrap/API/Worker 文件锁，先备份当前库，再原子替换。旧 schema 回滚须明确 target-schema 并启动匹配旧镜像，不在新镜像下自动重迁移。完整操作见 [运维说明](OPERATIONS.md)。
