@@ -378,3 +378,30 @@ def test_cancel_at_publish_manifest_and_lease_fence(client, config, database, ar
         queue.settle(old, result={})
     execute(recovered, recovered.claim(), threading.Event())
     assert task(client, retry)["status"] == "completed"
+
+
+def test_low_disk_fails_without_publication_and_new_id_retry_succeeds(
+    client, config, database, archive, monkeypatch
+):
+    from collections import namedtuple
+
+    before = [path.read_bytes() for path in archive[2]]
+    id = enqueue(client, body(archive))
+    original = exports.shutil.disk_usage
+    disk = namedtuple("Disk", "total used free")
+    monkeypatch.setattr(exports.shutil, "disk_usage", lambda _: disk(1024**3, 1024**3 - 1, 1))
+    perform(config, database)
+    failed = task(client, id)
+    assert failed["status"] == "failed" and failed["errorCode"] == "INSUFFICIENT_STORAGE"
+    assert failed["result"] is None
+    assert client.get(f"/api/exports/{id}/download").status_code == 409
+    assert not (config.data / "exports" / f"{id}.mp4").exists()
+    with Session(database) as session:
+        assert session.scalar(select(Artifact).where(Artifact.task_id == id)) is None
+    monkeypatch.setattr(exports.shutil, "disk_usage", original)
+    retry = client.post(f"/api/tasks/{id}/retry", json={}).json()["taskId"]
+    assert retry != id and task(client, retry)["retryOfTaskId"] == id
+    perform(config, database)
+    assert task(client, retry)["status"] == "completed"
+    assert task(client, id)["status"] == "failed"
+    assert [path.read_bytes() for path in archive[2]] == before

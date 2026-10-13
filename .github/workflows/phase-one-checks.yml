@@ -94,6 +94,8 @@ jobs:
         if: always()
         with:
           name: native-evidence-${{ matrix.arch }}
-          path: ${{ runner.temp }}/d6/
+          path: |
+            ${{ runner.temp }}/d6/results.json
+            ${{ runner.temp }}/d6/*/container.log
           retention-days: 7
           if-no-files-found: ignore
