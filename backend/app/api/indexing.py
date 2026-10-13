@@ -10,8 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.schemas import RequestKey, RetryRequest, SourceCreate, SourcePatch, TaskCreate
 from app.core.errors import AppError
 from app.core.pagination import decode_cursor, encode_cursor
-from app.core.time import iso_utc
-from app.db.models import Artifact, BusinessLog, Segment, Source, Task
+from app.db.models import Artifact, Segment, Source, Task
 from app.services.catalog import list_segments, segment_dto
 from app.services.exports import submit_export
 from app.services.sources import create_source, source_dto, update_source
@@ -205,60 +204,3 @@ def thumbnail(request: Request, segment_id: str):
         if not path.is_relative_to(request.app.state.config.data) or not path.is_file():
             raise AppError("THUMBNAIL_NOT_READY", "录像预览图已失效。", 404)
     return FileResponse(path, media_type="image/jpeg")
-
-
-@router.get("/logs")
-def logs(
-    request: Request,
-    taskId: str | None = None,
-    sourceId: str | None = None,
-    cursor: str | None = Query(None, max_length=2048),
-    limit: int = Query(50, ge=1, le=200),
-):
-    context = json.dumps([taskId, sourceId])
-    position = decode_cursor(cursor, context)
-    statement = select(BusinessLog)
-    if taskId:
-        statement = statement.where(BusinessLog.task_id == taskId)
-    if sourceId:
-        statement = statement.where(BusinessLog.source_id == sourceId)
-    if position:
-        try:
-            stamp, row_id = json.loads(position)
-            if type(stamp) is not int or not isinstance(row_id, str):
-                raise ValueError()
-        except (ValueError, TypeError) as error:
-            raise AppError("INVALID_CURSOR", "分页位置已失效，请重新加载。") from error
-        statement = statement.where(
-            (BusinessLog.created_at < stamp)
-            | ((BusinessLog.created_at == stamp) & (BusinessLog.id < row_id))
-        )
-    with Session(request.app.state.engine) as session:
-        rows = list(
-            session.scalars(
-                statement.order_by(BusinessLog.created_at.desc(), BusinessLog.id.desc()).limit(
-                    limit + 1
-                )
-            )
-        )
-        more = len(rows) > limit
-        rows = rows[:limit]
-        return {
-            "items": [
-                {
-                    "id": row.id,
-                    "createdAt": iso_utc(row.created_at),
-                    "level": row.level,
-                    "kind": row.kind,
-                    "sourceId": row.source_id,
-                    "taskId": row.task_id,
-                    "eventCode": row.event_code,
-                    "title": row.title,
-                    "detail": row.detail_json,
-                }
-                for row in rows
-            ],
-            "nextCursor": encode_cursor(context, json.dumps([rows[-1].created_at, rows[-1].id]))
-            if more
-            else None,
-        }

@@ -32,6 +32,12 @@ class AppConfig(BaseSettings):
     export_max_width: int = Field(default=3840, ge=320, le=7680)
     export_max_pieces: int = Field(default=500, ge=1, le=500)
     export_timeout_seconds: float = Field(default=3600, gt=0)
+    maintenance_interval_seconds: float = Field(default=60, ge=0.1)
+    usage_lease_seconds: int = Field(default=90, ge=1)
+    usage_idle_seconds: int = Field(default=30, ge=0)
+    temporary_retention_seconds: int = Field(default=3600, ge=1)
+    event_retention_hours: int = Field(default=24, ge=1)
+    event_max_count: int = Field(default=10000, ge=100)
     playback_timeout_seconds: float = Field(default=3600, gt=0)
 
     @field_validator("timezone")

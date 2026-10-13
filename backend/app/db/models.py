@@ -153,13 +153,17 @@ class Artifact(Entity, Base):
     created_at: Mapped[int] = mapped_column(BigInteger, default=utc_now_ms)
 
 
-class BusinessLog(Entity, Base):
+class BusinessLog(Base):
     __tablename__ = "business_logs"
     __table_args__ = (
         Index("ix_logs_time", "created_at", "id"),
         Index("ix_logs_task_time", "task_id", "created_at"),
         Index("ix_logs_source_time", "source_id", "created_at"),
+        {"sqlite_autoincrement": True},
     )
+
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(36), unique=True, default=new_id)
 
     created_at: Mapped[int] = mapped_column(BigInteger, default=utc_now_ms)
     level: Mapped[str] = mapped_column(String(20))

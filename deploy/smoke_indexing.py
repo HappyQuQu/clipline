@@ -65,7 +65,7 @@ def main():
     ready()
     flags = call("/capabilities")
     assert (
-        flags["backendStage"] in ("indexing", "playback", "exports")
+        flags["backendStage"] in ("indexing", "playback", "exports", "maintenance")
         and flags["scan"]
         and flags["reindex"]
     )

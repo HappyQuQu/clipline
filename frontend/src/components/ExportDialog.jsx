@@ -5,8 +5,8 @@ import { queryString, request } from '../api/client';
 import { exportRequest } from '../api/adapters';
 import { duration } from '../domain';
 
-export default function ExportDialog({ range, timezone, source, onClose, onSubmitted }) {
-  const [mode, setMode] = useState('fast'), [name, setName] = useState(`Clipline_${range.date}`);
+export default function ExportDialog({ range, timezone, source, defaultMode = 'fast', onClose, onSubmitted }) {
+  const [mode, setMode] = useState(defaultMode), [name, setName] = useState(`Clipline_${range.date}`);
   const [preview, setPreview] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const submission = useRef(null), mounted = useRef(true);

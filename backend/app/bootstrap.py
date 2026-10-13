@@ -17,6 +17,7 @@ from app.core.locks import ProcessLock
 from app.db.migrations import alembic_config, current_revision, expected_revision
 from app.db.models import SavedSettings
 from app.db.session import make_engine
+from app.services.settings import DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,12 @@ def verify_environment(config: AppConfig) -> None:
 
 
 def backup_database(config: AppConfig) -> Path:
+    if not config.db.is_file():
+        raise RuntimeError("Initialize the database before creating a backup")
     directory = config.data / "backups"
     directory.mkdir(exist_ok=True)
+    if directory.is_symlink() or not directory.resolve().is_relative_to(config.data):
+        raise RuntimeError("Backup directory must stay inside writable application data")
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     target = directory / f"clipline-{stamp}-{uuid4().hex[:8]}.sqlite3"
     # SQLite backup includes committed WAL data; copying only the main file would not.
@@ -57,7 +62,11 @@ def bootstrap(config: AppConfig, *, check_media: bool = True) -> None:
     else:
         config.data.mkdir(parents=True, exist_ok=True)
     config.db.parent.mkdir(parents=True, exist_ok=True)
-    with ProcessLock(config.data / "bootstrap.lock"), ProcessLock(config.data / "worker.lock"):
+    with (
+        ProcessLock(config.data / "bootstrap.lock"),
+        ProcessLock(config.data / "api.lock"),
+        ProcessLock(config.data / "worker.lock"),
+    ):
         engine = make_engine(config)
         try:
             tables = set(inspect(engine).get_table_names())
@@ -70,19 +79,15 @@ def bootstrap(config: AppConfig, *, check_media: bool = True) -> None:
                 connection.exec_driver_sql("PRAGMA journal_mode=WAL")
             if revision != expected_revision():
                 if revision is not None:
-                    backup_database(config)
+                    from app.backup import create
+
+                    create(config)
                 with engine.connect() as connection:
                     migration = alembic_config()
                     migration.attributes["connection"] = connection
                     command.upgrade(migration, "head")
             with Session(engine) as session, session.begin():
-                defaults = {
-                    "scan": {"interval": 5, "skipRecent": 30},
-                    "playback": {"autoNext": True, "skipGaps": True},
-                    "export": {"defaultMode": "fast", "maxDuration": 30},
-                    "tasks": {"concurrency": 2},
-                }
-                for group, values in defaults.items():
+                for group, values in DEFAULTS.items():
                     if session.get(SavedSettings, group) is None:
                         session.add(SavedSettings(group_name=group, value_json=values))
             for name in ("exports", "tmp", "thumbnails", "playback-proxies", "logs"):

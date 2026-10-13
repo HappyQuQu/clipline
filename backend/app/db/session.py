@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import URL, Engine, create_engine, event
 
 from app.core.config import AppConfig
@@ -15,6 +17,12 @@ def make_engine(config: AppConfig) -> Engine:
 
         connection.create_function(
             "casefold", 1, lambda value: str(value or "").casefold(), deterministic=True
+        )
+        connection.create_function(
+            "log_text",
+            1,
+            lambda value: json.dumps(json.loads(value or "{}"), ensure_ascii=False).casefold(),
+            deterministic=True,
         )
         connection.create_function("recording_clock", 2, clock, deterministic=True)
         cursor = connection.cursor()

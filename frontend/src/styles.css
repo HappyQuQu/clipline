@@ -4158,3 +4158,8 @@ td {
 .export-plan dt { color: #7b8794; font-size: 12px; }
 .export-plan dd { margin: 4px 0; font-weight: 600; }
 .task-name details { margin-top: 8px; font-size: 12px; color: #7b8794; }
+.log-loading, .log-more { padding: 24px; }
+.log-json { padding: 16px; margin: 16px 0; background: #f5f7fa; font: 12px/1.6 monospace; max-height: 340px; overflow: auto; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.retention-facts > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.retention-facts dt { color: var(--muted); }
+.retention-facts dd { margin: 0; text-align: right; }

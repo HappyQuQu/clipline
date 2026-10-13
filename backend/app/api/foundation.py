@@ -8,9 +8,11 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app import __version__
+from app.api.schemas import SettingsPatch
 from app.core.time import iso_utc, utc_now_ms
 from app.db.migrations import current_revision, expected_revision
 from app.db.models import RuntimeLease, SavedSettings, Task
+from app.services.settings import read_settings, save_settings
 
 router = APIRouter(prefix="/api")
 
@@ -35,7 +37,7 @@ def readiness(request: Request) -> dict:
     return {
         "ready": db_ready and worker_ready and data_ready,
         "database": {"ready": db_ready},
-        "worker": {"ready": worker_ready, "lastHeartbeatAt": last_heartbeat, "mode": "playback"},
+        "worker": {"ready": worker_ready, "lastHeartbeatAt": last_heartbeat, "mode": "maintenance"},
         "storage": {"ready": data_ready},
     }
 
@@ -54,7 +56,7 @@ def ready(request: Request):
 @router.get("/capabilities")
 def capabilities():
     return {
-        "backendStage": "exports",
+        "backendStage": "maintenance",
         "recordingDirectories": True,
         "scan": True,
         "export": True,
@@ -83,21 +85,12 @@ def directories(
 @router.get("/settings")
 def settings(request: Request):
     with Session(request.app.state.engine) as session:
-        groups = {
-            row.group_name: {"values": row.value_json, "revision": row.revision}
-            for row in session.scalars(select(SavedSettings))
-        }
-    config = request.app.state.config
-    return {
-        "groups": groups,
-        "deployment": {
-            "timezone": config.timezone,
-            "recordingsRoot": str(config.recordings_root),
-            "dataPath": str(config.data),
-            "maxConcurrentTranscodes": config.max_concurrent_transcodes,
-            "mediaThreads": config.media_threads,
-        },
-    }
+        return read_settings(session, request.app.state.config)
+
+
+@router.patch("/settings/{group}")
+def patch_settings(request: Request, group: str, body: SettingsPatch):
+    return save_settings(request.app.state.engine, group, body)
 
 
 @router.get("/system/status")
@@ -108,10 +101,13 @@ def system_status(request: Request):
         counts = dict(
             session.execute(select(Task.status, func.count()).group_by(Task.status)).all()
         )
+        maintenance = session.get(SavedSettings, "maintenance")
+        maintenance_state = maintenance.value_json if maintenance else None
     return {
+        "maintenance": maintenance_state,
         "version": __version__,
         "arch": platform.machine(),
-        "backendStage": "exports",
+        "backendStage": "maintenance",
         "health": readiness(request),
         "queue": {"executionEnabled": True, "counts": counts},
         "storage": {"totalBytes": disk.total, "freeBytes": disk.free},

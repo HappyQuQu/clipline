@@ -18,6 +18,7 @@ from app.db.migrations import require_current_schema
 from app.db.models import RuntimeLease
 from app.db.session import make_engine
 from app.services.exports import export
+from app.services.maintenance import run as maintenance_loop
 from app.services.playback import prepare
 from app.services.scanner import scan
 from app.tasks.context import TaskContext
@@ -79,6 +80,13 @@ def run(config: AppConfig, stopped: threading.Event) -> None:
         with ProcessLock(config.data / "worker.lock"):
             try:
                 queue.recover()
+                maintenance = threading.Thread(
+                    target=maintenance_loop,
+                    args=(engine, config, stopped),
+                    name="maintenance",
+                    daemon=True,
+                )
+                maintenance.start()
                 logger.info("Indexing worker started")
                 next_heartbeat = next_schedule = 0
                 while not stopped.is_set():
@@ -103,6 +111,8 @@ def run(config: AppConfig, stopped: threading.Event) -> None:
             finally:
                 stopped.set()
                 pool.shutdown(wait=True, cancel_futures=False)
+                if "maintenance" in locals():
+                    maintenance.join()
                 with Session(engine) as session, session.begin():
                     session.execute(
                         delete(RuntimeLease).where(

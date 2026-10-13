@@ -5,7 +5,7 @@ from sqlalchemy import delete, select
 
 from app.core.errors import AppError
 from app.core.time import iso_utc, utc_now_ms
-from app.db.models import RuntimeLease, SavedSettings, Source, Task, TaskAttempt, new_id
+from app.db.models import Artifact, RuntimeLease, SavedSettings, Source, Task, TaskAttempt, new_id
 from app.db.transactions import write_session
 from app.services.events import emit
 from app.services.idempotency import lookup, remember
@@ -46,8 +46,28 @@ def task_dto(session, task):
             .order_by(TaskAttempt.attempt_no)
         )
     )
+    artifact = (
+        session.scalar(
+            select(Artifact).where(Artifact.task_id == task.id, Artifact.kind == "export")
+        )
+        if task.kind == "export" and task.status == "completed"
+        else None
+    )
+    download_status = (
+        (
+            "ready"
+            if artifact
+            and artifact.status == "ready"
+            and artifact.expires_at
+            and artifact.expires_at > utc_now_ms()
+            else "expired"
+        )
+        if task.kind == "export" and task.status == "completed"
+        else None
+    )
     return {
         "id": task.id,
+        "downloadStatus": download_status,
         "kind": task.kind,
         "sourceId": task.source_id,
         "status": task.status,
@@ -502,7 +522,11 @@ class Queue:
                 )
             )
             for lease in session.scalars(
-                select(RuntimeLease).where(RuntimeLease.resource_key != "coordinator")
+                select(RuntimeLease).where(
+                    RuntimeLease.resource_key != "coordinator",
+                    ~RuntimeLease.resource_key.startswith("use:"),
+                    ~RuntimeLease.resource_key.startswith("view:"),
+                )
             ):
                 if lease.token not in active_tokens:
                     session.delete(lease)

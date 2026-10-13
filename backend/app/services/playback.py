@@ -12,6 +12,7 @@ from app.core.time import utc_now_ms
 from app.db.models import Artifact, Segment, Source, Task
 from app.services import media
 from app.services.directories import RecordingDirectories
+from app.services.maintenance import evict_playback
 
 
 def profile(config):
@@ -156,10 +157,18 @@ def prepare(context):
         if row.fingerprint != fingerprint:
             raise AppError("RECORDING_CHANGED", "录像已变化，播放结果未发布。", 409)
         original_path(session, context.config, row)
-        used = sum(file.stat().st_size for file in final.parent.glob("*.mp4") if file != final)
-        if used + size > context.config.playback_cache_max_bytes:
-            raise AppError(
-                "PLAYBACK_CACHE_FULL", "播放缓存容量不足，请清理缓存或调整部署容量。", 409
+        evicted = evict_playback(
+            session, context.config, size, final.relative_to(context.config.data).as_posix()
+        )
+        if evicted["removedFiles"]:
+            from app.services.events import emit
+
+            emit(
+                session,
+                kind="system",
+                code="PLAYBACK_LRU_EVICTED",
+                title="旧播放缓存已按使用顺序清理",
+                detail=evicted,
             )
         artifact = session.scalar(
             select(Artifact).where(

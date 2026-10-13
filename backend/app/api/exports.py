@@ -13,6 +13,7 @@ from app.db.models import Artifact, Task
 from app.db.transactions import write_session
 from app.services.export_plan import build_plan, public_plan, safe_filename
 from app.services.exports import submit_export
+from app.services.usage import FileUse
 
 router = APIRouter(prefix="/api/exports")
 
@@ -62,16 +63,19 @@ def download(request: Request, task_id: str):
         size = artifact.size_bytes
         name = safe_filename(task.payload_json["name"])
         etag = f'"{task.result_json["sha256"]}"'
-    return serve_file(
-        request,
-        path,
-        size,
-        None,
-        etag,
-        {
-            "Content-Disposition": (
-                f"attachment; filename=\"clipline-{task_id}.mp4\"; filename*=UTF-8''{quote(name)}"
-            ),
-            "Cache-Control": "private, no-store",
-        },
-    )
+        usage = FileUse(session, request.app.state.engine, config, artifact, path)
+        return serve_file(
+            request,
+            path,
+            size,
+            None,
+            etag,
+            {
+                "Content-Disposition": (
+                    f'attachment; filename="clipline-{task_id}.mp4"; '
+                    f"filename*=UTF-8''{quote(name)}"
+                ),
+                "Cache-Control": "private, no-store",
+            },
+            usage=usage,
+        )

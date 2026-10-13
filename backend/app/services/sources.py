@@ -101,7 +101,7 @@ def create_source(engine, config, directories, body, key=None):
         else:
             scan = session.get(SavedSettings, "scan")
             interval = scan.value_json.get("interval", 5) if scan else 5
-            interval = interval if interval in (5, 10, 30) else 5
+            interval = interval if interval in (5, 10, 30, None) else 5
         source = Source(
             id=new_id(),
             name=body.name,

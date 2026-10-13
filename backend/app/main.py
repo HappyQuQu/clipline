@@ -13,9 +13,11 @@ from app import __version__
 from app.api.exports import router as exports_router
 from app.api.foundation import router
 from app.api.indexing import router as indexing_router
+from app.api.operations import router as operations_router
 from app.api.playback import router as playback_router
 from app.core.config import AppConfig
 from app.core.errors import AppError
+from app.core.locks import ProcessLock
 from app.db.migrations import require_current_schema
 from app.db.session import make_engine
 from app.services.directories import RecordingDirectories
@@ -46,9 +48,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         engine = make_engine(config)
         try:
-            require_current_schema(engine)
-            app.state.engine = engine
-            yield
+            with ProcessLock(config.data / "api.lock"):
+                require_current_schema(engine)
+                app.state.engine = engine
+                yield
         finally:
             engine.dispose()
 
@@ -92,6 +95,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     app.include_router(router)
     app.include_router(indexing_router)
+    app.include_router(operations_router)
     app.include_router(playback_router)
     app.include_router(exports_router)
     if (config.static_dir / "index.html").is_file():

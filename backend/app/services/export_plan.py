@@ -108,6 +108,11 @@ def build_plan(session, config, body):
         "crf": 20,
         "implementation": "export-v1",
     }
+    mode = (
+        body.mode
+        if "mode" in body.model_fields_set
+        else (setting.value_json.get("defaultMode", "fast") if setting else "fast")
+    )
     return {
         "sourceId": body.source_id,
         "sourcePath": source.canonical_path,
@@ -116,7 +121,7 @@ def build_plan(session, config, body):
         "startAt": iso_utc(start),
         "endAt": iso_utc(end),
         "name": safe_filename(body.name),
-        "mode": body.mode,
+        "mode": mode,
         "segmentIds": selected_ids,
         "recordedCoverageMs": recorded_ms,
         "selectedCoverageMs": selected_ms,

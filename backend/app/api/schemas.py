@@ -102,3 +102,13 @@ class ExportRequest(APIModel):
 
 class RetryRequest(APIModel):
     mode: Literal["fast", "precise"] | None = None
+
+
+class SettingsPatch(APIModel):
+    revision: StrictInt = Field(ge=1)
+    values: dict
+
+
+class PlaybackLeaseRequest(APIModel):
+    client_id: Annotated[str, StringConstraints(pattern=r"^[a-f0-9-]{36}$")]
+    active: StrictBool = True

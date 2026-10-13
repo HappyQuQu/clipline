@@ -34,5 +34,17 @@ export default function usePlayback(clip, real) {
     else check();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [identity, real, retry]);
+  useEffect(() => {
+    if (!real || state.identity !== identity || !state.mediaUrl || !state.proxy) return;
+    const clientId = crypto.randomUUID(), abort = new AbortController(); let timer;
+    async function renew() {
+      let delay = 5000;
+      try { const result = await request(`/segments/${clip.id}/lease`, { method: 'POST', body: { clientId }, signal: abort.signal }); delay = Math.max(250, Math.min(20000, (result.expiresInSeconds || 60) * 1000 / 3)); }
+      catch (failure) { if (failure.name === 'AbortError') return; }
+      if (!abort.signal.aborted) timer = setTimeout(renew, delay);
+    }
+    renew();
+    return () => { abort.abort(); clearTimeout(timer); request(`/segments/${clip.id}/lease`, { method: 'POST', body: { clientId, active: false } }).catch(() => {}); };
+  }, [real, identity, state.mediaUrl, state.proxy]);
   return { ...(state.identity === identity ? state : { status: 'loading' }), retry: () => setRetry(value => ({ identity, count: value.identity === identity ? value.count + 1 : 1 })) };
 }
