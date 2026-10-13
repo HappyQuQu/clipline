@@ -153,3 +153,4 @@ recordings/
 # Local desktop and model-export fixtures
 .DS_Store
 /backend/yolov8n.pt
+/old/backend/yolov8n.pt

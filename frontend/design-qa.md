@@ -1,190 +1,159 @@
-# Clipline formal frontend — Design QA
+# Clipline 一期原型检查
 
-## Comparison target
+日期：2026-10-13。范围：新的独立前端原型。旧版截图仅用于理解业务，本次为重新设计，不要求复刻旧界面。
 
-- Current source visual truth: running prototype at `http://127.0.0.1:5175/` from `/Users/qu/Documents/GitHub/clipline/frontend/prototypes/clipline-full-redesign`.
-- Browser-rendered implementation: `http://127.0.0.1:5174/`, connected to the real local Clipline backend.
-- Eight 1440px combined comparisons: `m7-playback-comparison-1440-pass2.png`, `m7-library-comparison-1440-pass3.png`, `m7-tasks-comparison-1440.png`, `m7-sources-comparison-1440.png`, `m7-logs-comparison-1440.png`, `m7-settings-overview-comparison-1440.png`, `m7-export-settings-comparison-1440-pass2.png`, `m7-models-comparison-1440-pass2.png` under `/Users/qu/Documents/GitHub/clipline/docs/full-redesign-implementation-qa/`.
-- Responsive evidence: source/formal playback pairs at 1180 × 900, 900 × 900, 660 × 900 and 390 × 844; normalized mobile comparisons are `m7-playback-comparison-390.png`, `m7-library-comparison-390-pass5.png` and `m7-search-comparison-390.png`. Library also has overflow checks at 900 × 900 and 660 × 900.
-- Density normalization: device scale factor 1×. The prototype mobile screenshot excluded a 15px scrollbar and 32px bottom browser inset despite reporting a 390 × 844 CSS viewport, so it was padded—not scaled—to 390 × 844 before comparison.
-- State: real `xiaomi` source, 2026-06-02, selected 09:30 clip/library item, populated tasks and management data.
+**final result: passed**
 
-## Findings
+## 追加：设置分类与草稿优化
 
-- No actionable P0/P1/P2 visual findings remain.
-- No separate media deployment blocker remains: H.264/AAC is streamed directly, while HEVC/Opus now receives a cached H.264/AAC browser proxy without modifying the source file. The isolated real-API regression verifies both codec paths; first-play proxy generation time remains workload-dependent.
+- 设置分为基础、扫描、回看、导出、后台任务、识别与模型及关于。基础页提供已保存默认值概览；存储的进阶路径收进展开区域。
+- 当前分类独立保存、撤销或恢复默认，导航与页头显示未保存状态。草稿放在 App 中，切换分类和离开设置后仍保留；刷新时回到已保存配置。
+- 同时修改扫描与并行数，保存任务分类后仍有 2 项扫描草稿；打开添加录像源使用已保存的 5 分钟频率，回到设置仍保留 10 分钟草稿。恢复任务默认不改扫描草稿，撤销扫描后全部恢复。
+- 关闭自动续播后断档开关不可操作但偏好保留，保存后示例视频结束停止且不换片段。保存精准默认和 10 分钟范围后，导出确认带入精准模式，超限区间禁止提交。测试后恢复原有偏好。
+- 识别与模型预留语音、视觉和运行设备/模型缓存，控件数为 0。390px 分类导航、保存区和并行设置正常，无页面横向溢出；浏览器无错误或警告。
+- 11 项测试与生产构建通过。截图：`qa/settings-overview-optimized.png`、`qa/settings-export-optimized.png`、`qa/settings-export-mobile.png`。
 
-## Required fidelity surfaces
+## 追加：录像源二期设置占位
 
-- Fonts and typography: system/PingFang stack, hierarchy and weights are aligned closely across all eight comparisons; Export and Model Management now use the prototype heading, card and table scales.
-- Spacing and layout rhythm: topbar, 78px rail, management hierarchy, full-bleed playback viewer/timeline, mobile bottom navigation, library toolbar/cards, Export groups and Model Management table now follow the current prototype.
-- Colors and visual tokens: blue, neutral surfaces, borders and semantic states match the prototype direction; disabled and error states remain distinguishable.
-- Image quality and asset fidelity: the formal app now uses the prototype's exact v2 Clipline SVG; real segment thumbnails are used without placeholder art. Playback poster fallback preserves the real thumbnail when decoding fails. All interface icons now come from Phosphor.
-- Copy and content: primary navigation, management hierarchy and seven settings categories match. Dynamic task/source/log values intentionally come from the real backend rather than prototype mock counts.
+- 添加和编辑录像源均显示「自动识别 · 二期预留」，预留新录像自动语音转写和自动画面识别，说明二期可选手动或扫描后自动策略。
+- 该区域内部控件数为 0；一期能力开关保持 false，新源及缺省源的 `autoTranscribe/autoDetect` 均为 false。首次扫描不会提交识别任务。
+- 桌面添加与编辑占位均可见；390px 添加表单占位可见且无横向溢出。构建通过，现有 9 项领域测试通过。
+- 截图：`qa/add-source-phase-two.png`。
 
-## Full-view comparison evidence
+## 追加：添加录像源优化
 
-All eight 1440px baseline states now have same-viewport combined images. Playback, library, tasks, sources, logs, overview, Export and Model Management preserve the same major-region hierarchy. Core mutation paths pass against an isolated real API fixture, and compatible-media playback now has dynamic same-state evidence at 1440 and 390px.
+- 添加表单改为目录优先：支持浏览明确标注的示例目录或手动填写，已添加目录禁用；支持目录名称搜索，回车搜索不会误提交表单。
+- 选目录后建议中文名称，用户手动改过名称后更换目录保持名称。重复路径、空名称和越界路径有就地错误提示；添加与编辑共用路径校验。
+- 扫描频率可直接设置，默认选择添加后立即扫描。新增「客厅」源后左侧选择同步更新，10 分钟策略保存，首次扫描立即进入后台队列并产生关联日志；完成后仍无真实录像，源卡片显示空态。
+- 390px 目录选择、手动扫描策略、取消首次扫描及保存按钮正常；表单与页面无横向溢出。测试中仅保存了一个客厅演示源，其余添加表单取消。
+- 9 项领域测试通过，覆盖归一化后重复目录、编辑自身目录、越界/异常路径与正常嵌套目录；生产构建通过。浏览器无错误或警告。
+- 截图：`qa/add-source-desktop.png`、`qa/add-source-mobile.png`。
 
-## Focused region comparison evidence
+## 追加：后台任务分类与独立日志中心
 
-Playback viewer/timeline, library selected card/inspector/batch bar, task rows/summary cards, source detail, log table, settings health strip, export cards and model rows were inspected from the combined images. Mobile playback was separately normalized and compared at 390 × 844; the first comparison exposed a two-column overflow bug and excess timeline height, both of which were fixed and recaptured.
+- 任务中心展示目录扫描、录像导出、索引重建、播放准备四类任务；可提交非导出任务，导出仍从回看/片段库选择范围后创建。二期识别任务保持占位。
+- 新建索引重建后切到日志中心，记录入队、三个处理阶段及完成；播放准备取消后产生警告记录，重新提交并离开任务页后仍完成并记录结果。
+- 任务「查看日志」限定到 taskId；日志详情「查看关联任务」定位单一任务，解除定位恢复全部任务。
+- 录像源停用/启用记录为警告/信息，测试后恢复原始状态；设置保存产生两条记录，测试后恢复原并行任务数。设置不再提供活动记录分类。
+- 日志按类型、级别、源和关键词筛选，空态可清除条件；日志 JSON 实际下载成功。390px 新建任务、日志详情和组合筛选可操作，两页无横向溢出。
+- 当前关闭页面会暂停前端队列，正式版才由服务端持续执行。未对真实目录、索引或播放代理做处理。
+- 浏览器未捕获错误或警告；生产构建与现有领域测试通过。截图：`qa/background-tasks-desktop.png`、`qa/log-center-desktop.png`、`qa/log-center-mobile.png`。
 
-## Primary interactions tested
+## 追加：片段库查询范围与二期占位
 
-- Four-item primary navigation.
-- Management navigation: 录像源、日志、设置.
-- Seven settings categories are present and reachable.
-- Global search focus, clear action and keyboard shortcut remain reachable.
-- Playback previous/next-day controls update the real date state and return correctly.
-- Playback fast/accurate export modes can be switched without leaving the page.
-- Playback DOM exposes previous/next segment navigation, gap legend, horizontal timeline and labeled play/export controls.
-- Library grid/list controls switch the rendered layout while preserving filter state.
-- Topbar search opens inline, exposes loading/empty/error states and no longer navigates to an independent search page.
-- Task navigation opens the unified page; all five status filters preserve their state during recognition-job polling.
-- Task DOM exposes the prototype header, cleanup-disabled backend constraint, unified columns, API error/empty state and three summary cards.
-- Management navigation exposes one active second-level item and one active settings category; all seven settings categories are reachable.
-- Sources expose search, status filtering, create-directory form, scan actions, selected-row detail and preserved draft inputs.
-- Logs expose keyword/type/source/date filters and client-side CSV export for currently filtered real events.
-- Settings overview opens the real source page; model filters switch between all/downloaded/missing without leaving the category.
-- Settings drafts remain dirty across category switches; the shared sticky bar restores loaded values without issuing a backend mutation.
-- Diagnostics calls the real status endpoint and exposes real system-log reading/download; unavailable endpoints surface an inline error.
-- About exposes the real version/environment state plus valid repository and API documentation links.
-- Browser DOM contains the intended semantic banner, navigation and labeled controls.
-- Playback, library, task, source and log surfaces expose explicit loading, empty, error, expired/unavailable and partial-failure states instead of blank or permanent-loading bodies.
-- Clip cards and task rows are keyboard operable; view/status switches expose pressed state; tables, cells and progress indicators expose semantic roles and values.
-- Directory, management and export dialogs trap focus, close with Escape and restore focus to their trigger; all focusable controls receive a visible blue focus ring.
-- Desktop and mobile target-size rules enforce 36px and 44px minimum controls, and reduced-motion preferences disable non-essential motion.
-- Production build completed successfully.
-- An isolated H.264/AAC fixture now verifies real source create/update/rescan/delete, settings persistence, fast/accurate export completion and download, recognition job terminal/error states, and invalid model-delete protection without touching configured user data.
+- 移除编码筛选，只保留录像源、日期和文件名/起止时间搜索。新增 `library-filters` 扩展插槽，静态预留字幕搜索、画面标签、识别状态，内部操作控件数为 0。
+- 浏览器确认初始 18 个片段；输入带空格及中文冒号的 `09：16:12` 匹配开始或结束时刻，共 6 段。叠加车库源与 12 日筛选后得到 2 段；输入大写完整文件名得到 1 段。
+- 修改关键词会清除旧选择，未匹配结果显示空态且禁用批量导出；清除筛选恢复 18 段。
+- 390px 录像源和日期控件可见，时间搜索与源筛选组合正常，页面无横向溢出。生产构建与现有领域测试通过。
+- 截图：`qa/library-basic-filters.png`。
 
-## Console verification
+## 追加：识别占位集中到详情
 
-The earlier 5173 preview was connected to the wrong API target and returned `resource_not_found`; it is no longer used as evidence. A fresh 5174 browser tab connected to the real local backend, waited through polling, and reported no console error or warning. TypeScript/Vite build, backend `compileall`, all four existing prototype worker tests, and the isolated mutation smoke test pass.
+- 移除时间轴下方的「识别事件」占位卡。字幕、画面识别结果和事件时间点统一在片段详情的「智能分析 · 二期预留」区域说明。
+- 时间轴的扩展插槽仍在代码中，未注册真实组件时不渲染占位；搜索、任务和设置的规划位置保留。
+- 浏览器确认时间轴占位数为 0，详情文案包含事件时间点；展开管理片段后导出按钮正常可用。生产构建通过。
+- 截图：`qa/recognition-in-details.png`。
 
-## Comparison history
+## 追加：蓝色主题完整统一
 
-### Pass 14 — HEVC/Opus playback capability
+- 清理任务图标、完成/处理状态、录像源圆点、工作空间徽标、只读标识和活动图标的绿色残留，统一使用主色 `#087bfa`、深蓝 `#0765d0` 与浅蓝 `#edf5ff`。
+- 原先偏绿的中性色、底色、边框和阴影改为冷灰蓝；旧浏览器中保存的 green 颜色标记也按蓝色呈现。
+- 浏览器实测任务统计图标和录像源圆点均为 `rgb(8, 123, 250)`，状态文字为 `rgb(7, 101, 208)`；设置徽标使用浅蓝底色。告警和失败继续使用对应状态色，二期占位保留灰色。
+- 生产构建通过。截图：`qa/blue-theme-tasks.png`、`qa/blue-theme-review.png`。
 
-- Added an on-demand, source-safe playback proxy for indexed segments marked `needsTranscode`; compatible H.264/AAC files keep using direct byte-range streaming.
-- The proxy cache identity includes source path, size and modification time, so changed recordings cannot reuse stale media. Source deletion and scan/retention cleanup remove matching proxies.
-- Extended the isolated real-API mutation regression with an actual HEVC/Opus fixture. The stream endpoint output is verified by ffprobe as H.264/AAC, and the proxy is removed with its source.
-- This closes the codec blocker recorded during Pass 13 without changing the passed prototype-alignment surface.
+## 追加：主要流程复查与修复
 
-### Pass 9 — M7 real-data visual regression
+- 录像源下拉在工作室、家门口和已停用车库之间正常切换，播放器与文件信息同步，关闭旧详情；停用源禁止扫描。手机切换源后自动关闭导航。
+- 12/13 日切换与无录像日期正常；无录像时管理按钮禁用。修复切换日期后进度显示归零但实际视频仍停在旧位置的问题：按片段 ID 重建视频元素，加载后应用待定位时间。浏览器确认旧视频 60 秒位置切日后实际 `currentTime=0`。
+- 工作室真实示例视频可播放、暂停、倍速及定位；时间轴点击后位置与真实时钟一致，自动续播跳过 18 秒断档，最后一段结束后停止。
+- 详情随卡片/时间轴选中片段更新，详情导出与管理入口正常。修复从新片段详情进入截取时沿用旧区间的问题：该入口以当前片段起止时间初始化。复现后确认 09:17:30 片段截取范围为 09:17:30–09:18:30。
+- 管理区间可输入、键盘微调与拖动；起点时间与输入框同步，桌面无横向溢出。倒序范围禁用提交，跨 6 段提示 18 秒断档并显示实际覆盖 06:00。
+- 跨片段精准导出完整走通：创建任务、进度完成、下载成功。下载文件经 ffprobe 确认为有效 H.264 MP4，60 秒、736704 字节；仍为固定示例视频，不执行真实剪辑或拼接。
+- 390px 手机详情导出可取消返回详情、重新打开并提交快速导出任务；任务表无页面横向溢出。片段库勾选两个同源片段后合并确认显示 02:00，回看入口定位到选中片段。扫描入口显示处理中并防重复操作。
+- 二期能力开关和五处静态占位保持不变。浏览器无错误或警告；6 项领域测试与生产构建通过。
+- 截图：`qa/main-flow-export.png`、`qa/main-flow-review-verified.png`。
 
-- Corrected the QA environment: 5174 is the formal frontend connected to the real Clipline backend; 5175 is the current full-redesign prototype. The stale 5173 empty-state preview is excluded from final evidence.
-- Captured all eight baseline states at 1440 × 1024 and generated side-by-side comparison artifacts for playback, library, tasks, sources, logs, overview, export settings and model management.
-- Fixed async default-state bugs so the first real source and newest indexed date populate playback and library instead of showing a misleading current-date empty state.
-- Replaced the old square brand mark with the prototype's exact v2 Clipline SVG.
-- Reworked playback composition to the prototype's full-bleed desktop viewer/timeline, added the real thumbnail poster for unsupported codecs, and reduced excess card/margin treatment.
-- At 390px, found and fixed a P0 two-column playback squeeze caused by cascade order; then compacted source/date controls and timeline actions so player, range and clip strip remain visible. Verified 390/660/900/1180/1440 with no page-level horizontal overflow.
-- Task, source, log and overview comparisons have no remaining P0/P1 structural mismatch. Export settings and Model Management remain actionable P1 findings; the mixed icon library and library-toolbar density remain P2.
+## 追加：二期可见占位
 
-### Pass 10 — Export and Model Management alignment
+- 详情、时间轴、全局搜索、任务中心和设置五处均已显示「二期预留」，详情列出语音转写与视频内容识别。
+- 设置新增「识别与模型 · 二期」分类；该分类不显示保存配置按钮，占位内部没有按钮、输入框或选择器。
+- 能力开关保持关闭；真实扩展注册后替换静态占位。当前没有识别请求、结果或模拟识别任务。
+- 浏览器逐一确认五处文案；390px 设置无页面横向溢出，回看详情抽屉正常显示智能分析占位。
+- 生产构建通过。截图：`qa/phase-two-settings.png`、`qa/phase-two-review.png`。
 
-- Rebuilt Export settings into the prototype's two large left-description/right-control groups, retained the sticky save bar and kept every visible editable value mapped to a real backend setting.
-- Kept unsupported prototype settings honest: default export mode is read-only because mode is selected per task; cache cap and cleanup toggle are not fabricated. Server staging and browser-download semantics remain explicit.
-- Replaced the compact model strip/list with three summary cards, a full-width descriptive ASR table, prototype filter tabs and a separate vision-status card.
-- Preserved real model cache bytes, downloaded state, download polling, delete restrictions and real vision path/device/availability; no fake vision reload or download action was introduced.
-- Recaptured both screens at 1440 × 1024 and compared them side by side in `m7-export-settings-comparison-1440-pass2.png` and `m7-models-comparison-1440-pass2.png`. The earlier Export/Model P1 hierarchy findings are resolved; dynamic counts, sizes and unsupported-field omissions are intentional real-backend differences.
+## 追加：管理入口去重
 
-### Pass 11 — Library toolbar and icon unification
+- 移除播放器顶部重复的“管理片段”按钮，保留时间轴底部的单一入口。
+- 浏览器确认“管理片段”按钮共 1 个，播放器标题栏内为 0 个；点击后展开区间面板，“结束管理”正常收起。
+- 生产构建通过。截图：`qa/single-manage-entry.png`。
 
-- Recaptured the current running prototype instead of reusing the older library reference, then matched the exact populated interaction state: `xiaomi`, 2026-06-02, selected 09:30 card and one checked item.
-- Reduced the library toolbar to the prototype's five visible controls: unified filename/tag/subtitle search, source, recognition state, one date and grid/list switch.
-- Preserved the removed visual-label dropdown capability by folding real filename, source name, detected label and subtitle matching into the single prototype search field; the date control now applies one real day to both API bounds.
-- Aligned card and inspector copy to the prototype's minute labels, full time range, `MM:SS` duration and full Chinese date.
-- Replaced every remaining Lucide import with Phosphor, removed emoji status/icon substitutes from legacy helpers and removed `lucide-react` from the package and lockfile.
-- The same-viewport comparison `m7-library-comparison-1440-pass3.png` resolves the earlier library-toolbar density P2; repository search confirms no Lucide import or dependency remains.
-- A first 390px comparison exposed a wrapped toolbar, duplicate primary action and missing cancel action. The mobile rules now match the prototype's one-line scrollable toolbar, title/export header and cancel/merge selection bar; the normalized post-fix evidence is `m7-library-comparison-390-pass5.png`.
-- Formal library `documentElement.scrollWidth` equals the viewport at 900, 660 and 390px, so the scrollable toolbar remains locally contained without page-level overflow.
+## 追加：回看右侧片段详情
 
-### Pass 12 — Isolated mutation regression and mobile search
+- 点击主视频/静态画面、片段卡片和时间轴录像均可打开详情；顶部详情图标也可展开/收起。
+- 1440px 显示“时间轴—播放器—片段详情”三列，无页面横向溢出。
+- 点击 09:17:30 的片段后，文件名更新到 `studio_20261013_091730.mp4`，起止时间、缩略图与大小同步更新。
+- 详情导出带入当前片段的一分钟区间；“在时间轴中截取”切换到截取面板，避免同时展开多个侧栏。
+- 390px 使用右侧模态抽屉。抽屉内可打开导出确认，取消后保留详情；Escape 关闭详情，`aria-expanded` 恢复为 false。
+- 静态画面也可点击查看来源与文件信息，验证家门口文件及 `/recordings/front-door` 目录。
+- 生产构建通过。截图：`qa/playback-details-desktop.png`。
 
-- Added `backend/tests/mutation_smoke.py`, which boots a temporary real backend around a generated H.264/AAC clip and removes its database, outputs and recording directory after the run.
-- Verified source create/update/rescan/delete, settings persistence, fast and accurate export completion/download, transcription and vision task creation/terminal error reporting, and invalid model-delete protection.
-- Rebuilt the global-search quick result popover around the prototype's three semantic rows: subtitle hit, matching clip and recognition task; every displayed value remains backed by real API data.
-- Captured the prototype and formal search state at 390px. The formal popover is 242 × 186.5px at x60/y55.5, `scrollWidth` remains equal to 390px, and the normalized comparison is `m7-search-comparison-390.png`.
+## 追加：Logo 下方录像源下拉
 
-### Pass 13 — Compatible-media dynamic playback
+- 将原来的“我的录像源”列表替换为 Logo 下方的单一下拉选择，保留添加入口、片段数与启用状态。
+- 播放器顶部改为当前录像源名称，避免重复切换入口。
+- 浏览器选择“家门口”后，播放器与片段条切换到家门口，下方显示 86 个片段；旧列表节点已移除。
+- 390px 手机导航抽屉内可以选择“工作室”，回看随之切换且抽屉自动关闭；页面无横向溢出。
+- 生产构建通过。截图：`qa/sidebar-source-dropdown.png`。
 
-- Generated three isolated H.264/AAC segments from the prototype's supplied printer assets and indexed them through a temporary real Clipline backend; configured user data was not read or changed.
-- Captured the prototype and formal implementation in the playing state. The formal video reports `readyState=4`, advancing `currentTime`, `paused=false` and `error=null`.
-- The first comparison exposed a P1 mismatch: the sidebar selected 09:00–10:00 while the rail rendered 08:41–09:41. The selected display range now drives the real rail window and produces 09:00 through 10:00 ticks.
-- Rebuilt the source context hierarchy to match the prototype, then fixed mobile source-column compression, internal viewer scrolling after play-button focus, control-bar composition and clip-card density.
-- Final desktop evidence is `m7-playback-comparison-h264-playing-1440-pass4.png`; final normalized mobile evidence is `m7-playback-comparison-h264-playing-390-pass5.png`. Dynamic counts, durations and rail occupancy differ only because the isolated source intentionally contains three short real segments.
+## 追加：旧版蓝色与 UniFi 时间轴
 
-### Pass 8 — M6 states, responsive behavior and accessibility
+按照用户反馈，参考 `old/frontend/src/monitor.css`、`VerticalPlaybackTimeline.tsx` 及旧版 UniFi 截图调整：
 
-- Completed the four-page state matrix: playback has source/segment/loading/playback/scan failures; library preserves no-result, missing-thumbnail, recognition-failure and partial-batch feedback; tasks expose empty, polling failure, expiration and unavailable-download copy; management/settings retain read/save/model/diagnostic failure states.
-- Added explicit 1180, 900, 660 and 390px layout rules covering playback context, library grids, task columns, management navigation, single-column forms, mobile export controls and page-level overflow containment.
-- Added a reusable dialog-focus hook with initial focus, Tab trapping, Escape close and trigger restoration, then applied it to directory selection, management and export dialogs.
-- Added keyboard activation, pressed/selected state, table/progress semantics, live error/status announcements, named icon controls, visible focus rings, target-size guarantees and `prefers-reduced-motion` handling.
-- TypeScript and production build pass after the M6 changes. FR-602 remains formally blocked because the browser compositor cannot produce the required body screenshots at the responsive viewports.
+- 全局操作、选中态、焦点及播放头恢复 `#087bfa` 蓝色主题；成功/失败仍使用语义状态色。
+- 回看移除大标题、独立顶部筛选条与横向时间线，采用左侧竖向递减刻度、大播放器、紧凑片段条。
+- 日期、时段和 5/15/60 分钟缩放归入竖向时间轴。
+- “管理片段”按需展开区间面板；提供竖向起止手柄，支持指针拖动、方向键与 Shift 十秒调整。
+- 桌面显示“时间轴—截取面板—播放器”；1024px 和 390px 将播放器置于完整宽度的首行，时间轴与截取面板在下一行，页面无横向溢出。
+- 指针拖动终点从 09:17:12 到 09:17:51，方向键继续调整到 09:17:52；时长、片段数、断档提示与导出弹窗同步。
+- Enter 激活时间轴录像后，播放器定位到对应文件，视频实际播放成功（`paused: false`、`readyState: 4`）。
+- 日期切换到无录像日期后，日期控件仍可用，可切回示例日期；10:00 无录像，切回 09:00 重新显示已有片段。
+- 新截图：`qa/unifi-review-desktop.png`、`qa/unifi-manage-desktop.png`、`qa/unifi-manage-tablet.png`、`qa/unifi-manage-mobile.png`。下方截图列表是首版验证的历史记录。
+- 本轮生产构建通过；不涉及旧后端、识别功能或二期能力开关的改动。
 
-### Pass 7 — M5 settings completion
+## 验证
 
-- Replaced immediate per-control mutations with a shared settings draft provider that maps every supported backend field into one persistent cross-category patch.
-- Added the prototype sticky settings footer with dirty, saving, success, error and reset states; browser DOM verified a scan change remains dirty after switching to Export, then resets without a backend write.
-- Rebuilt Scan & Index around the actual backend fields for scheduling, file-stability delay, ffprobe concurrency, cleanup and idle scanning; unsupported prototype toggles are deliberately omitted.
-- Added real diagnostics using `/api/system/status` and `/api/system/logs`, including a browser-downloadable log text file and explicit inline error feedback when the connected backend lacks the endpoint.
-- Rebuilt About with the supplied Clipline logo, actual service state, repository link, API/data documentation and an explicit current license status.
-- Production build passes. M5 functionality is complete; formal visual regression remains blocked by the same browser body-compositor issue.
+- `npm run build` 成功。
+- `npm test`：6 项通过。验证跨文件覆盖、断档、局部裁剪、重叠覆盖、非法区间、半开时间边界与二期能力开关。
+- Codex 内置浏览器实际检查：1440、1024、768、390px。
+- 视频实际播放，读取到 `paused: false`、`readyState: 4`、`duration: 60`。播放结束后自动进入下一片段；18 秒断档会提示并跳过。
+- 时间输入、滑块、片段选择、时间线定位、日期切换及无录像状态可操作。
+- 09:14:12–09:20:30 区间覆盖 6 个片段，显示 06:00 实际录像和 00:18 断档。
+- 开始时间晚于结束时间时展示错误并禁止导出。
+- 导出任务可以创建、运行、完成。失败任务切换到精准模式后重试成功。
+- 示例下载成功，下载文件经 ffprobe 验证为 60 秒 MP4。
+- 片段库按源筛选，网格/列表切换和两片段批量选择成功，显示 02:00 总时长。
+- 重复目录添加被拒绝，设置可以修改和保存。
+- 搜索“家门口”返回文件结果，选择后定位到家门口的回看时间线。
+- 手机导航、设置和导出弹窗可操作。任务表在容器内横向滚动，页面本身不溢出。
+- 干净刷新后的检查阶段没有浏览器 error/warn；此前改动 useEffect 依赖数组时的热更新警告不属于最终加载错误。
 
-### Pass 6 — M5 management checkpoint
+## 修复记录
 
-- Kept the prototype management hierarchy and rebuilt the source surface as a page header, search/status toolbar, six-column table and selected-source preview/configuration panel.
-- Preserved real directory creation, source enable/disable, scan, schedule, recognition policy, save and delete behavior; source edits remain in local draft state if a backend save fails.
-- Replaced the compressed legacy log summary/sidebar with a full-width five-column table backed by scan, export, transcription, vision and file-failure data; added working keyword/type/source/date filters and CSV export.
-- Rebuilt settings headers, overview health strip, storage/cache cards and source-scope callout from real status data; separated recognition settings from model management, added vision settings, model filters and current-model delete protection.
-- Reworked export settings around real Web semantics: `data/exports` is read-only server staging and download location is controlled by the browser.
-- Production build and browser DOM navigation pass. Formal visual comparison remains blocked by the browser compositor, and uniform sticky save lifecycle plus final scan/diagnostics/about alignment remain open.
+- 时间字段改用 input 事件同步，避免原生 time/date 字段在部分浏览器中更新延迟。
+- 日期与录像源变化重置播放上下文；自动续播保留手动选定的导出范围。
+- 调整时间输入、区间滑块文字及移动端导航布局，修复窄屏控件挤压。
+- 为手机搜索按钮与模态弹窗补充名称；关闭的移动侧栏不会进入焦点顺序。
+- 二期扩展受能力开关控制，一期不加载识别模块。
+- 压缩示例图片后，迁移已保存的示例图片路径，避免刷新后图片丢失。
+- 使用持久化任务初始化完成记录，避免刷新后重复生成完成日志；无活动任务时停止更新任务状态。
 
-### Pass 5 — M4 unified task implementation
+## 截图
 
-- Replaced the legacy export-only/N+1 status composition with one normalized row model for export, transcription and vision jobs.
-- Aligned the formal page to the prototype header, cleanup action, five status tabs, task/type/source/status/result-more columns and three summary cards.
-- Connected completed export downloads, task-specific result/error copy and supported transcription/vision retry actions; cleanup is deliberately disabled because the backend exposes no task-delete API.
-- React Query polling updates recognition tasks without resetting the selected status tab; browser DOM interaction verified the filter state.
-- Production build passes. Visual QA remains blocked because the browser screenshot compositor omitted the task body and the connected backend did not provide populated recognition jobs.
+- `qa/review-desktop.png`、`qa/review-mobile.png`
+- `qa/library-desktop.png`、`qa/library-tablet.png`
+- `qa/sources-desktop.png`、`qa/sources-tablet.png`、`qa/sources-mobile.png`
+- `qa/settings-mobile.png`、`qa/tasks-mobile.png`
 
-### Pass 4 — M3 library and global search implementation
+## 原型边界
 
-- Rebuilt the library around the prototype page header, horizontal filter toolbar, three-column grid/list switch, persistent desktop inspector and bottom multi-select bar.
-- Connected real source, date, transcription status, visual-label and subtitle filters; batch transcription, batch vision and same-source merge export remain functional actions.
-- Replaced the independent search page with a topbar popover backed by search, suggestions and popular-search APIs; result selection resolves the real segment and seeks to the transcription offset.
-- Browser DOM and primary interactions were verified, including grid/list switching and loading/empty/error search states.
-- Visual capture is blocked: the in-app browser returned a blank composited body despite visible DOM boxes and successful interactions. The unusable capture is retained at `docs/full-redesign-implementation-qa/m3-library-capture-blocked.jpg` as blocker evidence and is not treated as a visual comparison.
-- M3 therefore remains `blocked` for screenshot comparison and responsive visual verification, not for compilation or DOM functionality.
-
-### Pass 3 — M2 interaction completion
-
-- Added real timeline gaps, gap count and legend, previous/next navigation, exact click-to-time seeking and gap feedback.
-- Completed the export surface with preview, editable file name and range, fast/accurate modes, gap duration, estimated size, preserved failure input and success navigation.
-- Added player loading/error states and clip-strip transcription status plus per-card transcription/export actions.
-- Production build passed and the browser DOM exposed the expected playback timeline, navigation, gap legend and export mode controls.
-- Final empty-state evidence: `docs/full-redesign-implementation-qa/m2-playback-final.jpg`.
-- M2 remains visually blocked only on the unavailable source/segment fixture and unverified 900/660/390 responsive captures; no production mock data was introduced to hide that constraint.
-
-### Pass 2 — M2 playback checkpoint
-
-- Replaced the old vertical canvas rail with the prototype's horizontal recording timeline and a real playback playhead.
-- Rebuilt the playback surface as a 250px source context column followed by player, timeline and horizontal clip strip.
-- Moved source metadata and playback controls into the video surface, while retaining the real `/api/segments/:id/stream` path and existing playback events.
-- Added a draggable blue export selection and kept the existing export panel as a modal layer.
-- Captured the browser-rendered empty-data checkpoint at `docs/full-redesign-implementation-qa/m2-playback-empty.jpg`.
-- The local backend provides no source/segment fixture, so media-filled comparison, gap behavior and export success remain unverified and are recorded as blockers rather than simulated in production code.
-
-### Pass 1 — M1 checkpoint
-
-- Implemented the 64px topbar, real logo asset, Phosphor shell icons, 78px primary rail, four-item navigation, management hierarchy and seven settings categories.
-- Captured the formal implementation at the same 1440 × 1024 viewport as the source.
-- P1/P2 findings remain by design because only M1 is in scope for this checkpoint.
-
-## Implementation checklist
-
-- Visual implementation and compatible-media interaction QA are complete.
-- Active-model deletion protection, network Whisper Tiny download, real speech inference, real YOLO ONNX person detection, cache deletion and runtime session reload all pass in isolated release checks.
-
-final result: passed
+扫描、FFmpeg 拼接、文件大小和索引数量是模拟数据；下载文件固定为 60 秒示例。未验证真实 NAS 目录、正式后端、真实区间裁剪或模型识别，这些属于后续开发。
