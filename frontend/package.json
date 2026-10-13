@@ -1,6 +1,6 @@
 {
-  "name": "clipline-phase-one-prototype",
-  "version": "0.1.0",
+  "name": "clipline-workspace",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {

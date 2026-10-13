@@ -27,6 +27,8 @@ class AppConfig(BaseSettings):
     max_task_recoveries: int = Field(default=3, ge=1, le=10)
     probe_timeout_seconds: float = Field(default=30, gt=0)
     thumbnail_timeout_seconds: float = Field(default=30, gt=0)
+    playback_max_width: int = Field(default=1920, ge=320, le=1920)
+    playback_timeout_seconds: float = Field(default=3600, gt=0)
 
     @field_validator("timezone")
     @classmethod

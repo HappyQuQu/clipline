@@ -6,7 +6,7 @@
 
 本文中的目录、数据库、API、Docker 配置和测试为拟实现的正式版契约，除明确标注“已有”外均不代表已完成。
 
-当前已完成 D1 运行基础及 D2 后台索引，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1 记录](qa/D1_FOUNDATION.md)及 [D2 记录](qa/D2_INDEXING.md)。scan/reindex 已执行真实媒体工作；回看、播放准备、导出和前端 API 接入仍待 D3/D4。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
+当前已完成 D1–D3，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)及 [D3](qa/D3_PLAYBACK.md)。scan/reindex/prepare 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；导出与完整设置/日志运维仍待 D4/D5。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
 
 ## 1. 架构与技术选择
 
@@ -47,12 +47,12 @@ flowchart LR
 clipline/
 ├── frontend/                     # 已有一期原型，逐步替换模拟数据
 │   └── src/
-│       ├── api/                  # 拟新增：HTTP、DTO、错误映射
+│       ├── api/                  # 已有：HTTP、DTO、错误映射
 │       ├── services/             # 拟新增：源、回看、任务等领域适配
-│       ├── hooks/                # 拟新增：查询、订阅、播放器状态
+│       ├── hooks/                # 已有播放状态；订阅在 D5
 │       ├── pages/                # 已有：Review/Library/Tasks/Logs/Sources/Settings
 │       └── capabilities.js       # 已有：二期能力及插槽
-├── backend/                      # 已建立 D1/D2；old/backend 不直接作为运行目录
+├── backend/                      # 已建立 D1–D3；old/backend 不直接作为运行目录
 │   ├── app/
 │   │   ├── main.py               # API 入口，不启动扫描循环或识别服务
 │   │   ├── core/                 # 配置、路径约束、错误、时间规则
@@ -65,7 +65,7 @@ clipline/
 │   └── tests/
 ├── deploy/                       # 已有本地测试配置与 smoke 脚本；运行管理在 app.runtime
 ├── Dockerfile                    # 已实现 D1 双架构构建
-├── compose.yaml                  # 已支持后台索引，前端仍是原型
+├── compose.yaml                  # 已支持后台索引和真实回看
 ├── docs/
 └── old/                          # 只读参考，不进入正式镜像
 ```
@@ -88,7 +88,7 @@ clipline/
 
 SQLite WAL 依赖同机共享内存机制，不适合跨主机网络文件系统；本方案要求数据库及其 WAL/SHM 文件处于同一持久化本地目录。参考 [SQLite WAL 文档](https://www.sqlite.org/wal.html)。
 
-以下是设计中的部署参数示例；实际配置以仓库 `compose.yaml` 为准，当前可执行 scan/reindex。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
+以下是设计中的部署参数示例；实际配置以仓库 `compose.yaml` 为准，当前可执行 scan/reindex/prepare。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
 
 ```yaml
 services:
@@ -216,16 +216,17 @@ CLIPLINE_IMAGE_TAG=d1-local
 | POST `/sources` | name, path, scanIntervalMinutes, scanOnCreate | 201 `{source, firstTaskId}`；源与首次扫描任务同一事务创建 |
 | PATCH `/sources/{id}` | name, enabled, scanIntervalMinutes；允许条件下 path | 返回更新源；校验路径锁与版本 |
 | POST `/sources/{id}/scan` | 空对象；请求带幂等键 | 202 `{taskId, reused}`；同源活动扫描复用 |
-| GET `/segments` | sourceId, date, q, viewTimezone, cursor；回看可加 fromAt/toAt | 源/日期/文件名与起止时刻文本匹配；date 使用日区间重叠查询；时间窗供回看按需加载，不增加片段库筛选项 |
+| GET `/segments` | sourceId, date, q, viewTimezone, cursor | 源/日期/文件名与起止时刻文本匹配；date 使用日区间重叠查询；回看时间窗由 timeline 接口提供 |
 | GET `/segments/{id}` | — | 完整元数据、文件与播放状态 |
-| GET `/timeline` | sourceId, date, viewTimezone | 当日录像覆盖、断档及按需加载的片段索引；覆盖合并，片段不丢失 |
-| GET `/segments/resolve` | sourceId, at | 对应片段与 offsetMs；无覆盖时返回 gap 与下一片段信息 |
+| GET `/sources/{id}/dates` | viewTimezone | 有录像的本地日期，跨日片段出现在重叠日期 |
+| GET `/timeline` | sourceId, date, viewTimezone, startSeconds, endSeconds, cursor, limit | 当日录像覆盖、断档及按需加载的片段索引；覆盖合并，片段不丢失 |
+| GET `/sources/{id}/resolve` | at（含时区的 ISO 时间） | 对应片段与 offsetMs；无覆盖时返回 gap 与下一片段信息 |
 | GET `/segments/{id}/thumbnail` | — | 已有缩略图；未生成时返回可识别的占位状态 |
-| GET `/segments/{id}/playback` | — | `{status, streamUrl, taskId, profile}`；未准备不触发同步转码 |
-| POST `/segments/{id}/prepare` | profile | 202，创建或复用播放准备任务 |
-| GET `/segments/{id}/stream` | HTTP Range | 原文件或已完成代理的字节流；206、416 等范围行为正确 |
+| GET `/segments/{id}/playback` | — | `{status, mediaUrl, taskId, proxy}`；未准备不触发同步转码 |
+| POST `/segments/{id}/prepare` | 空对象或 force=true；profile 由部署规格生成 | 202，创建或复用播放准备任务 |
+| GET/HEAD `/segments/{id}/media` | fingerprint、HTTP Range/If-Range/ETag | 原文件或已完成代理的字节流；206、416 等范围行为正确 |
 
-静态 `/segments/resolve` 路由先于动态 `/{id}` 注册。所有源和片段路径由 ID 在服务端解析，客户端不能指定任意文件作为 stream 输入。
+定位路由使用 `/sources/{id}/resolve`，避免片段 ID 与静态定位路径冲突。所有源和片段路径由 ID 在服务端解析，客户端不能指定任意文件作为 stream 输入。
 
 ### 5.2 任务、导出与日志
 
@@ -404,7 +405,7 @@ Worker 恢复先获得 worker.lock 独占，确认旧执行器已退出后再清
 
 设置按分类保存：`scan`（默认间隔、文件保护）、`playback`（续播、断档）、`export`（模式、跨度）、`tasks`（并行）。PATCH 仅接受该分类字段，使用 revision 比较防止覆盖同分类新值。识别能力由版本与 provider 状态决定，不能通过普通设置绕过。
 
-前端保留 App 层草稿；保存成功后更新当前分类 saved 值，其他分类草稿不变。保存冲突提示重新读取并保留用户编辑，不能静默覆盖。
+D3 默认真实模式读取配置，保存按钮在 D5 开放；原型仅在显式 ?mode=demo 启用。前端保留 App 层草稿；保存成功后更新当前分类 saved 值，其他分类草稿不变。保存冲突提示重新读取并保留用户编辑，不能静默覆盖。
 
 ## 10. 前端接入顺序
 

@@ -12,7 +12,7 @@ from app.services.idempotency import lookup, remember
 
 ACTIVE = ("queued", "running", "cancelling")
 TERMINAL = ("completed", "failed", "cancelled")
-HANDLERS = ("scan", "reindex")
+HANDLERS = ("scan", "reindex", "prepare")
 
 
 class Cancelled(Exception):
@@ -84,7 +84,7 @@ def concurrency(session):
 
 
 def enqueue(session, source, kind, trigger="manual", *, retry_of=None, reuse=True):
-    if kind not in HANDLERS:
+    if kind not in ("scan", "reindex"):
         raise AppError("CAPABILITY_NOT_AVAILABLE", "此任务类型尚未接入，请等待后续阶段。", 409)
     if not source.enabled:
         raise AppError("SOURCE_DISABLED", "请先启用录像源再提交维护任务。", 409)
@@ -158,6 +158,80 @@ def submit(engine, source_id, kind, key=None, *, retry_of=None):
                 title="任务已重新提交",
                 source_id=source_id,
                 task_id=task.id,
+                detail={"retryOfTaskId": retry_of},
+            )
+        return response
+
+
+def task_resource(kind, source_id, payload):
+    return f"prepare:{payload['segmentId']}" if kind == "prepare" else f"index:{source_id}"
+
+
+def submit_prepare(engine, config, segment_id, key=None, *, force=False, retry_of=None):
+    from app.services.playback import cached, get_segment, original_path, profile
+
+    scope = f"task:retry:{retry_of}" if retry_of else "prepare:create"
+    request = {"segmentId": segment_id, "force": force}
+    with write_session(engine) as session:
+        previous = lookup(session, scope, key, request)
+        if previous is not None:
+            return previous
+        segment = get_segment(session, segment_id)
+        original_path(session, config, segment)
+        if retry_of:
+            original = session.get(Task, retry_of)
+            if (
+                original is None
+                or original.kind != "prepare"
+                or original.payload_json.get("segmentId") != segment_id
+            ):
+                raise AppError("TASK_NOT_FOUND", "原播放准备任务不存在。", 404)
+            if original.status not in ("failed", "cancelled"):
+                raise AppError("TASK_NOT_RETRYABLE", "只有失败或取消的任务可以重试。", 409)
+        if cached(session, config, segment) or (segment.playback_status == "direct" and not force):
+            response = {"taskId": None, "reused": True, "ready": True}
+            remember(session, scope, key, request, response, None)
+            return response
+        active_key = f"prepare:{segment.id}:{segment.fingerprint}:{profile(config)}"
+        existing = session.scalar(select(Task).where(Task.active_key == active_key))
+        if existing and retry_of:
+            raise AppError("TASK_ALREADY_ACTIVE", "当前片段正在准备播放，请查看当前任务。", 409)
+        task = existing
+        if task is None:
+            task = Task(
+                id=new_id(),
+                kind="prepare",
+                source_id=segment.source_id,
+                active_key=active_key,
+                retry_of_task_id=retry_of,
+                payload_json={
+                    "segmentId": segment.id,
+                    "fingerprint": segment.fingerprint,
+                    "profile": profile(config),
+                    "force": force,
+                },
+            )
+            session.add(task)
+            session.flush()
+            emit(
+                session,
+                kind="prepare",
+                code="TASK_QUEUED",
+                title="播放准备已加入后台队列",
+                source_id=segment.source_id,
+                task_id=task.id,
+                detail={"status": "queued", "segmentId": segment.id},
+            )
+        response = {"taskId": task.id, "reused": existing is not None, "ready": False}
+        remember(session, scope, key, request, response, task.id)
+        if retry_of:
+            emit(
+                session,
+                kind="prepare",
+                code="TASK_RETRIED",
+                title="播放准备已重新提交",
+                task_id=task.id,
+                source_id=segment.source_id,
                 detail={"retryOfTaskId": retry_of},
             )
         return response
@@ -253,7 +327,7 @@ class Queue:
             )
             for task in tasks:
                 source = session.get(Source, task.source_id)
-                if source is None or not source.enabled:
+                if source is None or (not source.enabled and task.kind != "prepare"):
                     finish(
                         session,
                         task,
@@ -262,7 +336,7 @@ class Queue:
                         message="录像源已停用，维护任务未开始。",
                     )
                     continue
-                resource = f"index:{source.id}"
+                resource = task_resource(task.kind, source.id, task.payload_json)
                 if session.get(RuntimeLease, resource):
                     continue
                 token = str(uuid4())
@@ -310,7 +384,9 @@ class Queue:
 
     def owned(self, session, claim, *, allow_cancel=False):
         task = session.get(Task, claim.task_id)
-        resource = session.get(RuntimeLease, f"index:{claim.source_id}")
+        resource = session.get(
+            RuntimeLease, task_resource(claim.kind, claim.source_id, claim.payload)
+        )
         if (
             task is None
             or task.lease_token != claim.token
@@ -463,12 +539,14 @@ class Queue:
                 if finalize is not None:
                     finalize(session)
                 source = session.get(Source, claim.source_id)
-                source.last_scan_at = utc_now_ms()
-                source.next_scan_at = (
-                    utc_now_ms() + source.scan_interval_minutes * 60_000
-                    if source.enabled and source.scan_interval_minutes is not None
-                    else None
-                )
+                if claim.kind in ("scan", "reindex"):
+                    source.last_scan_at = utc_now_ms()
+                if claim.kind in ("scan", "reindex"):
+                    source.next_scan_at = (
+                        utc_now_ms() + source.scan_interval_minutes * 60_000
+                        if source.enabled and source.scan_interval_minutes is not None
+                        else None
+                    )
                 finish(session, task, "completed", result=result)
 
     def schedule(self):

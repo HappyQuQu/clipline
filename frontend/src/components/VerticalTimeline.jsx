@@ -4,33 +4,34 @@ import { clock } from '../domain';
 import { ExtensionSlot, IconButton } from './UI';
 
 // Like the original UniFi rail: later times are at the top, earlier times at the bottom.
-export default function VerticalTimeline({ clips, clip, date, current, onDateChange, onShiftDate, onSeek, managing, range, onRangeChange, onManage }) {
+export default function VerticalTimeline({ clips, clip, date, current, onDateChange, onShiftDate, onSeek, managing, range, onRangeChange, onManage, coverage, onWindow, dates = [] }) {
   const ruler = useRef(null);
   const dragOrigin = useRef(null);
   const [span, setSpan] = useState(900);
-  const [hour, setHour] = useState(Math.floor((clip?.start || 0) / 3600));
-  const [anchor, setAnchor] = useState(clip?.start || 0);
+  const [hour, setHour] = useState(Math.max(0, Math.min(23, Math.floor((clip?.start || 0) / 3600))));
+  const [anchor, setAnchor] = useState(Math.max(0, clip?.start || 0));
   const [focusedHandle, setFocusedHandle] = useState(null);
   useEffect(() => {
-    setHour(Math.floor((clip?.start || 0) / 3600));
-    setAnchor(clip?.start || 0);
+    setHour(Math.max(0, Math.min(23, Math.floor((clip?.start || 0) / 3600))));
+    setAnchor(Math.max(0, clip?.start || 0));
   }, [date, clips[0]?.sourceId]);
   useEffect(() => {
     if (managing && range) {
       setAnchor((range.start + range.end) / 2);
-      setSpan(300);
-      setHour(Math.floor(range.start / 3600));
+      setSpan(range.end - range.start > 900 ? 3600 : range.end - range.start > 300 ? 900 : 300);
+      setHour(Math.max(0, Math.min(23, Math.floor(range.start / 3600))));
     }
   }, [managing]);
   const start = span === 3600 ? hour * 3600 : Math.max(hour * 3600, Math.min((hour + 1) * 3600 - span, Math.floor((anchor - span / 2) / 60) * 60));
   const end = start + span;
   const position = value => Math.max(0, Math.min(100, (end - value) / span * 100));
+  useEffect(() => { onWindow?.(start, end); }, [start, end, onWindow]);
   const visible = clips.filter(item => item.start < end && item.end > start);
   const ticks = span === 300 ? 5 : 12;
   useEffect(() => {
     if (clip && !managing && (clip.start < start || clip.end > end)) {
-      setHour(Math.floor(clip.start / 3600));
-      setAnchor(clip.start);
+      setHour(Math.max(0, Math.min(23, Math.floor(clip.start / 3600))));
+      setAnchor(Math.max(0, clip.start));
     }
   }, [clip?.id]);
 
@@ -51,9 +52,9 @@ export default function VerticalTimeline({ clips, clip, date, current, onDateCha
     <div ref={ruler} className="rail-ruler" onClick={e => onSeek(timeAt(e.clientY))}>
       {Array.from({ length: ticks * 5 + 1 }, (_, i) => <i className={`rail-tick ${i % 5 === 0 ? 'major' : ''}`} key={i} style={{ top: `${i / (ticks * 5) * 100}%` }}>{i % 5 === 0 && <time>{end - i / (ticks * 5) * span === 86400 ? '24:00' : clock(end - i / (ticks * 5) * span).slice(0, 5)}</time>}</i>)}
       <div className="rail-coverage" />
-      {visible.map(item => <button key={item.id} className={`rail-recording ${item.id === clip?.id ? 'active' : ''}`} aria-label={`定位 ${clock(item.start)} 至 ${clock(item.end)}`} title={`${clock(item.start)} – ${clock(item.end)}`} style={{ top: `${position(item.end)}%`, height: `${Math.max(.2, position(item.start) - position(item.end))}%` }} onClick={e => {
+      {(coverage || visible).filter(item => item.start < end && item.end > start).map((item, index) => <button key={item.id || index} className={`rail-recording ${item.id === clip?.id ? 'active' : ''}`} aria-label={`定位 ${clock(item.start)} 至 ${clock(item.end)}`} title={`${clock(item.start)} – ${clock(item.end)}`} style={{ top: `${position(item.end)}%`, height: `${Math.max(.2, position(item.start) - position(item.end))}%` }} onClick={e => {
         e.stopPropagation();
-        onSeek(e.detail === 0 ? item.start : Math.max(item.start, Math.min(item.end - .1, timeAt(e.clientY))));
+        onSeek(e.detail === 0 ? Math.max(start, item.start) : Math.max(item.start, Math.min(item.end - .1, timeAt(e.clientY))));
       }} />)}
       {managing && range && range.start < end && range.end > start && <>
         <div className="rail-range" style={{ top: `${position(range.end)}%`, height: `${Math.max(0, position(range.start) - position(range.end))}%` }} />
@@ -62,9 +63,9 @@ export default function VerticalTimeline({ clips, clip, date, current, onDateCha
         }}><span>{key === 'start' ? '开始' : '结束'}</span><time>{clock(range[key])}</time></button>)}
       </>}
       {current >= start && current <= end && <div className="rail-playhead" style={{ top: `${position(current)}%` }}><time>{clock(current)}</time></div>}
-      {!visible.length && <div className="rail-no-recordings">此时段无录像</div>}
+      {!(coverage || visible).some(item => item.start < end && item.end > start) && <div className="rail-no-recordings">此时段无录像</div>}
     </div>
     <ExtensionSlot name="timeline-track" showPlaceholder={false} context={{ clips: visible, current, seek: onSeek }} />
-    <footer className="rail-footer"><span>当前范围 {visible.length} 段 · 蓝色为录像</span><button className={managing ? 'active' : ''} onClick={onManage} disabled={!clip} aria-pressed={managing}><Scissors size={15} />{managing ? '结束管理' : '管理片段'}</button></footer>
+    <footer className="rail-footer">{dates.length > 0 && <select aria-label="有录像的日期" value={dates.includes(date) ? date : ''} onChange={event => onDateChange(event.target.value)}>{!dates.includes(date) && <option value="">选择有录像日期</option>}{dates.map(day => <option key={day} value={day}>{day}</option>)}</select>}<span>当前范围 {visible.length} 段 · 蓝色为录像</span><button className={managing ? 'active' : ''} onClick={onManage} disabled={!clip} aria-pressed={managing}><Scissors size={15} />{managing ? '结束管理' : '管理片段'}</button></footer>
   </section>;
 }

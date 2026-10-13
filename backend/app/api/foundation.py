@@ -35,7 +35,7 @@ def readiness(request: Request) -> dict:
     return {
         "ready": db_ready and worker_ready and data_ready,
         "database": {"ready": db_ready},
-        "worker": {"ready": worker_ready, "lastHeartbeatAt": last_heartbeat, "mode": "indexing"},
+        "worker": {"ready": worker_ready, "lastHeartbeatAt": last_heartbeat, "mode": "playback"},
         "storage": {"ready": data_ready},
     }
 
@@ -54,13 +54,13 @@ def ready(request: Request):
 @router.get("/capabilities")
 def capabilities():
     return {
-        "backendStage": "indexing",
+        "backendStage": "playback",
         "recordingDirectories": True,
         "scan": True,
         "export": False,
         "reindex": True,
-        "prepare": False,
-        "playback": False,
+        "prepare": True,
+        "playback": True,
         "transcription": False,
         "visualRecognition": False,
         "semanticSearch": False,
@@ -111,7 +111,7 @@ def system_status(request: Request):
     return {
         "version": __version__,
         "arch": platform.machine(),
-        "backendStage": "indexing",
+        "backendStage": "playback",
         "health": readiness(request),
         "queue": {"executionEnabled": True, "counts": counts},
         "storage": {"totalBytes": disk.total, "freeBytes": disk.free},

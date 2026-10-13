@@ -296,11 +296,10 @@ def test_readiness_requires_current_worker_and_source_offline_does_not_fail(
 
 def test_capabilities_are_truthful_and_recognition_is_unavailable(client):
     flags = client.get("/api/capabilities").json()
-    assert flags["backendStage"] == "indexing"
-    assert flags["scan"] is True and flags["reindex"] is True
+    assert flags["backendStage"] == "playback"
+    assert all(flags[key] for key in ("scan", "reindex", "prepare", "playback"))
     for key in (
         "export",
-        "prepare",
         "transcription",
         "visualRecognition",
         "semanticSearch",

@@ -17,6 +17,7 @@ from app.core.time import utc_now_ms
 from app.db.migrations import require_current_schema
 from app.db.models import RuntimeLease
 from app.db.session import make_engine
+from app.services.playback import prepare
 from app.services.scanner import scan
 from app.tasks.context import TaskContext
 from app.tasks.queue import Cancelled, Interrupted, LeaseLost, Queue
@@ -43,7 +44,7 @@ def heartbeat(engine, owner: str, token: str, lease_seconds: float) -> None:
 def execute(queue, claim, stopped):
     context = TaskContext(queue, claim, stopped)
     try:
-        result, finalize = scan(context)
+        result, finalize = (prepare if claim.kind == "prepare" else scan)(context)
         queue.settle(claim, result=result, finalize=finalize)
     except Cancelled:
         queue.settle(claim)

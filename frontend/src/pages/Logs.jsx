@@ -7,7 +7,7 @@ const levels = { info: ['信息', 'blue'], warning: ['警告', 'amber'], error: 
 const kinds = { ...Object.fromEntries(Object.entries(TASK_TYPES).map(([id, config]) => [id, config.label])), source: '录像源配置', settings: '系统设置', system: '系统运行' };
 const logTime = log => log.createdAt ? new Date(log.createdAt).toLocaleString('zh-CN', { hour12: false }) : log.time;
 
-export default function Logs({ logs, sources, settings, taskId, onClearTask, onOpenTask, notify }) {
+export default function Logs({ logs, sources, settings, taskId, onClearTask, onOpenTask, notify, real = false }) {
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('all');
   const [level, setLevel] = useState('all');
@@ -24,10 +24,10 @@ export default function Logs({ logs, sources, settings, taskId, onClearTask, onO
   }
   return <div className="logs-page">
     <PageHeading eyebrow="EVERY OPERATION LEAVES A TRACE" title="日志中心" description="查看任务过程、配置变更与异常，找到每一步发生了什么。">
-      <button className="button secondary" onClick={() => download({ version: '0.1.0-prototype', settings, sources, logs }, 'clipline-prototype-diagnostics.json')}><DownloadSimple size={17} />下载诊断</button>
-      <button className="button primary" disabled={!filtered.length} onClick={() => download(filtered, 'clipline-logs.json')}><DownloadSimple size={17} />导出日志</button>
+      <button className="button secondary" disabled={real} onClick={() => download({ version: '0.1.0-prototype', settings, sources, logs }, 'clipline-prototype-diagnostics.json')}><DownloadSimple size={17} />下载诊断</button>
+      <button className="button primary" disabled={real || !filtered.length} onClick={() => download(filtered, 'clipline-logs.json')}><DownloadSimple size={17} />导出日志</button>
     </PageHeading>
-    <div className="log-summary"><span>共 <strong>{logs.length}</strong> 条记录</span><span>警告 <strong>{logs.filter(log => log.level === 'warning').length}</strong></span><span>错误 <strong>{logs.filter(log => log.level === 'error').length}</strong></span><Badge>本地原型记录</Badge></div>
+    <div className="log-summary"><span>共 <strong>{logs.length}</strong> 条记录</span><span>警告 <strong>{logs.filter(log => log.level === 'warning').length}</strong></span><span>错误 <strong>{logs.filter(log => log.level === 'error').length}</strong></span><Badge>{real ? '服务端记录' : '本地原型记录'}</Badge></div>
     <section className="panel log-center-panel">
       <div className="log-center-toolbar">
         <div className="search-field"><MagnifyingGlass size={18} /><input value={query} onChange={event => setQuery(event.target.value)} aria-label="搜索日志" placeholder="搜索事件、录像源或任务 ID…" /></div>
@@ -43,7 +43,7 @@ export default function Logs({ logs, sources, settings, taskId, onClearTask, onO
         <time>{logTime(log)}</time><ArrowRight size={15} />
       </button>)}</div>}
     </section>
-    <p className="task-bottom-note">日志保存在当前浏览器；真实服务端日志将在正式版接入。</p>
+    <p className="task-bottom-note">{real ? '当前读取完整服务端记录并在页面筛选；日志导出和诊断在 D5 接入。' : '日志保存在当前浏览器；真实服务端日志将在正式版接入。'}</p>
     {selected && <Modal title="日志详情" onClose={() => setSelected(null)}><div className="log-detail"><h3>{selected.title}</h3><Badge tone={levels[selected.level || 'info']?.[1]}>{levels[selected.level || 'info']?.[0] || '信息'}</Badge><p>{selected.detail}</p><dl><div><dt>时间</dt><dd>{logTime(selected)}</dd></div><div><dt>类型</dt><dd>{kinds[selected.kind] || '系统运行'}</dd></div><div><dt>录像源</dt><dd>{sourceName(selected.sourceId)}</dd></div>{selected.taskId && <div><dt>关联任务</dt><dd><code>{selected.taskId}</code></dd></div>}</dl>{selected.taskId && <button className="button primary full" onClick={() => { setSelected(null); onOpenTask(selected.taskId); }}>查看关联任务<ArrowRight size={16} /></button>}</div></Modal>}
   </div>;
 }

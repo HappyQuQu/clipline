@@ -42,7 +42,7 @@ class Source(Entity, Timestamped, Base):
     name: Mapped[str] = mapped_column(String(120))
     canonical_path: Mapped[str] = mapped_column(String, unique=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    scan_interval_minutes: Mapped[int | None] = mapped_column(Integer, default=5)
+    scan_interval_minutes: Mapped[int | None] = mapped_column(Integer().evaluates_none(), default=5)
     recording_timezone: Mapped[str] = mapped_column(String(80), default="Asia/Shanghai")
     auto_transcribe: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_detect: Mapped[bool] = mapped_column(Boolean, default=False)

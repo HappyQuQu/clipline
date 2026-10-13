@@ -9,7 +9,7 @@ from pathlib import Path
 from app.core.errors import AppError
 
 
-def run_process(args, context, timeout):
+def run_process(args, context, timeout, on_poll=None):
     directory = context.config.data / "tmp"
     with (
         tempfile.TemporaryFile(dir=directory) as output,
@@ -21,6 +21,8 @@ def run_process(args, context, timeout):
         try:
             while process.poll() is None:
                 context.check()
+                if on_poll is not None:
+                    on_poll()
                 if time.monotonic() >= deadline:
                     raise AppError("MEDIA_TIMEOUT", "媒体文件处理超时，请检查文件或设备。")
                 if output.tell() > 1024 * 1024 or error.tell() > 1024 * 1024:
@@ -103,6 +105,8 @@ def make_thumbnail(path, metadata, target: Path, context):
             "-nostdin",
             "-v",
             "error",
+            "-filter_threads",
+            str(context.config.media_threads),
             "-protocol_whitelist",
             "file",
             "-format_whitelist",
@@ -130,3 +134,77 @@ def make_thumbnail(path, metadata, target: Path, context):
     with target.open("rb") as stream:
         if stream.read(2) != b"\xff\xd8":
             raise AppError("INVALID_THUMBNAIL", "录像预览图格式异常。")
+
+
+def make_proxy(path, duration_ms, target, context):
+    progress_file = target.parent / "progress.txt"
+    last_update = 0
+
+    def progress():
+        nonlocal last_update
+        if time.monotonic() - last_update < 0.5:
+            return
+        last_update = time.monotonic()
+        if progress_file.is_file():
+            values = dict(
+                line.split("=", 1)
+                for line in progress_file.read_text()[-8192:].splitlines()
+                if "=" in line
+            )
+            try:
+                processed = max(0, int(values.get("out_time_us", "0")) // 1000)
+            except ValueError:
+                return
+            context.update(
+                "transcode",
+                min(95, 2 + int(processed / duration_ms * 92)),
+                {"outTimeMs": processed},
+            )
+
+    run_process(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-protocol_whitelist",
+            "file",
+            "-format_whitelist",
+            "mov,matroska,mpegts",
+            "-threads",
+            str(context.config.media_threads),
+            "-filter_threads",
+            str(context.config.media_threads),
+            "-i",
+            str(path),
+            "-map",
+            "0:V:0",
+            "-map",
+            "0:a:0?",
+            "-vf",
+            f"scale=w='min({context.config.playback_max_width},iw)':h=-2",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-threads",
+            str(context.config.media_threads),
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "-progress",
+            str(progress_file),
+            "-y",
+            str(target),
+        ],
+        context,
+        context.config.playback_timeout_seconds,
+        progress,
+    )

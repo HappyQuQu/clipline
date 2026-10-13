@@ -14,7 +14,7 @@ from app.core.time import iso_utc
 from app.db.models import Artifact, BusinessLog, Segment, Source, Task
 from app.services.catalog import list_segments, segment_dto
 from app.services.sources import create_source, source_dto, update_source
-from app.tasks.queue import ACTIVE, cancel, submit, task_dto
+from app.tasks.queue import ACTIVE, cancel, submit, submit_prepare, task_dto
 
 router = APIRouter(prefix="/api")
 KeyHeader = Annotated[RequestKey | None, Header(alias="Idempotency-Key")]
@@ -55,6 +55,8 @@ def scan_source(
 
 @router.post("/tasks", status_code=202)
 def create_task(request: Request, body: TaskCreate, key: KeyHeader = None):
+    if body.kind == "prepare":
+        raise AppError("SEGMENT_REQUIRED", "请在具体录像片段上发起播放准备。")
     return submit(request.app.state.engine, body.source_id, body.kind, key)
 
 
@@ -130,7 +132,16 @@ def retry_task(
         task = session.get(Task, task_id)
         if task is None:
             raise AppError("TASK_NOT_FOUND", "任务不存在。", 404)
-        source_id, kind = task.source_id, task.kind
+        source_id, kind, payload = task.source_id, task.kind, task.payload_json
+    if kind == "prepare":
+        return submit_prepare(
+            request.app.state.engine,
+            request.app.state.config,
+            payload["segmentId"],
+            key,
+            force=payload.get("force", False),
+            retry_of=task_id,
+        )
     return submit(request.app.state.engine, source_id, kind, key, retry_of=task_id)
 
 

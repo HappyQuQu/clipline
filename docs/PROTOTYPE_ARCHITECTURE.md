@@ -1,5 +1,7 @@
 # Clipline 原型结构与二期接入
 
+本文件记录保留的交互原型，对应 `DemoApp.jsx` 和显式 `?mode=demo`。D3 起默认 `App.jsx` 使用真实 API，接入契约与验证见 [开发文档](DEVELOPMENT.md)及 [D3 记录](qa/D3_PLAYBACK.md)。
+
 ## 新方案
 
 本次重新设计由 `frontend/` 独立承载，保留原产品的目录扫描、真实时间回看和区间导出流程。旧文档中“必须完全对齐 full redesign”和“一期包含识别”的要求不适用于这版新原型。

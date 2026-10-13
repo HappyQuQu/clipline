@@ -69,3 +69,7 @@ class TaskCreate(APIModel):
         if value:
             raise ValueError("Custom task options are not supported in this milestone")
         return value
+
+
+class PrepareRequest(APIModel):
+    force: StrictBool = False
