@@ -1,4 +1,4 @@
-# Clipline 一期交互原型
+# Clipline 一期原型与正式版开发
 
 沿用旧版蓝色主题与 UniFi 风格竖向时间轴的本地录像工作台。源码位于 `frontend/`，旧版源码与资料保留在 `old/`。
 
@@ -40,3 +40,9 @@ npm run dev
 文档以 NAS Docker 部署及 `linux/amd64`、`linux/arm64` 支持为基线，区分已有原型与待实现正式版；不会把演示扫描或示例下载视为真实后端能力。
 
 本地真实录像测试固定使用 `/Volumes/extended/clipline`，容器只读映射到 `/recordings`；新测试数据库、缓存和输出独立放在项目的 `data/local-test`，详见开发文档。
+
+## 后端开发进度
+
+D1 运行基础已实现：新 FastAPI 后端、SQLite/Alembic、真实目录浏览、健康检查、独立 Worker 心跳及双架构 Docker。后端支持 Python 3.11/3.12，现有 32 项测试；前端 11 项测试与构建通过。
+
+使用方法见 [后端说明](backend/README.md)，验证结果见 [D1 记录](docs/qa/D1_FOUNDATION.md)。本地测试接口文档为 <http://127.0.0.1:8088/docs>。当前 Worker 尚未执行业务任务，页面仍为原型；真实扫描、回看与导出按任务清单继续接入。

@@ -1,0 +1,1 @@
+"""Configuration and shared contracts."""

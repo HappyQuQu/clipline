@@ -6,6 +6,8 @@
 
 本文中的目录、数据库、API、Docker 配置和测试为拟实现的正式版契约，除明确标注“已有”外均不代表已完成。
 
+当前已完成 D1 运行基础，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1 记录](qa/D1_FOUNDATION.md)。业务扫描、回看与导出仍待接入；本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
+
 ## 1. 架构与技术选择
 
 一期采用单容器部署，内部 API 与 Worker 分进程。API 提供页面、查询和任务提交；Worker 独立领取持久化任务并调用 FFmpeg。浏览器不执行队列，不承担任务恢复。
@@ -50,7 +52,7 @@ clipline/
 │       ├── hooks/                # 拟新增：查询、订阅、播放器状态
 │       ├── pages/                # 已有：Review/Library/Tasks/Logs/Sources/Settings
 │       └── capabilities.js       # 已有：二期能力及插槽
-├── backend/                      # 拟重建；old/backend 不直接作为运行目录
+├── backend/                      # 已建立 D1 基础；old/backend 不直接作为运行目录
 │   ├── app/
 │   │   ├── main.py               # API 入口，不启动扫描循环或识别服务
 │   │   ├── core/                 # 配置、路径约束、错误、时间规则
@@ -61,9 +63,9 @@ clipline/
 │   │   └── worker.py             # 单一调度协调器与执行池
 │   ├── migrations/
 │   └── tests/
-├── deploy/                       # 拟新增：进程管理与启动脚本
-├── Dockerfile                    # 拟重建：前端构建 + 运行镜像
-├── compose.yaml                  # 拟新增：NAS 示例部署
+├── deploy/                       # 已有本地测试配置与 smoke 脚本；运行管理在 app.runtime
+├── Dockerfile                    # 已实现 D1 双架构构建
+├── compose.yaml                  # 已实现基础部署，业务能力仍待接入
 ├── docs/
 └── old/                          # 只读参考，不进入正式镜像
 ```
@@ -86,7 +88,7 @@ clipline/
 
 SQLite WAL 依赖同机共享内存机制，不适合跨主机网络文件系统；本方案要求数据库及其 WAL/SHM 文件处于同一持久化本地目录。参考 [SQLite WAL 文档](https://www.sqlite.org/wal.html)。
 
-以下是目标部署示例，须完成 Dockerfile 和后端后才能使用。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
+以下是设计中的部署参数示例；实际已实现的 D1 配置以仓库 `compose.yaml` 为准，尚不提供业务任务处理。NAS 主机目录先创建，并授予容器运行用户读写数据目录、读取录像目录的权限：
 
 ```yaml
 services:
@@ -133,17 +135,17 @@ services:
 
 用户指定宿主机目录为 `/Volumes/extended/clipline`。本机已确认它存在且可读，包含 `media` 及旧数据库、设置和缓存。正式版本地测试沿用此目录作为只读输入，不在其中新建数据库、写缓存或导出结果，也不导入覆盖旧库。
 
-本地测试配置固定如下，配合上方 Compose 示例使用；完整运行仍依赖 D1 阶段的 Dockerfile、Compose 与后端实现：
+本地映射配置固定如下；D1 运行配置已保存于 `deploy/local-test.env.example`，采用 `clipline:d1-local` 和独立的 8088 端口：
 
 ```dotenv
 CLIPLINE_RECORDINGS_DIR=/Volumes/extended/clipline
 CLIPLINE_DATA_DIR=/Users/qu/Documents/GitHub/clipline/data/local-test
-CLIPLINE_IMAGE_TAG=version-under-test
+CLIPLINE_IMAGE_TAG=d1-local
 ```
 
 容器内映射为 `/recordings:ro` 与 `/app/data:rw`；在录像源表单选择 `/recordings/media` 下的实际录像目录，避免把根目录中的旧导出和代理当成原录像扫描。启动前创建独立的 `data/local-test` 并验证容器访问权限；该目录已被 `.gitignore` 的 `data/` 规则排除。
 
-合成测试样本写入另外的临时目录/卷，以覆盖损坏、跨日、重叠等边界，不改变此真实录像目录。宿主机可读不代表 Docker 已验证可访问，实际挂载验证与双架构运行记录仍属于待完成任务。
+合成测试样本写入另外的临时目录/卷，以覆盖损坏、跨日、重叠等边界，不改变此真实录像目录。D1 已验证 Docker 挂载与真实样本探测/首帧解码；完整媒体流程及原生 x86 NAS 验收仍待完成。
 
 ### 3.2 启动、健康与停止
 
@@ -456,7 +458,7 @@ provider 接口负责能力描述、任务 payload 校验、资源需求、执�
 | `old/backend/app/main.py` | 包含模型与识别初始化流程 | 一期 API 启动移除所有识别加载 |
 | `old/backend/app/db.py` | 手工补字段迁移 | Alembic + 启动前备份/迁移 |
 | 旧导出 mode=`accurate` | 当前原型采用 `precise` | 统一正式契约，复用代码时明确映射 |
-| `.github/workflows/dockerhub.yml` | 已声明双架构，但根 Dockerfile 已随旧代码迁入 old | 重建 Dockerfile、更新构建上下文与运行测试；现流程不能证明可发布 |
+| `.github/workflows/dockerhub.yml` | 保留旧发布流程；D1 已重建根 Dockerfile | D6 补候选镜像与完整运行验收门禁；构建成功不能证明正式版可发布 |
 
 旧接口只作为参考。正式前端以本文 API 为准；需要兼容时使用显式 adapter，不能让页面分别猜测 scan-job/export-job 等历史结构。
 
