@@ -13,7 +13,12 @@ export async function request(path, { method = 'GET', body, signal, key } = {}) 
     throw new ApiError('无法连接服务，请检查后端是否启动。', 'CONNECTION_FAILED');
   }
   let data;
-  try { data = await response.json(); } catch { throw new ApiError('服务返回了无效响应，请检查服务连接。', 'INVALID_RESPONSE', response.headers?.get?.('X-Request-ID'), response.status); }
+  try { data = await response.json(); } catch (error) {
+    // Aborting while streaming a response is still a cancelled request, not bad JSON.
+    if (error.name === 'AbortError') throw error;
+    if (signal?.aborted) throw new DOMException('The request was aborted.', 'AbortError');
+    throw new ApiError('服务返回了无效响应，请检查服务连接。', 'INVALID_RESPONSE', response.headers?.get?.('X-Request-ID'), response.status);
+  }
   if (!response.ok) throw new ApiError(data.error?.message || '请求失败，请重新尝试。', data.error?.code, data.error?.requestId, response.status, data.error?.details);
   return data;
 }

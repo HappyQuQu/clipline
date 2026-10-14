@@ -36,6 +36,19 @@ test('列表沿服务器游标读取，查询字符安全编码', async () => {
   } finally { globalThis.fetch = original; }
 });
 
+test('响应正文读取中止不误报连接异常，真正无效 JSON 仍报告错误', async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({ ok: true, json: async () => { throw new DOMException('Aborted', 'AbortError'); } });
+    await assert.rejects(request('/tasks'), { name: 'AbortError' });
+    const controller = new AbortController();
+    globalThis.fetch = async () => ({ ok: true, json: async () => { controller.abort(); throw new SyntaxError('Partial JSON'); } });
+    await assert.rejects(request('/tasks', { signal: controller.signal }), { name: 'AbortError' });
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('Bad JSON'); } });
+    await assert.rejects(request('/tasks'), error => error.code === 'INVALID_RESPONSE');
+  } finally { globalThis.fetch = original; }
+});
+
 test('快速切换后返回相同源与日期，也使用新的回看上下文隔离旧请求', () => {
   const first = { sourceId: 'one', date: '2026-06-02', generation: 1, offset: 0 };
   assert.notEqual(reviewContext(first), reviewContext({ ...first, generation: 3 }));
