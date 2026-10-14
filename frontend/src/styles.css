@@ -4163,3 +4163,85 @@ td {
 .retention-facts > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .retention-facts dt { color: var(--muted); }
 .retention-facts dd { margin: 0; text-align: right; }
+
+/* Recording-aware calendar, bounded playback and a calm, actionable empty state. */
+.rail-date-trigger{display:flex;align-items:center;justify-content:space-between;gap:5px;flex:1;min-width:0;border:0;background:transparent;color:#526174;font-size:10px;padding:5px 2px;border-radius:4px;font-variant-numeric:tabular-nums;min-height:30px;cursor:pointer}
+.rail-date-trigger:hover{background:#f0f6ff;color:var(--primary)}
+.rail-date-trigger:disabled{cursor:default;color:#8a95a5}
+.rail-date-trigger>svg{flex-shrink:0}
+.rail-filter-summary{display:flex;justify-content:space-between;gap:3px;align-items:center;background:#edf5ff;border-radius:4px;margin-bottom:10px;padding:6px;font-size:8px;color:#3973ad}
+.rail-filter-summary .text-button{font-size:8px}
+.rail-ruler{cursor:default}
+.rail-no-recordings{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:8px;line-height:1.5}
+.recording-range-dialog{position:fixed;inset:var(--picker-top,80px) auto auto var(--picker-left,20px);margin:0;width:360px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:20px;border:1px solid #dfe7f0;border-radius:12px;background:#fff;color:var(--text);box-shadow:0 16px 56px #20395126;overflow:auto;overscroll-behavior:contain}
+.recording-range-dialog::backdrop{background:#172b451c}
+.recording-range-dialog>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:17px}
+.recording-range-dialog h2{font-size:15px;line-height:1.5;margin:0;font-weight:600}
+.recording-range-dialog header p{margin:5px 0 0;font-size:11px;color:#64748b}
+.recording-range-dialog .icon-button{width:30px;min-height:30px;height:30px}
+.calendar-month{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.calendar-month strong{font-size:13px;font-weight:600}
+.calendar-weekdays,.calendar-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+.calendar-weekdays{font-size:11px;color:#748297;margin-bottom:6px}
+.calendar-weekdays>span{padding:5px 0}
+.calendar-days button{position:relative;width:100%;aspect-ratio:1;border:0;border-radius:50%;background:none;font-size:12px;color:#475569;cursor:pointer;font-variant-numeric:tabular-nums}
+.calendar-days button:hover:not(:disabled){background:#e8f2ff;color:var(--primary)}
+.calendar-days button.in-range:not(:disabled){background:#eef5ff;color:#3378c7;border-radius:6px}
+.calendar-days button[aria-pressed=true]{background:var(--primary);color:#fff;font-weight:600}
+.calendar-days button[aria-pressed=true]:hover{background:#056bdc;color:#fff}
+.calendar-days button:disabled{color:#b2bdca;cursor:default}
+.calendar-days button.outside{visibility:hidden}
+.calendar-days button i{position:absolute;width:3px;height:3px;bottom:4px;left:calc(50% - 1.5px);border-radius:50%;background:var(--primary)}
+.calendar-days button[aria-pressed=true] i{background:#fff}
+.calendar-legend{display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b;margin:12px 0 17px}
+.calendar-legend>i{width:5px;height:5px;border-radius:50%;background:var(--primary)}
+.calendar-legend>span{margin-left:auto;color:#7c899b}
+.recording-range-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px solid #edf1f6;padding-top:16px}
+.recording-range-fields label{display:block;font-size:11px;color:#64748b;margin-bottom:7px}
+.recording-range-fields>div.editing label{color:var(--primary)}
+.recording-range-fields .range-date-value{display:flex;align-items:center;justify-content:space-between;gap:4px;border:1px solid transparent;border-radius:5px;background:#f5f7fa;width:100%;padding:8px;font-size:11px;font-variant-numeric:tabular-nums;color:#3f4b5b;margin-bottom:6px;cursor:pointer}
+.recording-range-fields .range-date-value[aria-pressed=true]{border-color:#bad9ff;background:#f3f8ff}
+.recording-range-fields input{height:34px;width:100%;padding:5px 9px;border:1px solid #e2e8f0;border-radius:5px;background:#f9fafc;font-size:12px;font-variant-numeric:tabular-nums;color:#354254}
+.recording-range-fields input[aria-invalid=true]{border-color:#e5a4a4;background:#fff9f9}
+.available-recording-times{margin-top:15px}
+.available-recording-times>strong{font-size:10px;color:#64748b;font-weight:500}
+.available-recording-times>div{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;max-height:72px;overflow:auto;padding:1px}
+.available-recording-times button{border:1px solid #d8e8fc;border-radius:4px;background:#f2f7ff;color:#3479c5;padding:5px 7px;font-size:10px;font-variant-numeric:tabular-nums;cursor:pointer}
+.available-recording-times button:hover{background:#e3efff;border-color:#accfff}
+.available-recording-times p,.range-picker-feedback{font-size:10px;line-height:1.6;color:#6d7c91;margin:8px 0}
+.range-picker-feedback{min-height:32px;margin:12px 0}
+.range-picker-feedback.invalid{color:#b44c4c}
+.recording-range-dialog>footer{display:flex;align-items:center;justify-content:space-between;gap:6px;padding-top:12px;border-top:1px solid #edf1f6}
+.recording-range-dialog footer>div{display:flex;gap:5px}
+.recording-range-dialog footer .button{height:33px;font-size:11px;padding:0 12px;gap:5px}
+.recording-range-dialog footer>.text-button{font-size:10px}
+.review-range-banner{display:flex;align-items:center;gap:9px;padding:10px 12px;background:#eef5ff;border:1px solid #d9e8fb;border-radius:6px;color:#47729e;font-size:10px;line-height:1.7}
+.review-range-banner>svg{flex-shrink:0;color:var(--primary)}
+.review-range-banner strong{font-weight:500;margin-left:6px;font-variant-numeric:tabular-nums}
+.review-range-banner .text-button{margin-left:auto;white-space:nowrap;font-size:10px}
+.review-empty{display:flex;flex-direction:column;min-height:clamp(400px,calc(100dvh - 220px),760px);overflow:hidden;border-radius:8px;background:linear-gradient(145deg,#fbfdff,#f4f8fd 72%,#fbfdff);border:1px solid #e2eaf3}
+.review-empty-heading{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #e6edf5;font-size:11px;color:#7a899b}
+.review-empty-heading>span:first-child{display:flex;align-items:center;gap:7px;color:#5f7187}
+.review-empty-heading>span:last-child{font-variant-numeric:tabular-nums}
+.review-empty-content{display:flex;flex:1;min-height:320px;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:32px 20px}
+.review-empty-symbol{width:76px;height:76px;display:flex;align-items:center;justify-content:center;border:1px solid #d5e5f9;border-radius:22px;background:#edf5ff;box-shadow:0 8px 24px #1c6eca0a;color:#5a98e3;margin-bottom:23px}
+.review-empty h2{font-size:19px;letter-spacing:.01em;color:#354b64;font-weight:500;margin:0 0 10px}
+.review-empty p{font-size:12px;line-height:1.8;color:#73849a;max-width:390px;margin:0}
+.review-empty-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:24px}
+.review-empty-actions .button{font-size:11px;height:37px;gap:7px}
+.review-empty>footer{border-top:1px solid #e6edf5;margin:0 22px;padding:16px 0;display:flex;gap:13px;align-items:center;font-size:10px;color:#7b8b9e}
+.review-empty>footer>div{display:flex;gap:7px;flex-wrap:wrap}
+.review-empty>footer button{display:flex;align-items:center;gap:7px;border:1px solid #dce6f2;background:#fff;border-radius:5px;color:#5c7798;padding:7px 10px;font-size:10px;cursor:pointer}
+.review-empty>footer button:hover{border-color:#97c3fa;color:var(--primary);background:#f5f9ff}
+@media(max-width:768px){.recording-range-dialog{inset:12px auto auto 12px;width:calc(100vw - 24px);max-width:360px;padding:17px}.calendar-days button{max-height:37px}.review-range-banner{flex-wrap:wrap;font-size:9px}.review-range-banner>span{flex:1}.review-range-banner strong{display:block;margin-left:0}.review-range-banner .text-button{font-size:9px}.review-empty{min-height:370px}.review-empty-heading{padding:13px;font-size:9px}.review-empty-content{min-height:270px;padding:28px 15px}.review-empty-symbol{width:62px;height:62px;border-radius:18px;margin-bottom:19px}.review-empty h2{font-size:16px}.review-empty p{font-size:11px}.review-empty-actions{gap:7px;margin-top:20px}.review-empty-actions .button{padding:0 10px;font-size:10px}.review-empty>footer{margin:0 13px;flex-direction:column;align-items:flex-start;gap:9px}.rail-date-trigger{font-size:10px}.review-page .unifi-review-layout:not(.managing) .rail-date{max-width:240px}}
+@media(prefers-reduced-motion:reduce){.review-empty .spin{animation:none}}
+.rail-empty{flex:1;min-height:250px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:13px;color:#9aacc1;text-align:center;padding:18px 0}
+.rail-empty strong{font-size:10px;font-weight:500;color:#73849b}
+.rail-empty span{font-size:9px;line-height:1.9;color:#8a99ad}
+@media(max-width:768px){.vertical-timeline:has(.rail-empty){min-height:230px!important}.rail-empty{min-height:85px;padding:20px 0}.rail-empty span br{display:none}}
+.recording-range-dialog .calendar-days button{aspect-ratio:auto;min-height:34px;height:34px}
+.recording-range-dialog .recording-range-fields input:not([type=range]){min-height:34px;height:34px}
+.recording-range-dialog .recording-range-fields label{margin:0 0 7px}
+.recording-range-dialog .recording-range-fields .range-date-value{min-height:34px;height:34px;padding:5px 8px}
+.recording-range-dialog .available-recording-times>div{max-height:56px}
+.recording-range-dialog .calendar-days button{width:34px;justify-self:center}

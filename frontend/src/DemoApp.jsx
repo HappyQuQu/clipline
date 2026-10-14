@@ -9,6 +9,7 @@ import Sources from './pages/Sources';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import SourceDialog from './components/SourceDialog';
+import { reviewDayBounds } from './recordingSelection';
 
 const nav = [
   ['review', '录像回看', PlayCircle], ['library', '片段库', SquaresFour], ['tasks', '任务中心', Stack],
@@ -24,6 +25,7 @@ export default function App() {
   const [settings, setSettings] = useState(() => readSaved('settings', initialSettings));
   const [settingsDraft, setSettingsDraft] = useState(() => ({ ...settings }));
   const [sourceId, setSourceId] = useState('studio');
+  const [reviewRange, setReviewRange] = useState(null);
   const [date, setDate] = useState(DEMO_DATE);
   const [clipId, setClipId] = useState(`studio-${DEMO_DATE}-2`);
   const [toast, setToast] = useState('');
@@ -45,7 +47,9 @@ export default function App() {
     setLogs(previous => [{ id: crypto.randomUUID(), createdAt: new Date().toISOString(), time: `今天 ${nowLabel()}`, level: 'info', ...event }, ...previous]);
   }, []);
   const source = sources.find(s => s.id === sourceId) || sources[0];
-  const clips = demoClips.filter(c => c.sourceId === source?.id && c.date === date);
+  const reviewBounds = reviewDayBounds(reviewRange, date);
+  const sourceClips = demoClips.filter(c => c.sourceId === source?.id);
+  const clips = sourceClips.filter(c => c.date === date && c.start < reviewBounds.end && c.end > reviewBounds.start);
   const activeClip = clips.find(c => c.id === clipId) || clips[2] || clips[0];
   const activeTasks = tasks.filter(t => ['queued', 'running'].includes(t.status)).length;
 
@@ -116,7 +120,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
   const navigate = target => { setPage(target); setMobileNav(false); };
-  const openClip = clip => { setSourceId(clip.sourceId); setDate(clip.date); setClipId(clip.id); setSearchOpen(false); navigate('review'); };
+  const openClip = clip => { setReviewRange(null); setSourceId(clip.sourceId); setDate(clip.date); setClipId(clip.id); setSearchOpen(false); navigate('review'); };
   const scan = id => {
     const target = sources.find(s => s.id === id);
     if (!target?.enabled) return notify('请先启用这个录像源。');
@@ -152,7 +156,7 @@ export default function App() {
       <button className="brand" onClick={() => navigate('review')}><img src="/assets/clipline-logo.svg" alt="" /><span>Clipline<span className="brand-caption">你的录像，有迹可循。</span></span></button>
       <div className="sidebar-source-picker">
         <div className="source-picker-label"><label htmlFor="workspace-source">录像源</label><IconButton icon={Plus} label="添加录像源" onClick={() => setSourceDialog(true)} /></div>
-        <div className="source-picker-control"><span className={`source-dot ${source.enabled ? source.color : 'neutral'}`} /><select id="workspace-source" aria-label="当前录像源" aria-describedby="workspace-source-summary" value={source.id} onChange={e => { setSourceId(e.target.value); navigate('review'); }}>{sources.map(item => <option key={item.id} value={item.id}>{item.name}{!item.enabled ? ' · 已停用' : ''}</option>)}</select></div>
+        <div className="source-picker-control"><span className={`source-dot ${source.enabled ? source.color : 'neutral'}`} /><select id="workspace-source" aria-label="当前录像源" aria-describedby="workspace-source-summary" value={source.id} onChange={e => { setReviewRange(null); setSourceId(e.target.value); navigate('review'); }}>{sources.map(item => <option key={item.id} value={item.id}>{item.name}{!item.enabled ? ' · 已停用' : ''}</option>)}</select></div>
         <p id="workspace-source-summary" className="source-picker-summary"><span>{source.count} 个片段</span><span>{source.enabled ? '已启用' : '已停用'}</span></p>
       </div>
       <nav aria-label="主导航">{nav.map(([id, label, Icon]) => <button key={id} aria-label={label} className={`nav-item ${page === id ? 'active' : ''} ${id === 'sources' ? 'nav-divider' : ''}`} onClick={() => navigate(id)} aria-current={page === id ? 'page' : undefined}><Icon size={21} weight={page === id ? 'fill' : 'regular'} /><span>{label}</span>{id === 'tasks' && activeTasks > 0 && <span className="nav-count">{activeTasks}</span>}</button>)}</nav>
@@ -161,7 +165,7 @@ export default function App() {
     <div className="main-shell">
       <header className="topbar"><div className="topbar-context"><span className="mobile-menu"><IconButton icon={mobileNav ? X : List} label="切换导航" onClick={() => setMobileNav(!mobileNav)} /></span><span className="muted">工作空间</span><CaretRight size={12} /><strong>{nav.find(n => n[0] === page)?.[1]}</strong></div><div className="topbar-right"><button className="search-trigger" aria-label="搜索录像文件" onClick={() => setSearchOpen(true)}><MagnifyingGlass size={17} /><span>搜索录像文件</span><kbd>⌘ K</kbd></button><Badge tone="blue" dot>本地演示</Badge><div className="avatar" title="本地工作空间">Q</div></div></header>
       <main className="content">
-        {page === 'review' && <Review source={source} clips={clips} clip={activeClip} setClipId={setClipId} date={date} setDate={setDate} onScan={() => scan(source.id)} scanning={tasks.some(t => t.kind === 'scan' && t.sourceId === source.id && ['running', 'queued'].includes(t.status))} onExport={requestExport} onLibrary={() => navigate('library')} settings={settings} notify={notify} />}
+        {page === 'review' && <Review key={`${source.id}:${date}:${reviewRange?.start}:${reviewRange?.end}`} dates={[...new Set(sourceClips.map(c => c.date))].sort().reverse()} allClips={sourceClips} reviewRange={reviewRange} onReviewRangeChange={range => { setReviewRange(range); if (range) setDate(range.startDate); }} initialOffset={Math.max(0, reviewBounds.start - (activeClip?.start || 0))} source={source} clips={clips} clip={activeClip} setClipId={setClipId} date={date} setDate={setDate} onScan={() => scan(source.id)} scanning={tasks.some(t => t.kind === 'scan' && t.sourceId === source.id && ['running', 'queued'].includes(t.status))} onExport={requestExport} onLibrary={() => navigate('library')} settings={settings} notify={notify} />}
         {page === 'library' && <Library sources={sources} clips={demoClips} onOpen={openClip} onExport={requestExport} />}
         {page === 'tasks' && <Tasks tasks={tasks} sources={sources} onDownload={download} onCreate={() => setBackgroundDialog(true)} focusId={taskFocusId} onClearFocus={() => setTaskFocusId(null)} onViewLogs={id => { setLogTaskId(id); navigate('logs'); }} onCancel={id => { setTasks(previous => previous.map(task => task.id === id ? { ...task, status: 'cancelled' } : task)); notify('任务已取消'); }} onRetry={id => { setTasks(previous => previous.map(task => task.id === id ? { ...task, status: 'queued', progress: 0, ...(task.kind === 'export' ? { mode: 'precise' } : {}), error: null } : task)); notify('任务已重新加入队列'); }} />}
         {page === 'logs' && <Logs logs={logs} sources={sources} settings={settings} taskId={logTaskId} onClearTask={() => setLogTaskId(null)} onOpenTask={id => { setTaskFocusId(id); navigate('tasks'); }} notify={notify} />}
