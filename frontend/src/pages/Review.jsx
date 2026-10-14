@@ -5,6 +5,7 @@ import { Badge, IconButton, Notice } from '../components/UI';
 import VerticalTimeline from '../components/VerticalTimeline';
 import PlaybackDetails from '../components/PlaybackDetails';
 import usePlayback from '../hooks/usePlayback';
+import useRangePlan from '../hooks/useRangePlan';
 import { request, queryString } from '../api/client';
 import { clipView } from '../api/adapters';
 import { recordedAt, recordingCoverage, reviewDayBounds, recordingTime } from '../recordingSelection';
@@ -32,6 +33,8 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
   const coverage = recordingCoverage(real && timeline ? timeline.coverage.map(item => ({ start: (Date.parse(item.startAt) - Date.parse(timeline.dayStartAt)) / 1000, end: (Date.parse(item.endAt) - Date.parse(timeline.dayStartAt)) / 1000 })) : clips, bounds.start, bounds.end);
   const summary = summarizeRange(real ? coverage : clips, rangeStart, rangeEnd);
   const rangeBoundariesValid = recordedAt(coverage, rangeStart) && recordedAt(coverage, rangeEnd, true);
+  const rangePlan = useRangePlan({ enabled: real && managing && summary.valid && rangeBoundariesValid, sourceId: source.id, date, start: rangeStart, end: rangeEnd, timezone: settings.timezone, mode: settings.defaultMode, timeline });
+  const canExportRange = summary.valid && rangeBoundariesValid && exportEnabled && (!real || !!rangePlan.plan);
   const current = (clip?.start || 0) + offset;
   const minimumOffset = clip ? Math.max(0, bounds.start - clip.start) : 0;
   const maximumOffset = clip ? Math.max(minimumOffset, Math.min(clipDuration, bounds.end - clip.start)) : clipDuration;
@@ -126,7 +129,7 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
     setRangeStart(real ? Math.max(bounds.start, clip.start) : clip.start); setRangeEnd(real ? Math.min(bounds.end, clip.end) : clip.end); setRangeDirty(true);
     setManaging(true);
   }
-  function requestExport() { if (!summary.valid || !rangeBoundariesValid) return; onExport({ sourceId: source.id, date, start: rangeStart, end: rangeEnd }); }
+  function requestExport() { if (!canExportRange) return; onExport({ sourceId: source.id, date, start: rangeStart, end: rangeEnd }); }
 
   return <div className="review-page">
     {!source.enabled && <Notice warning>这个录像源已停用。仍可查看已索引片段，启用后可继续扫描。</Notice>}
@@ -155,9 +158,11 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
         <aside className="range-panel panel"><div className="section-heading"><h2>管理片段</h2><button className="text-button" onClick={() => setManaging(false)}>关闭</button></div><p className="section-description">拖动边界或输入起止时间，只能选择有录像的位置。</p>
           <label className="field range-field">开始时间<div className="time-input"><Clock size={17} /><input type="time" step="1" min={recordingTime(Math.ceil(coverage[0]?.start || 0))} max={clock(coverage.at(-1)?.end || 0)} value={recordingTime(rangeStart)} aria-invalid={!recordedAt(coverage, rangeStart)} aria-label="导出开始时间" onInput={e => { if (e.currentTarget.value) { setRangeDirty(true); setRangeStart(seconds(e.currentTarget.value)); } }} onChange={e => { if (e.target.value) { setRangeDirty(true); setRangeStart(seconds(e.target.value)); } }} /><button className="text-button" onClick={() => { setRangeDirty(true); setRangeStart(Math.floor(current)); }}>设为当前</button></div></label>
           <label className="field range-field">结束时间<div className="time-input"><Clock size={17} /><input type="time" step="1" min={recordingTime(Math.ceil(coverage[0]?.start || 0))} max={clock(coverage.at(-1)?.end || 0)} aria-invalid={!recordedAt(coverage, rangeEnd, true)} value={rangeEnd === 86400 ? "" : recordingTime(rangeEnd)} aria-label="导出结束时间" onInput={e => { if (e.currentTarget.value) { setRangeDirty(true); setRangeEnd(seconds(e.currentTarget.value)); } }} onChange={e => { if (e.target.value) { setRangeDirty(true); setRangeEnd(seconds(e.target.value)); } }} /><button className="text-button" onClick={() => { setRangeDirty(true); setRangeEnd(Math.floor(current)); }}>设为当前</button></div></label>
-          {real && <p className="range-hint">{rangeEnd === 86400 ? "结束：24:00:00（当天结束） · " : ""}<button className="text-button" onClick={() => { setRangeDirty(true); setRangeEnd(coverage.at(-1)?.end || rangeEnd); }}>设为录像末尾</button></p>}<div className="range-facts"><div><span>实际录像</span><strong>{duration(summary.coverage)}</strong></div><div><span>包含片段</span><strong>{real ? "提交前核对" : summary.clips.length}<small>{real ? "" : " 个"}</small></strong></div></div>
+          {real && <p className="range-hint">{rangeEnd === 86400 ? "结束：24:00:00（当天结束） · " : ""}<button className="text-button" onClick={() => { setRangeDirty(true); setRangeEnd(coverage.at(-1)?.end || rangeEnd); }}>设为录像末尾</button></p>}<div className="range-facts" aria-live="polite" aria-busy={rangePlan.loading}><div><span>实际录像</span><strong>{duration(rangePlan.plan ? rangePlan.plan.selectedCoverageMs / 1000 : summary.coverage)}</strong></div><div><span>包含片段</span><strong>{real ? rangePlan.plan?.pieceCount ?? '—' : summary.clips.length}<small> 个</small></strong></div></div>
+          {rangePlan.loading && <p className="range-plan-status" role="status"><CircleNotch size={13} className="spin" />正在核对录像…</p>}
+          {rangePlan.error && <p className="form-error range-plan-error" role="status">{rangePlan.error}<button className="text-button" onClick={rangePlan.retry}>重新核对</button></p>}
           {!rangeBoundariesValid && <p className="form-error" role="status">起止时间必须落在蓝色录像区间内。</p>}{!summary.valid && <p className="form-error" role="status">{summary.message}</p>}{summary.gap > 0 && <div className="gap-note"><Info size={15} />{duration(summary.gap)} 无录像，导出时自动跳过</div>}
-          <button className="button primary full" onClick={requestExport} disabled={!summary.valid || !rangeBoundariesValid || !exportEnabled}><DownloadSimple size={18} />导出选定区间<ArrowRight size={16} /></button><p className="range-hint">{exportEnabled ? '后台处理，可以继续回看。' : '导出将在 D4 接入；区间选择已预留。'}</p>
+          <button className="button primary full" onClick={requestExport} disabled={!canExportRange}><DownloadSimple size={18} />导出选定区间<ArrowRight size={16} /></button><p className="range-hint">{exportEnabled ? '后台处理，可以继续回看。' : '导出将在 D4 接入；区间选择已预留。'}</p>
         </aside>
 
         </>}

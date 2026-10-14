@@ -898,7 +898,9 @@ kbd {
   padding:0 16px 0 4px;
   height:28px;
   font-size:10px;
-  width:47px
+  width:64px;
+  min-width:64px;
+  flex-shrink:0
 }
 
 .player-controls>.icon-button {
@@ -2085,7 +2087,7 @@ td {
 
 .source-safety strong {
   font-size:12px;
-  color:var(--primary-dark)
+  color:var(--primary-dark);
   font-weight:500
 }
 
@@ -4264,7 +4266,7 @@ td {
 @media(min-width:769px){
   .review-page .vertical-timeline{grid-column:1;grid-row:1/span 2;position:sticky;top:16px;align-self:start;height:calc(var(--review-player-height) + 116px);min-height:600px}
   .managing .clip-section{grid-column:3;grid-row:2}
-  .with-details .playback-inspector{grid-row:1/span 2;position:sticky;top:16px;align-self:start}
+  .with-details .review-inspector{grid-row:1/span 2;position:sticky;top:16px;align-self:start}
 }
 @media(min-width:769px) and (max-width:1300px){
   .review-page .unifi-review-layout.managing .vertical-timeline{grid-row:2;position:static;height:550px}
@@ -4290,3 +4292,12 @@ td {
 }
 .review-load-more{display:flex;margin:12px auto 0}
 .review-gallery-hint{margin:0 0 9px;color:var(--muted);font-size:10px;line-height:1.6}
+.rail-heading{flex-wrap:wrap}
+.rail-heading select{width:72px;min-width:72px;padding:0 20px 0 7px;font-size:10px;font-variant-numeric:tabular-nums}
+.rail-heading select,.speed-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='m3 4.5 3 3 3-3' stroke='%23647080' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 7px center}
+.range-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+.range-facts>div{min-width:0}
+.range-facts strong{white-space:nowrap}
+.range-plan-status{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:10px;line-height:1.6;margin:0 0 12px}
+.range-plan-error{font-size:11px;line-height:1.7;margin:0 0 12px}
+.range-plan-error .text-button{font-size:10px;margin-left:7px}
