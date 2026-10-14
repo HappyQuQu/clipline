@@ -54,3 +54,14 @@ export function appendReviewPage(current, data, windowKey, cursor) {
   if (!current || current.windowKey !== windowKey || current.nextCursor !== cursor) return current;
   return { ...current, items: [...new Map([...current.items, ...data.items].map(row => [row.id, row])).values()], nextCursor: data.nextCursor };
 }
+
+// Prefer the selected file when it covers the entire cut, including subsecond overlaps.
+export function selectedExportClip(clip, start, end) {
+  return clip && Number.isFinite(start) && Number.isFinite(end) && end > start && start >= clip.start && end <= clip.end ? clip.id : undefined;
+}
+
+export function recordingRailStart(span, hour, anchor, managing = false) {
+  const centered = Math.floor((anchor - span / 2) / 60) * 60;
+  if (managing) return Math.max(0, Math.min(86400 - span, centered));
+  return span === 3600 ? hour * 3600 : Math.max(hour * 3600, Math.min((hour + 1) * 3600 - span, centered));
+}

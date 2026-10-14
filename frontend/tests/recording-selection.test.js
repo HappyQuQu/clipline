@@ -1,8 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordingCoverage, recordedAt, nearestRecording, adjacentRecordingDate, reviewDayBounds, parseRecordingTime, recordingTime, monthDays } from '../src/recordingSelection.js';
+import { recordingCoverage, recordedAt, nearestRecording, adjacentRecordingDate, reviewDayBounds, parseRecordingTime, recordingTime, monthDays, selectedExportClip, recordingRailStart } from '../src/recordingSelection.js';
 
 const recordings = [{ start: -100, end: 100 }, { start: 300, end: 600 }, { start: 500, end: 700 }, { start: 86300, end: 86500 }];
+test('跨整点截取居中显示两个边界，日初和日末保持在当天内', () => {
+  const left = 21540, right = 21859.103;
+  const start = recordingRailStart(900, 5, (left + right) / 2, true);
+  assert.ok(start <= left && start + 900 >= right);
+  assert.equal(recordingRailStart(300, 0, 30, true), 0);
+  assert.equal(recordingRailStart(300, 23, 86390, true), 86100);
+  assert.equal(recordingRailStart(900, 5, 21540), 20700);
+  assert.equal(recordingRailStart(3600, 5, 21540), 18000);
+});
+test('单片段截取保留当前文件及毫秒边界，不混入相邻重叠文件', () => {
+  const clip = { id: 'selected', start: 21540, end: 21859.103 };
+  assert.equal(selectedExportClip(clip, clip.start, clip.end), 'selected');
+  assert.equal(selectedExportClip(clip, 21541, 21859), 'selected');
+  assert.equal(selectedExportClip(clip, 21539.999, clip.end), undefined);
+  assert.equal(selectedExportClip(clip, clip.start, 21859.104), undefined);
+  assert.equal(selectedExportClip(clip, clip.end, clip.start), undefined);
+  assert.equal(selectedExportClip(null, clip.start, clip.end), undefined);
+});
 test('按日期与回看范围裁剪覆盖，合并重叠文件而保留断档', () => {
   assert.deepEqual(recordingCoverage(recordings, 50, 86400), [{ start: 50, end: 100 }, { start: 300, end: 700 }, { start: 86300, end: 86400 }]);
 });

@@ -8,7 +8,7 @@ import usePlayback from '../hooks/usePlayback';
 import useRangePlan from '../hooks/useRangePlan';
 import { request, queryString } from '../api/client';
 import { clipView } from '../api/adapters';
-import { recordedAt, recordingCoverage, reviewDayBounds, recordingTime } from '../recordingSelection';
+import { recordedAt, recordingCoverage, reviewDayBounds, recordingTime, selectedExportClip } from '../recordingSelection';
 
 export default function Review({ source, clips, clip, setClipId, date, setDate, onScan, scanning, onExport, onLibrary, settings, notify, real = false, onSelect, initialOffset = 0, initialDetails = false, timeline, dates = [], onLoadMore, loadingMore = false, exportEnabled = true, reviewRange = null, onReviewRangeChange, allClips = clips }) {
   const video = useRef(null);
@@ -33,7 +33,8 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
   const coverage = recordingCoverage(real && timeline ? timeline.coverage.map(item => ({ start: (Date.parse(item.startAt) - Date.parse(timeline.dayStartAt)) / 1000, end: (Date.parse(item.endAt) - Date.parse(timeline.dayStartAt)) / 1000 })) : clips, bounds.start, bounds.end);
   const summary = summarizeRange(real ? coverage : clips, rangeStart, rangeEnd);
   const rangeBoundariesValid = recordedAt(coverage, rangeStart) && recordedAt(coverage, rangeEnd, true);
-  const rangePlan = useRangePlan({ enabled: real && managing && summary.valid && rangeBoundariesValid, sourceId: source.id, date, start: rangeStart, end: rangeEnd, timezone: settings.timezone, mode: settings.defaultMode, timeline });
+  const exportClipId = real ? selectedExportClip(clip, rangeStart, rangeEnd) : undefined;
+  const rangePlan = useRangePlan({ enabled: real && managing && summary.valid && rangeBoundariesValid, sourceId: source.id, date, start: rangeStart, end: rangeEnd, timezone: settings.timezone, mode: settings.defaultMode, timeline, clipId: exportClipId });
   const canExportRange = summary.valid && rangeBoundariesValid && exportEnabled && (!real || !!rangePlan.plan);
   const current = (clip?.start || 0) + offset;
   const minimumOffset = clip ? Math.max(0, bounds.start - clip.start) : 0;
@@ -129,7 +130,7 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
     setRangeStart(real ? Math.max(bounds.start, clip.start) : clip.start); setRangeEnd(real ? Math.min(bounds.end, clip.end) : clip.end); setRangeDirty(true);
     setManaging(true);
   }
-  function requestExport() { if (!canExportRange) return; onExport({ sourceId: source.id, date, start: rangeStart, end: rangeEnd }); }
+  function requestExport() { if (!canExportRange) return; onExport({ sourceId: source.id, date, start: rangeStart, end: rangeEnd, ...(exportClipId ? { clipIds: [exportClipId] } : {}) }); }
 
   return <div className="review-page">
     {!source.enabled && <Notice warning>这个录像源已停用。仍可查看已索引片段，启用后可继续扫描。</Notice>}

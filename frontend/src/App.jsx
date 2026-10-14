@@ -155,7 +155,7 @@ export default function App() {
       const anchor = document.createElement('a'); anchor.href = task.result.downloadUrl; anchor.download = task.result.name; document.body.appendChild(anchor); anchor.click(); anchor.remove();
     } catch (failure) { notify(failure.message); }
   }
-  return <div className="app-shell">
+  return <div className={`app-shell ${page === 'review' ? 'review-workspace' : ''}`}>
     {mobileNav && <button className="nav-backdrop" aria-label="关闭导航" onClick={() => setMobileNav(false)} />}
     <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
       <button className="brand" onClick={() => navigate('review')}><img src="/assets/clipline-logo.svg" alt="" /><span>Clipline<span className="brand-caption">你的录像，有迹可循。</span></span></button>

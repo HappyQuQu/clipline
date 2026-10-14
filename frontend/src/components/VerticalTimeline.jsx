@@ -3,7 +3,7 @@ import { CaretLeft, CaretRight, Minus, Plus, Scissors, CalendarBlank } from '@ph
 import { clock } from '../domain';
 import { ExtensionSlot, IconButton } from './UI';
 import RecordingRangePicker from './RecordingRangePicker';
-import { recordingTime, adjacentRecordingDate, recordedAt, recordingCoverage, nearestRecording } from '../recordingSelection';
+import { recordingTime, adjacentRecordingDate, recordedAt, recordingCoverage, nearestRecording, recordingRailStart } from '../recordingSelection';
 
 // Like the original UniFi rail: later times are at the top, earlier times at the bottom.
 export default function VerticalTimeline({ clips, clip, date, current, onDateChange, onSeek, managing, range, onRangeChange, onManage, coverage, dayRecordings, dates = [], source, timezone, reviewRange, onReviewRangeChange, real = false, bounds = { start: 0, end: 86400 } }) {
@@ -28,7 +28,7 @@ export default function VerticalTimeline({ clips, clip, date, current, onDateCha
       setHour(Math.max(0, Math.min(23, Math.floor(range.start / 3600))));
     }
   }, [managing]);
-  const start = span === 3600 ? hour * 3600 : Math.max(hour * 3600, Math.min((hour + 1) * 3600 - span, Math.floor((anchor - span / 2) / 60) * 60));
+  const start = recordingRailStart(span, hour, anchor, managing);
   const end = start + span;
   const position = value => Math.max(0, Math.min(100, (end - value) / span * 100));
   const visible = clips.filter(item => item.start < end && item.end > start);
