@@ -1,27 +1,33 @@
 [project]
 name = "clipline-backend"
-version = "0.1.0"
-description = "Clipline backend API"
-requires-python = ">=3.11"
+version = "0.7.0" # x-release-please-version
+description = "Clipline phase-one NAS backend"
+requires-python = ">=3.11,<3.13"
 dependencies = [
-  "fastapi>=0.115.0",
-  "uvicorn[standard]>=0.30.0",
-  "sqlalchemy>=2.0.0",
-  "pydantic-settings>=2.4.0",
+  "alembic>=1.13,<2",
+  "fastapi>=0.115,<1",
+  "pydantic-settings>=2.4,<3",
+  "sqlalchemy>=2.0,<2.1",
+  "uvicorn>=0.30,<1",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-  "ruff>=0.6.0",
+    "httpx2>=2.13.1",
+    "pytest>=8,<10",
+    "ruff>=0.6,<1",
 ]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
-line-length = 100
 target-version = "py311"
+line-length = 100
 
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["app*"]
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,227 @@
+from __future__ import annotations
+
+import json
+
+from fastapi import BackgroundTasks, HTTPException
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import Session
+
+from app.core.logging import get_logger
+from app.models import ScanJob, Source, VideoSegment
+from app.schemas import SourceCreate, SourceOut, SourceUpdate
+from app.services.common import bool_int, make_id, now_iso
+from app.services.paths import validate_source_path
+from app.services.playback_proxy import remove_playback_proxies
+from app.services.scanner import create_scan_job, run_scan_job
+
+logger = get_logger(__name__)
+ACTIVE_SCAN_STATUSES = ("queued", "running")
+DEFAULT_DETECT_LABELS = ["person", "cat", "dog", "vehicle", "phone"]
+
+
+def _parse_detect_labels(value: str | None) -> list[str]:
+    if not value:
+        return DEFAULT_DETECT_LABELS.copy()
+    try:
+        labels = json.loads(value)
+    except json.JSONDecodeError:
+        return DEFAULT_DETECT_LABELS.copy()
+    if not isinstance(labels, list):
+        return DEFAULT_DETECT_LABELS.copy()
+    return [str(label) for label in labels if str(label).strip()]
+
+
+def _dump_detect_labels(labels: list[str]) -> str:
+    cleaned = []
+    for label in labels:
+        value = str(label).strip()
+        if value and value not in cleaned:
+            cleaned.append(value)
+    return json.dumps(cleaned or DEFAULT_DETECT_LABELS, ensure_ascii=False)
+
+
+def source_to_out(db: Session, source: Source) -> SourceOut:
+    segment_count = db.scalar(
+        select(func.count()).select_from(VideoSegment).where(VideoSegment.source_id == source.id)
+    )
+    failed_count = db.scalar(
+        select(func.count())
+        .select_from(VideoSegment)
+        .where(VideoSegment.source_id == source.id, VideoSegment.scan_status == "failed")
+    )
+    last_scan = db.scalar(
+        select(ScanJob.finished_at)
+        .where(ScanJob.source_id == source.id)
+        .order_by(ScanJob.created_at.desc())
+        .limit(1)
+    )
+    return SourceOut(
+        id=source.id,
+        name=source.name,
+        path=source.path,
+        enabled=bool(source.enabled),
+        createdAt=source.created_at,
+        updatedAt=source.updated_at,
+        scanIntervalMinutes=source.scan_interval_minutes,
+        autoTranscribe=bool(source.auto_transcribe),
+        autoDetect=bool(source.auto_detect),
+        recognitionTrigger=source.recognition_trigger,
+        recognitionPriority=source.recognition_priority,
+        transcribeLanguage=source.transcribe_language,
+        detectLabels=_parse_detect_labels(source.detect_labels),
+        detectConfidence=source.detect_confidence,
+        lastScanAt=last_scan,
+        segmentCount=segment_count or 0,
+        failedCount=failed_count or 0,
+    )
+
+
+def list_sources(db: Session) -> list[SourceOut]:
+    sources = db.scalars(select(Source).order_by(Source.created_at.asc())).all()
+    return [source_to_out(db, source) for source in sources]
+
+
+def create_source(db: Session, payload: SourceCreate, background_tasks: BackgroundTasks) -> tuple[Source, str]:
+    path = validate_source_path(payload.path)
+    name = payload.name.strip()
+    existing_name = db.scalar(select(Source).where(Source.name == name))
+    if existing_name:
+        raise HTTPException(status_code=409, detail="录像源名称已存在")
+
+    timestamp = now_iso()
+    source = Source(
+        id=make_id("src"),
+        name=name,
+        path=str(path),
+        enabled=1,
+        scan_interval_minutes=payload.scanIntervalMinutes,
+        auto_transcribe=bool_int(payload.autoTranscribe),
+        auto_detect=bool_int(payload.autoDetect),
+        recognition_trigger=payload.recognitionTrigger,
+        recognition_priority=payload.recognitionPriority,
+        transcribe_language=payload.transcribeLanguage,
+        detect_labels=_dump_detect_labels(payload.detectLabels),
+        detect_confidence=payload.detectConfidence,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    scan_job_id = create_scan_job(source.id, trigger="manual")
+    background_tasks.add_task(run_scan_job, scan_job_id)
+    logger.info(
+        "source created",
+        extra={"source_id": source.id, "path": source.path, "scan_job_id": scan_job_id},
+    )
+    return source, scan_job_id
+
+
+def update_source(db: Session, source_id: str, payload: SourceUpdate) -> Source:
+    source = db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    if payload.path is not None:
+        path = validate_source_path(payload.path)
+        source.path = str(path)
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        existing_name = db.scalar(select(Source).where(Source.name == name, Source.id != source_id))
+        if existing_name:
+            raise HTTPException(status_code=409, detail="录像源名称已存在")
+        source.name = name
+    if payload.enabled is not None:
+        source.enabled = bool_int(payload.enabled)
+    if payload.scanIntervalMinutes is not None:
+        source.scan_interval_minutes = payload.scanIntervalMinutes
+    if payload.autoTranscribe is not None:
+        source.auto_transcribe = bool_int(payload.autoTranscribe)
+    if payload.autoDetect is not None:
+        source.auto_detect = bool_int(payload.autoDetect)
+    if payload.recognitionTrigger is not None:
+        source.recognition_trigger = payload.recognitionTrigger
+    if payload.recognitionPriority is not None:
+        source.recognition_priority = payload.recognitionPriority
+    if payload.transcribeLanguage is not None:
+        source.transcribe_language = payload.transcribeLanguage
+    if payload.detectLabels is not None:
+        source.detect_labels = _dump_detect_labels(payload.detectLabels)
+    if payload.detectConfidence is not None:
+        source.detect_confidence = payload.detectConfidence
+    source.updated_at = now_iso()
+    db.commit()
+    db.refresh(source)
+    logger.info("source updated", extra={"source_id": source.id, "path": source.path})
+    return source
+
+
+def queue_scan(db: Session, source_id: str, background_tasks: BackgroundTasks) -> tuple[str, str]:
+    source = db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    if not source.enabled:
+        raise HTTPException(status_code=409, detail="Source is disabled")
+
+    active_job = db.scalar(
+        select(ScanJob)
+        .where(ScanJob.source_id == source.id, ScanJob.status.in_(ACTIVE_SCAN_STATUSES))
+        .order_by(ScanJob.created_at.desc())
+        .limit(1)
+    )
+    if active_job:
+        logger.info(
+            "manual scan reused active job",
+            extra={"source_id": source.id, "scan_job_id": active_job.id, "status": active_job.status},
+        )
+        return active_job.id, active_job.status
+
+    scan_job_id = create_scan_job(source.id, trigger="manual")
+    background_tasks.add_task(run_scan_job, scan_job_id)
+    logger.info("manual scan queued", extra={"source_id": source.id, "scan_job_id": scan_job_id})
+    return scan_job_id, "queued"
+
+
+def delete_source(db: Session, source_id: str) -> None:
+    """删除录像源及其所有关联数据"""
+    source = db.get(Source, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    # 检查是否有正在进行的扫描任务
+    active_job = db.scalar(
+        select(ScanJob)
+        .where(ScanJob.source_id == source.id, ScanJob.status.in_(ACTIVE_SCAN_STATUSES))
+        .limit(1)
+    )
+    if active_job:
+        raise HTTPException(status_code=409, detail="无法删除：有正在进行的扫描任务")
+
+    # 删除关联的片段
+    segment_ids = list(
+        db.scalars(select(VideoSegment.id).where(VideoSegment.source_id == source.id))
+    )
+    db.execute(
+        delete(VideoSegment).where(VideoSegment.source_id == source.id)
+    )
+
+    # 删除关联的扫描任务
+    db.execute(
+        delete(ScanJob).where(ScanJob.source_id == source.id)
+    )
+
+    # 删除录像源
+    db.delete(source)
+    db.commit()
+    proxies_deleted = remove_playback_proxies(segment_ids)
+
+    logger.info(
+        "source deleted",
+        extra={
+            "source_id": source_id,
+            "source_name": source.name,
+            "segments_deleted": len(segment_ids),
+            "playback_proxies_deleted": proxies_deleted,
+        },
+    )

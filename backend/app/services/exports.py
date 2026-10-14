@@ -1,278 +1,194 @@
-from __future__ import annotations
+import hashlib
+import json
+import os
+import shutil
+from contextlib import nullcontext
 
-import subprocess
-from datetime import timedelta
-from pathlib import Path
-
-from fastapi import BackgroundTasks, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
-from app.core.logging import get_logger
-from app.db import SessionLocal
-from app.models import ExportJob, Source, VideoSegment
-from app.schemas import ExportCreate, ExportJobOut
-from app.services.common import make_id, now_iso, parse_iso
-from app.services.timeline import indexed_segments_for_range
+from app.core.errors import AppError
+from app.core.time import iso_utc, utc_now_ms
+from app.db.models import Artifact, Task, new_id
+from app.db.transactions import write_session
+from app.services import export_media
+from app.services.events import emit
+from app.services.export_plan import build_plan, digest, validate_inputs
+from app.services.idempotency import lookup, remember
 
-logger = get_logger(__name__)
 
-
-def _job_to_out(db: Session, job: ExportJob) -> ExportJobOut:
-    source = db.get(Source, job.source_id)
-    download_url = f"/api/exports/{job.id}/download" if job.status == "completed" else None
-    return ExportJobOut(
-        id=job.id,
-        sourceId=job.source_id,
-        sourceName=source.name if source else None,
-        startTime=job.start_time,
-        endTime=job.end_time,
-        mode=job.mode,
-        status=job.status,
-        progress=job.progress,
-        hasGaps=bool(job.has_gaps),
-        gapDurationSeconds=job.gap_duration_seconds,
-        outputSizeBytes=job.output_size_bytes,
-        downloadUrl=download_url,
-        errorMessage=job.error_message,
-        createdAt=job.created_at,
-        updatedAt=job.updated_at,
-        expiresAt=job.expires_at,
+def submit_export(engine, config, body=None, key=None, *, retry_of=None, mode=None, resubmit=False):
+    scope = (
+        f"export:{'resubmit' if resubmit else 'retry'}:{retry_of}" if retry_of else "export:create"
     )
-
-
-def list_export_jobs(db: Session, limit: int, offset: int, source_id: str | None, status: str | None):
-    query = select(ExportJob)
-    count_query = select(func.count()).select_from(ExportJob)
-    if source_id:
-        query = query.where(ExportJob.source_id == source_id)
-        count_query = count_query.where(ExportJob.source_id == source_id)
-    if status:
-        query = query.where(ExportJob.status == status)
-        count_query = count_query.where(ExportJob.status == status)
-    total = db.scalar(count_query) or 0
-    jobs = db.scalars(query.order_by(ExportJob.created_at.desc()).limit(limit).offset(offset)).all()
-    return [_job_to_out(db, job) for job in jobs], total
-
-
-def get_export_job(db: Session, export_id: str) -> ExportJobOut:
-    job = db.get(ExportJob, export_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Export job not found")
-    return _job_to_out(db, job)
-
-
-def create_export_job(db: Session, payload: ExportCreate, background_tasks: BackgroundTasks) -> ExportJob:
-    source = db.get(Source, payload.sourceId)
-    if not source or not source.enabled:
-        raise HTTPException(status_code=404, detail="Source not found")
-    start = parse_iso(payload.startTime)
-    end = parse_iso(payload.endTime)
-    if start >= end:
-        raise HTTPException(status_code=400, detail="startTime must be before endTime")
-    if end - start > timedelta(minutes=get_settings().max_export_minutes):
-        raise HTTPException(status_code=400, detail="Export range is too long")
-    if payload.mode not in {"fast", "accurate"}:
-        raise HTTPException(status_code=400, detail="mode must be fast or accurate")
-
-    segments = indexed_segments_for_range(db, source.id, start, end)
-    if not segments:
-        raise HTTPException(status_code=400, detail="No video segments intersect the export range")
-
-    has_gaps, gap_duration = calculate_export_gaps(segments, start, end)
-    timestamp = now_iso()
-    job = ExportJob(
-        id=make_id("exp"),
-        source_id=source.id,
-        start_time=start.isoformat(),
-        end_time=end.isoformat(),
-        mode=payload.mode,
-        status="queued",
-        progress=0,
-        has_gaps=1 if has_gaps else 0,
-        gap_duration_seconds=gap_duration,
-        created_at=timestamp,
-        updated_at=timestamp,
+    request = (
+        body.model_dump(mode="json", by_alias=True)
+        if body
+        else {"retryOfTaskId": retry_of, "mode": mode, "resubmit": resubmit}
     )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    background_tasks.add_task(run_export_job, job.id)
-    logger.info(
-        "export job created",
-        extra={
-            "export_job_id": job.id,
-            "source_id": source.id,
-            "mode": job.mode,
-            "has_gaps": bool(job.has_gaps),
-            "gap_duration_seconds": job.gap_duration_seconds,
-        },
-    )
-    return job
+    with write_session(engine) as session:
+        previous = lookup(session, scope, key, request)
+        if previous is not None:
+            return previous
+        if retry_of:
+            original = session.get(Task, retry_of)
+            allowed = ("completed",) if resubmit else ("failed", "cancelled")
+            if original is None or original.kind != "export":
+                raise AppError("TASK_NOT_FOUND", "原导出任务不存在。", 404)
+            if original.status not in allowed:
+                raise AppError("TASK_NOT_RETRYABLE", "当前状态无法重新提交导出。", 409)
+            plan = dict(original.payload_json)
+            if mode:
+                plan["mode"] = mode
+            validate_inputs(session, config, plan)
+        else:
+            plan = build_plan(session, config, body)
+            if body.plan_hash and body.plan_hash != digest(plan):
+                raise AppError("EXPORT_PLAN_CHANGED", "录像计划已变化，请重新预览后提交。", 409)
+        active_key = "export:" + digest(plan)
+        existing = session.scalar(select(Task).where(Task.active_key == active_key))
+        if existing and retry_of:
+            raise AppError("TASK_ALREADY_ACTIVE", "相同导出正在处理，请查看当前任务。", 409)
+        task = existing
+        if task is None:
+            task = Task(
+                id=new_id(),
+                kind="export",
+                source_id=plan["sourceId"],
+                payload_json=plan,
+                active_key=active_key,
+                retry_of_task_id=retry_of,
+            )
+            session.add(task)
+            session.flush()
+            emit(
+                session,
+                kind="export",
+                code="TASK_RETRIED" if retry_of else "TASK_QUEUED",
+                title="录像导出已加入后台队列",
+                source_id=task.source_id,
+                task_id=task.id,
+                detail={
+                    "mode": plan["mode"],
+                    "expectedDurationMs": plan["expectedDurationMs"],
+                    "retryOfTaskId": retry_of,
+                },
+            )
+        response = {"taskId": task.id, "reused": existing is not None}
+        remember(session, scope, key, request, response, task.id)
+        return response
 
 
-def calculate_export_gaps(segments: list[VideoSegment], start, end) -> tuple[bool, float]:
-    previous_end = start
-    gap = 0.0
-    for segment in segments:
-        segment_start = parse_iso(segment.start_time)
-        segment_end = parse_iso(segment.end_time)
-        if segment_start > previous_end:
-            gap += (segment_start - previous_end).total_seconds()
-        previous_end = max(previous_end, segment_end)
-    if previous_end < end:
-        gap += (end - previous_end).total_seconds()
-    return gap > 0, gap
-
-
-def run_export_job(export_id: str) -> None:
-    settings = get_settings()
-    db = SessionLocal()
-    tmp_files: list[Path] = []
+def fsync_directory(path):
+    descriptor = os.open(path, os.O_RDONLY)
     try:
-        job = db.get(ExportJob, export_id)
-        if not job:
-            return
-        start = parse_iso(job.start_time)
-        end = parse_iso(job.end_time)
-        segments = indexed_segments_for_range(db, job.source_id, start, end)
-        output = settings.exports_path / f"{job.id}.mp4"
-        temp_dir = settings.tmp_path / job.id
-        temp_dir.mkdir(parents=True, exist_ok=True)
-        job.status = "running"
-        job.progress = 0.05
-        job.updated_at = now_iso()
-        db.commit()
-        logger.info("export job started", extra={"export_job_id": job.id, "segments": len(segments)})
-
-        for index, segment in enumerate(segments):
-            clip_start = max(start, parse_iso(segment.start_time))
-            clip_end = min(end, parse_iso(segment.end_time))
-            offset = (clip_start - parse_iso(segment.start_time)).total_seconds()
-            duration = (clip_end - clip_start).total_seconds()
-            temp_file = temp_dir / f"part_{index:04d}.mp4"
-            trim_segment(Path(segment.path), temp_file, offset, duration, job.mode)
-            tmp_files.append(temp_file)
-            job.progress = 0.05 + (0.75 * ((index + 1) / len(segments)))
-            job.updated_at = now_iso()
-            db.commit()
-
-        concat_file = temp_dir / "concat.txt"
-        concat_file.write_text(
-            "\n".join(f"file '{file.as_posix()}'" for file in tmp_files),
-            encoding="utf-8",
-        )
-        concat_segments(concat_file, output, job.mode)
-        job.status = "completed"
-        job.progress = 1
-        job.output_path = str(output)
-        job.output_size_bytes = output.stat().st_size
-        job.updated_at = now_iso()
-        db.commit()
-        logger.info(
-            "export job completed",
-            extra={"export_job_id": job.id, "output_path": str(output), "size": job.output_size_bytes},
-        )
-    except Exception as exc:  # noqa: BLE001
-        job = db.get(ExportJob, export_id)
-        if job:
-            job.status = "failed"
-            job.error_message = str(exc)
-            job.updated_at = now_iso()
-            db.commit()
-        logger.exception("export job failed", extra={"export_job_id": export_id, "error": str(exc)})
+        os.fsync(descriptor)
     finally:
-        for file in tmp_files:
-            try:
-                file.unlink(missing_ok=True)
-            except OSError:
-                pass
-        db.close()
+        os.close(descriptor)
 
 
-def trim_segment(input_path: Path, output_path: Path, offset: float, duration: float, mode: str) -> None:
-    if mode == "fast":
-        command = [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            str(offset),
-            "-i",
-            str(input_path),
-            "-t",
-            str(duration),
-            "-c",
-            "copy",
-            str(output_path),
-        ]
-    else:
-        command = [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            str(offset),
-            "-i",
-            str(input_path),
-            "-t",
-            str(duration),
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "20",
-            "-c:a",
-            "aac",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-        ]
-    run_ffmpeg(command)
+def save_manifest(path, value):
+    temporary = path.with_suffix(".pending")
+    with temporary.open("w") as handle:
+        json.dump(value, handle, sort_keys=True)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+    fsync_directory(path.parent)
 
 
-def concat_segments(concat_file: Path, output_path: Path, mode: str) -> None:
-    if mode == "fast":
-        command = [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(concat_file),
-            "-c",
-            "copy",
-            str(output_path),
-        ]
-    else:
-        command = [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(concat_file),
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "20",
-            "-c:a",
-            "aac",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-        ]
-    run_ffmpeg(command)
+def file_hash(path, context):
+    value = hashlib.sha256()
+    with path.open("rb") as handle:
+        while block := handle.read(1024 * 1024):
+            context.check()
+            value.update(block)
+    return value.hexdigest()
 
 
-def run_ffmpeg(command: list[str]) -> None:
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "ffmpeg failed")
+def export(context):
+    plan, task_id = context.claim.payload, context.claim.task_id
+    config = context.config
+    context.update("validate", 1, {})
+    with Session(context.queue.engine) as session:
+        paths = validate_inputs(session, config, plan)
+    directory = config.data / "tmp" / task_id / context.claim.token
+    directory.mkdir(parents=True, exist_ok=True)
+    final = config.data / "exports" / f"{task_id}.mp4"
+    manifests = config.data / "exports" / "manifests"
+    manifests.mkdir(exist_ok=True)
+    manifest_path = manifests / f"{task_id}.json"
+    manifest = None
+    target = directory / "output.mp4"
+    if manifest_path.is_file():
+        try:
+            candidate = json.loads(manifest_path.read_text())
+            staged = (config.data / candidate["temporaryPath"]).resolve()
+            recovered = final if final.is_file() else staged
+            if (
+                candidate["planHash"] == digest(plan)
+                and candidate["taskId"] == task_id
+                and staged.is_relative_to(config.data / "tmp" / task_id)
+                and recovered.is_file()
+                and not recovered.is_symlink()
+                and recovered.stat().st_size == candidate["sizeBytes"]
+                and file_hash(recovered, context) == candidate["sha256"]
+            ):
+                # Only a verified manifest written after full output validation is reusable.
+                manifest, target = candidate, recovered
+        except (ValueError, KeyError, OSError):
+            pass
+    if manifest is None:
+        if shutil.disk_usage(config.data).free < 128 * 1024**2:
+            raise AppError("INSUFFICIENT_STORAGE", "数据目录剩余空间不足，无法导出。", 409)
+        with context.media_slot() if plan["mode"] == "precise" else nullcontext():
+            result = export_media.render(paths, plan, target, context)
+        with target.open("rb") as handle:
+            os.fsync(handle.fileno())
+        manifest = {
+            "taskId": task_id,
+            "planHash": digest(plan),
+            "temporaryPath": target.relative_to(config.data).as_posix(),
+            "sizeBytes": target.stat().st_size,
+            "sha256": file_hash(target, context),
+            "result": result,
+        }
+        save_manifest(manifest_path, manifest)
+    result = dict(manifest["result"]) | {
+        "name": plan["name"],
+        "mode": plan["mode"],
+        "pieceCount": len(plan["pieces"]),
+        "unrecordedMs": plan["unrecordedMs"],
+        "omittedMs": plan["omittedMs"],
+        "sizeBytes": manifest["sizeBytes"],
+        "sha256": manifest["sha256"],
+        "downloadUrl": f"/api/exports/{task_id}/download",
+    }
 
+    def finalize(session):
+        validate_inputs(session, config, plan)
+        # Queue.settle already checks the owner token and cancellation inside this transaction.
+        if target != final:
+            os.replace(target, final)
+        fsync_directory(final.parent)
+        expires = utc_now_ms() + config.export_ttl_hours * 3600_000
+        result["expiresAt"] = iso_utc(expires)
+        relative = final.relative_to(config.data).as_posix()
+        artifact = session.scalar(select(Artifact).where(Artifact.relative_path == relative))
+        if artifact is None:
+            artifact = Artifact(
+                kind="export",
+                task_id=task_id,
+                relative_path=relative,
+                size_bytes=manifest["sizeBytes"],
+            )
+            session.add(artifact)
+        artifact.status, artifact.expires_at = "ready", expires
+        artifact.duration_ms = result["actualDurationMs"]
+        artifact.input_fingerprint = manifest["planHash"]
+        artifact.profile_hash = digest(plan["profile"])
+        artifact.last_access_at = utc_now_ms()
+        session.flush()
+
+    context.update("publish", 99, {})
+    return result, finalize

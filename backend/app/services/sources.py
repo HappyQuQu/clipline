@@ -1,130 +1,199 @@
-from __future__ import annotations
+import os
+from pathlib import Path
 
-from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.logging import get_logger
-from app.models import ScanJob, Source, VideoSegment
-from app.schemas import SourceCreate, SourceOut, SourceUpdate
-from app.services.common import bool_int, make_id, now_iso
-from app.services.paths import validate_source_path
-from app.services.scanner import create_scan_job, run_scan_job
-
-logger = get_logger(__name__)
-ACTIVE_SCAN_STATUSES = ("queued", "running")
+from app.core.errors import AppError
+from app.core.time import iso_utc, utc_now_ms
+from app.db.models import SavedSettings, Segment, Source, Task, new_id
+from app.db.transactions import write_session
+from app.services.events import emit
+from app.services.idempotency import lookup, remember
+from app.tasks.queue import ACTIVE, enqueue, finish
 
 
-def source_to_out(db: Session, source: Source) -> SourceOut:
-    segment_count = db.scalar(
-        select(func.count()).select_from(VideoSegment).where(VideoSegment.source_id == source.id)
+def source_dto(session, source):
+    count = session.scalar(
+        select(func.count()).select_from(Segment).where(Segment.source_id == source.id)
     )
-    failed_count = db.scalar(
+    available = session.scalar(
         select(func.count())
-        .select_from(VideoSegment)
-        .where(VideoSegment.source_id == source.id, VideoSegment.scan_status == "failed")
+        .select_from(Segment)
+        .where(Segment.source_id == source.id, Segment.availability == "available")
     )
-    last_scan = db.scalar(
-        select(ScanJob.finished_at)
-        .where(ScanJob.source_id == source.id)
-        .order_by(ScanJob.created_at.desc())
-        .limit(1)
-    )
-    return SourceOut(
-        id=source.id,
-        name=source.name,
-        path=source.path,
-        enabled=bool(source.enabled),
-        createdAt=source.created_at,
-        updatedAt=source.updated_at,
-        scanIntervalMinutes=source.scan_interval_minutes,
-        lastScanAt=last_scan,
-        segmentCount=segment_count or 0,
-        failedCount=failed_count or 0,
-    )
-
-
-def list_sources(db: Session) -> list[SourceOut]:
-    sources = db.scalars(select(Source).order_by(Source.created_at.asc())).all()
-    return [source_to_out(db, source) for source in sources]
-
-
-def create_source(db: Session, payload: SourceCreate, background_tasks: BackgroundTasks) -> tuple[Source, str]:
-    path = validate_source_path(payload.path)
-    name = payload.name.strip()
-    existing_name = db.scalar(select(Source).where(Source.name == name))
-    if existing_name:
-        raise HTTPException(status_code=409, detail="录像源名称已存在")
-
-    timestamp = now_iso()
-    source = Source(
-        id=make_id("src"),
-        name=name,
-        path=str(path),
-        enabled=1,
-        scan_interval_minutes=payload.scanIntervalMinutes,
-        created_at=timestamp,
-        updated_at=timestamp,
-    )
-    db.add(source)
-    db.commit()
-    db.refresh(source)
-    scan_job_id = create_scan_job(source.id, trigger="manual")
-    background_tasks.add_task(run_scan_job, scan_job_id)
-    logger.info(
-        "source created",
-        extra={"source_id": source.id, "path": source.path, "scan_job_id": scan_job_id},
-    )
-    return source, scan_job_id
-
-
-def update_source(db: Session, source_id: str, payload: SourceUpdate) -> Source:
-    source = db.get(Source, source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-
-    if payload.path is not None:
-        path = validate_source_path(payload.path)
-        source.path = str(path)
-
-    if payload.name is not None:
-        name = payload.name.strip()
-        existing_name = db.scalar(select(Source).where(Source.name == name, Source.id != source_id))
-        if existing_name:
-            raise HTTPException(status_code=409, detail="录像源名称已存在")
-        source.name = name
-    if payload.enabled is not None:
-        source.enabled = bool_int(payload.enabled)
-    if payload.scanIntervalMinutes is not None:
-        source.scan_interval_minutes = payload.scanIntervalMinutes
-    source.updated_at = now_iso()
-    db.commit()
-    db.refresh(source)
-    logger.info("source updated", extra={"source_id": source.id, "path": source.path})
-    return source
-
-
-def queue_scan(db: Session, source_id: str, background_tasks: BackgroundTasks) -> tuple[str, str]:
-    source = db.get(Source, source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-    if not source.enabled:
-        raise HTTPException(status_code=409, detail="Source is disabled")
-
-    active_job = db.scalar(
-        select(ScanJob)
-        .where(ScanJob.source_id == source.id, ScanJob.status.in_(ACTIVE_SCAN_STATUSES))
-        .order_by(ScanJob.created_at.desc())
-        .limit(1)
-    )
-    if active_job:
-        logger.info(
-            "manual scan reused active job",
-            extra={"source_id": source.id, "scan_job_id": active_job.id, "status": active_job.status},
+    size = session.scalar(
+        select(func.coalesce(func.sum(Segment.size_bytes), 0)).where(
+            Segment.source_id == source.id, Segment.availability != "missing"
         )
-        return active_job.id, active_job.status
+    )
+    recent = session.scalar(
+        select(Task)
+        .where(Task.source_id == source.id, Task.kind.in_(("scan", "reindex")))
+        .order_by(Task.created_at.desc(), Task.id.desc())
+        .limit(1)
+    )
+    return {
+        "id": source.id,
+        "name": source.name,
+        "path": source.canonical_path,
+        "enabled": source.enabled,
+        "scanIntervalMinutes": source.scan_interval_minutes,
+        "recordingTimezone": source.recording_timezone,
+        "autoTranscribe": False,
+        "autoDetect": False,
+        "segmentCount": count,
+        "availableCount": available,
+        "totalBytes": size,
+        "lastScanAt": iso_utc(source.last_scan_at),
+        "nextScanAt": iso_utc(source.next_scan_at),
+        "createdAt": iso_utc(source.created_at),
+        "updatedAt": iso_utc(source.updated_at),
+        "revision": source.revision,
+        "lastScanTask": (
+            {
+                "id": recent.id,
+                "status": recent.status,
+                "result": recent.result_json,
+                "errorCode": recent.error_code,
+            }
+            if recent
+            else None
+        ),
+    }
 
-    scan_job_id = create_scan_job(source.id, trigger="manual")
-    background_tasks.add_task(run_scan_job, scan_job_id)
-    logger.info("manual scan queued", extra={"source_id": source.id, "scan_job_id": scan_job_id})
-    return scan_job_id, "queued"
+
+def check_duplicate(session, path, exclude_id=None):
+    for source in session.scalars(select(Source)):
+        if source.id == exclude_id:
+            continue
+        duplicate = source.canonical_path == str(path)
+        if not duplicate:
+            try:
+                duplicate = os.path.samefile(path, source.canonical_path)
+            except OSError:
+                pass
+        if duplicate:
+            raise AppError(
+                "SOURCE_DUPLICATE",
+                "这个录像目录已经添加，请选择其他目录。",
+                409,
+                {"sourceId": source.id, "field": "path"},
+            )
+
+
+def create_source(engine, config, directories, body, key=None):
+    payload = body.model_dump(mode="json", by_alias=True) | {"path": str(Path(body.path))}
+    if "scan_interval_minutes" not in body.model_fields_set:
+        payload.pop("scanIntervalMinutes")
+    with Session(engine) as read:
+        previous = lookup(read, "source:create", key, payload)
+        if previous is not None:
+            return previous
+    path = directories.resolve(body.path)
+    with write_session(engine) as session:
+        previous = lookup(session, "source:create", key, payload)
+        if previous is not None:
+            return previous
+        check_duplicate(session, path)
+        if "scan_interval_minutes" in body.model_fields_set:
+            interval = body.scan_interval_minutes
+        else:
+            scan = session.get(SavedSettings, "scan")
+            interval = scan.value_json.get("interval", 5) if scan else 5
+            interval = interval if interval in (5, 10, 30, None) else 5
+        source = Source(
+            id=new_id(),
+            name=body.name,
+            canonical_path=str(path),
+            enabled=True,
+            scan_interval_minutes=interval,
+            recording_timezone=config.timezone,
+            next_scan_at=utc_now_ms() + interval * 60_000 if interval is not None else None,
+        )
+        session.add(source)
+        session.flush()
+        emit(
+            session,
+            kind="source",
+            code="SOURCE_CREATED",
+            title="录像源已添加",
+            source_id=source.id,
+            detail={"name": source.name, "path": str(path)},
+        )
+        task = enqueue(session, source, "scan", "source_added")[0] if body.scan_on_create else None
+        response = {"source": source_dto(session, source), "firstTaskId": task.id if task else None}
+        remember(session, "source:create", key, payload, response, task.id if task else None)
+        return response
+
+
+def update_source(engine, directories, source_id, body):
+    changes = body.model_dump(exclude_unset=True)
+    path = directories.resolve(body.path) if "path" in changes else None
+    with write_session(engine) as session:
+        source = session.get(Source, source_id)
+        if source is None:
+            raise AppError("SOURCE_NOT_FOUND", "录像源不存在。", 404)
+        if body.revision is not None and body.revision != source.revision:
+            raise AppError("SOURCE_CHANGED", "录像源已被修改，请重新加载后再保存。", 409)
+        actual = set()
+        if path is not None and str(path) != source.canonical_path:
+            if session.scalar(select(Segment.id).where(Segment.source_id == source.id).limit(1)):
+                raise AppError(
+                    "SOURCE_PATH_LOCKED", "此源已有索引，请添加新源来使用其他目录。", 409
+                )
+            if session.scalar(
+                select(Task.id).where(Task.source_id == source.id, Task.status.in_(ACTIVE)).limit(1)
+            ):
+                raise AppError("SOURCE_BUSY", "此源正在处理任务，请先停止任务再改目录。", 409)
+            check_duplicate(session, path, source.id)
+            source.canonical_path = str(path)
+            actual.add("path")
+        if "name" in changes and body.name != source.name:
+            source.name = body.name
+            actual.add("name")
+        if "enabled" in changes and body.enabled != source.enabled:
+            source.enabled = body.enabled
+            actual.add("enabled")
+        if (
+            "scan_interval_minutes" in changes
+            and body.scan_interval_minutes != source.scan_interval_minutes
+        ):
+            source.scan_interval_minutes = body.scan_interval_minutes
+            actual.add("scanIntervalMinutes")
+        if not actual:
+            return source_dto(session, source)
+        if not source.enabled:
+            source.next_scan_at = None
+            for task in session.scalars(
+                select(Task).where(
+                    Task.source_id == source.id,
+                    Task.status == "queued",
+                    Task.kind.in_(("scan", "reindex")),
+                )
+            ):
+                finish(
+                    session,
+                    task,
+                    "cancelled",
+                    code="SOURCE_DISABLED",
+                    message="录像源已停用，维护任务未开始。",
+                )
+        elif {"enabled", "scanIntervalMinutes"} & actual:
+            source.next_scan_at = (
+                utc_now_ms() + source.scan_interval_minutes * 60_000
+                if source.scan_interval_minutes is not None
+                else None
+            )
+        source.updated_at = max(utc_now_ms(), source.updated_at + 1)
+        source.revision += 1
+        session.flush()
+        emit(
+            session,
+            kind="source",
+            code="SOURCE_UPDATED",
+            title="录像源配置已更新",
+            source_id=source.id,
+            detail={"changedFields": sorted(actual), "enabled": source.enabled},
+        )
+        return source_dto(session, source)

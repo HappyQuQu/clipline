@@ -1,2 +1,1 @@
-"""Core backend configuration."""
-
+"""Configuration and shared contracts."""

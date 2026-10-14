@@ -1,0 +1,76 @@
+name: Phase-one checks
+
+on:
+  push:
+    branches: ['**', '!main']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+      build_images:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.9.20"
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked
+      - name: Install FFmpeg for media integration tests
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: uv run --frozen ruff check . ../deploy
+      - run: uv run --frozen ruff format --check . ../deploy
+      - run: uv run --frozen pytest -q
+      - run: uv run --frozen python ../deploy/validate_release.py
+      - name: Check Docker dependency export
+        run: |
+          uv export --frozen --no-dev --no-emit-project -o requirements.lock > /dev/null
+          git diff --exit-code -- requirements.lock
+
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm test
+      - run: npm run build
+
+  native-image:
+    if: toJSON(inputs.build_images) != 'false'
+    uses: ./.github/workflows/native-images.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}

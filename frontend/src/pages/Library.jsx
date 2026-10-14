@@ -1,0 +1,75 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { MagnifyingGlass, SquaresFour, ListBullets, Play, DownloadSimple, Check, ArrowRight, FilmStrip, CalendarBlank } from '@phosphor-icons/react';
+import { clock, duration, DEMO_DATE } from '../domain';
+import { queryString, request } from '../api/client';
+import { clipView } from '../api/adapters';
+import { exportableClip, librarySelection, sameExportScope, toggleLibraryClip } from '../librarySelection';
+import PlaybackDetails from '../components/PlaybackDetails';
+import { Badge, EmptyState, ExtensionSlot, IconButton, PageHeading } from '../components/UI';
+
+export default function Library({ sources, clips, onOpen, onExport, real = false, defaultDate = DEMO_DATE, timezone = 'Asia/Shanghai', exportEnabled = true }) {
+  const detailScroll = useRef(null);
+  const detailPanel = useRef(null);
+  const [query, setQuery] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [date, setDate] = useState(real ? defaultDate || '' : DEMO_DATE);
+  const [view, setView] = useState('grid');
+  const [selected, setSelected] = useState([]);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [focusedId, setFocusedId] = useState(clips[0]?.id || '');
+  const [remote, setRemote] = useState({ items: [], nextCursor: null }), [loading, setLoading] = useState(false), [error, setError] = useState('');
+  useEffect(() => {
+    if (!real) return;
+    const controller = new AbortController(); setLoading(true); setError(''); setRemote({ items: [], nextCursor: null }); setSelected([]);
+    const timer = setTimeout(() => request(`/segments?${queryString({ sourceId: sourceFilter === 'all' ? undefined : sourceFilter, date, q: query, viewTimezone: timezone, limit: 60 })}`, { signal: controller.signal }).then(data => { if (!controller.signal.aborted) { setRemote({ ...data, items: data.items.map(row => clipView(row, null, timezone)) }); setLoading(false); } }).catch(failure => { if (failure.name !== 'AbortError') { setError(failure.message); setLoading(false); } }), 180);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [real, sourceFilter, date, query, timezone]);
+  async function more() { try { const data = await request(`/segments?${queryString({ sourceId: sourceFilter === 'all' ? undefined : sourceFilter, date, q: query, viewTimezone: timezone, limit: 60, cursor: remote.nextCursor })}`); setRemote(current => current.nextCursor === remote.nextCursor ? { ...data, items: [...current.items, ...data.items.map(row => clipView(row, null, timezone))] } : current); } catch (failure) { setError(failure.message); } }
+  const dataClips = real ? remote.items : clips;
+  const searchQuery = query.trim().replaceAll('：', ':').toLowerCase();
+  const filtered = useMemo(() => real ? dataClips : dataClips.filter(c => (sourceFilter === 'all' || c.sourceId === sourceFilter) && (!date || c.date === date) && `${c.filename} ${clock(c.start)} ${clock(c.end)}`.toLowerCase().includes(searchQuery)), [dataClips, real, searchQuery, sourceFilter, date]);
+  const focused = filtered.find(c => c.id === focusedId) || filtered[0];
+  const focusedSource = sources.find(s => s.id === focused?.sourceId);
+  const exportDate = real ? date : '';
+  const { chosen, anchor, eligible, compatible, allSelected } = librarySelection(filtered, selected, focused, exportDate);
+  const selectionSource = sources.find(s => s.id === anchor?.sourceId);
+  const selectionDate = exportDate || anchor?.date;
+  const mixedResults = filtered.some(c => !sameExportScope(c, anchor, exportDate));
+  useEffect(() => { if (detailScroll.current) detailScroll.current.scrollTop = 0; }, [focused?.id]);
+  useLayoutEffect(() => {
+    const panel = detailPanel.current;
+    const content = panel?.closest('.content');
+    if (!content) return;
+    const batch = content.querySelector('.batch-bar');
+    const measure = () => {
+      const bottom = Math.min(content.getBoundingClientRect().bottom, batch?.getBoundingClientRect().top ?? Infinity);
+      panel.style.setProperty('--library-detail-height', `${Math.max(0, bottom - panel.getBoundingClientRect().top - 12)}px`);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    if (batch) observer.observe(batch);
+    measure();
+    content.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => { observer.disconnect(); content.removeEventListener('scroll', measure); window.removeEventListener('resize', measure); };
+  }, [chosen.length, filtered.length, focused?.id]);
+  function toggle(c) { setFocusedId(c.id); setSelected(previous => toggleLibraryClip(filtered, previous, c, exportDate)); }
+  function filter(setter, value) { setter(value); setSelected([]); setDetailOpen(false); }
+  function exportClips(items) {
+    if (!items.length || !items.every(c => exportableClip(c) && sameExportScope(c, items[0], exportDate))) return;
+    onExport({ sourceId: items[0].sourceId, date: real && date || items[0].date, ...(real ? { startAt: new Date(Math.min(...items.map(c => Date.parse(c.startAt)))).toISOString(), endAt: new Date(Math.max(...items.map(c => Date.parse(c.endAt)))).toISOString() } : { start: Math.min(...items.map(c => c.start)), end: Math.max(...items.map(c => c.end)) }), clipIds: items.map(c => c.id) });
+  }
+  return <div className="library-page"><PageHeading eyebrow="YOUR RECORDING ARCHIVE" title="片段库" description="所有录像，井然有序。按文件信息找到你需要的片段。"><button className="button primary" disabled={!exportEnabled || !chosen.length || !compatible} onClick={() => exportClips(chosen)}><DownloadSimple size={18} />导出选中片段</button></PageHeading>
+    <div className="library-toolbar"><div className="search-field"><MagnifyingGlass size={18} /><input value={query} onChange={e => filter(setQuery, e.target.value)} placeholder="搜索文件名或时间，如 09:16…" aria-label="搜索文件名或时间" /></div><select aria-label="筛选录像源" value={sourceFilter} onChange={e => filter(setSourceFilter, e.target.value)}><option value="all">全部录像源</option>{sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><input type="date" aria-label="筛选片段日期" value={date} onInput={e => filter(setDate, e.currentTarget.value)} onChange={e => filter(setDate, e.target.value)} /><div className="view-switch"><IconButton icon={SquaresFour} label="网格视图" aria-pressed={view === 'grid'} onClick={() => setView('grid')} /><IconButton icon={ListBullets} label="列表视图" aria-pressed={view === 'list'} onClick={() => setView('list')} /></div></div>
+    <ExtensionSlot name="library-filters" context={{ sourceFilter, date, query, onQueryChange: value => filter(setQuery, value) }} />
+    <div className="library-meta"><div><span>共 <strong>{filtered.length}</strong> 个{real ? '已加载片段' : '示例片段'}</span><p id="library-selection-hint">{chosen.length ? <>本次合并：<strong>{selectionSource?.name} · {selectionDate}</strong>。取消选择后可切换范围。</> : '仅支持合并同一录像源、同一天的片段；勾选第一个片段确定范围。'}</p></div><div className="library-select-all">{mixedResults && !chosen.length && <span>当前查看：{selectionSource?.name} · {selectionDate}</span>}<button className="text-button" disabled={!eligible.length} onClick={() => setSelected(allSelected ? [] : eligible.map(c => c.id))}>{allSelected ? '取消全选' : mixedResults ? '全选同源同日片段' : '全选当前结果'}</button></div></div>
+    {error && <p className="form-error" role="alert">{error}</p>}{loading && <p role="status">正在查询真实片段…</p>}
+    <div className="library-layout"><div>{!filtered.length ? <div className="panel"><EmptyState title={loading ? '正在查询真实片段…' : '没有匹配的片段'} description={loading ? '正在读取索引，请稍候。' : '调整录像源、日期、文件名或时间，重新查看结果。'} action={() => { setQuery(''); setSourceFilter('all'); setDate(real ? '' : DEMO_DATE); }} actionLabel="清除筛选" /></div> : <div className={`library-clips ${view}`}>{filtered.map(c => <article className={`library-card ${focused?.id === c.id ? 'focused' : ''} ${selected.includes(c.id) ? 'selected' : ''}`} key={c.id}><div className="library-image"><button className="card-preview" onClick={() => { setFocusedId(c.id); if (window.matchMedia('(max-width: 1200px), (max-height: 699px)').matches) setDetailOpen(true); }} aria-label={`查看 ${sources.find(s => s.id === c.sourceId)?.name} ${clock(c.start)} 片段详情`}><img src={c.image} alt={`${sources.find(s => s.id === c.sourceId)?.name} ${clock(c.start)} 录像画面`} loading="lazy" /></button><input className="clip-checkbox" type="checkbox" aria-label={`选择 ${sources.find(s => s.id === c.sourceId)?.name} ${c.date} ${c.filename}`} aria-describedby="library-selection-hint" title={!exportableClip(c) ? '录像文件尚不可导出' : chosen.length && !sameExportScope(c, anchor, exportDate) ? '仅能合并同一录像源、同一天的片段；请先取消当前选择' : '选择片段进行导出'} disabled={!exportableClip(c) || (chosen.length > 0 && !sameExportScope(c, anchor, exportDate))} checked={selected.includes(c.id)} onChange={() => toggle(c)} /><span className="image-duration">{duration(c.duration || c.end - c.start)}</span><button className="card-play" onClick={() => onOpen(c)} aria-label={`回看 ${sources.find(s => s.id === c.sourceId)?.name} ${c.filename}`}><Play size={22} weight="fill" /></button></div><button className="library-card-info" onClick={() => { setFocusedId(c.id); if (window.matchMedia('(max-width: 1200px), (max-height: 699px)').matches) setDetailOpen(true); }}><div><strong>{sources.find(s => s.id === c.sourceId)?.name}</strong><Badge>{c.codec}</Badge></div><span className="clip-time">{real ? c.startLabel : clock(c.start)} – {real ? c.endLabel : clock(c.end)}</span><span className="clip-filename" title={c.filename}>{c.filename}</span><span className="clip-file-meta">{c.date} <span>·</span> {c.size}</span></button></article>)}</div>}</div>
+      {focused && <aside className="clip-detail panel" aria-label="片段详情" ref={detailPanel}><div className="section-heading clip-detail-heading"><h2>片段详情</h2><FilmStrip size={19} /></div><div className="clip-detail-scroll" role="region" aria-label="片段详情内容" tabIndex={0} ref={detailScroll}><img className="detail-image" src={focused.image} alt={`${focusedSource?.name}片段预览`} /><h3>{focusedSource?.name}</h3><span className="detail-date"><CalendarBlank size={14} />{focused.date} · {real ? focused.startLabel : clock(focused.start)}</span><dl><div><dt>录像时长</dt><dd>{duration(focused.duration || focused.end - focused.start)}</dd></div><div><dt>分辨率</dt><dd>{focused.resolution}</dd></div><div><dt>视频编码</dt><dd>{focused.codec}</dd></div><div><dt>文件大小</dt><dd>{focused.size}</dd></div><div><dt>{real ? '文件状态' : '示例内容'}</dt><dd>{real ? ({ available: '可用', pending: '持续写入', missing: '文件缺失', invalid: '文件异常' }[focused.availability] || focused.availability) : focused.media ? '可播放视频' : '静态画面'}</dd></div>{real && <div><dt>时间来源</dt><dd>{focused.timeSource === 'mtime' ? '修改时间 · 估算' : focused.timeSource === 'filename' ? '文件名' : '目录时间'}</dd></div>}</dl><div className="detail-file"><span>文件名称</span><code>{focused.filename}</code></div><ExtensionSlot name="clip-detail" context={{ clip: focused, source: focusedSource }} /></div><div className="clip-detail-actions"><button className="button primary full" onClick={() => onOpen(focused)}><Play size={17} weight="fill" />在时间线中回看<ArrowRight size={16} /></button><button className="button secondary full" disabled={!exportEnabled || !exportableClip(focused)} onClick={() => exportClips([focused])}><DownloadSimple size={17} />导出这个片段</button><p className="range-hint">仅浏览索引，不修改录像源文件。</p></div></aside>}
+    </div>
+    {detailOpen && focused && <PlaybackDetails exportDate={date || focused.date} forceDrawer clip={focused} source={focusedSource} onClose={() => setDetailOpen(false)} onWatch={() => { setDetailOpen(false); onOpen(focused); }} onExport={onExport} exportEnabled={exportEnabled && exportableClip(focused)} />}
+    {real && remote.nextCursor && <button className="button secondary" onClick={more}>加载更多片段</button>}
+    {chosen.length > 0 && <div className="batch-bar"><div className="batch-summary" role="status"><span className="batch-count"><Check size={18} />已选择 {chosen.length} 个片段</span><strong>{selectionSource?.name} · {selectionDate}</strong><span className="batch-hint">{compatible ? '同源同日 · 时长与断档将在导出确认中核对' : '所选范围不一致，请取消选择后重新勾选'}</span></div><div className="batch-actions"><button className="button secondary" onClick={() => setSelected([])}>取消选择</button><button className="button primary" disabled={!exportEnabled || !compatible} onClick={() => exportClips(chosen)}><DownloadSimple size={17} />合并导出 <span>({chosen.length})</span></button></div></div>}
+
+  </div>;
+}

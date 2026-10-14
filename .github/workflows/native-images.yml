@@ -1,0 +1,130 @@
+name: Native image verification
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact source commit to build and verify
+        type: string
+        required: true
+      publish:
+        description: Stage by digest before final tag promotion
+        type: boolean
+        default: false
+      image:
+        type: string
+        default: clipline
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Native image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v4
+        if: inputs.publish
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        if: inputs.publish
+        with:
+          name: final-image-metadata
+          path: ${{ runner.temp }}/image-metadata
+      - name: Resolve verified source and OCI labels
+        id: source
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+          python3 deploy/validate_release.py
+          if [ "$PUBLISH" = true ]; then
+            python3 deploy/release_metadata.py --labels "$RUNNER_TEMP/image-metadata/final-image-metadata.json" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build final native image once
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: ${{ !inputs.publish }}
+          tags: ${{ !inputs.publish && 'clipline:ci' || '' }}
+          labels: ${{ steps.source.outputs.labels }}
+          build-args: SOURCE_DATE_EPOCH=${{ steps.source.outputs.epoch }}
+          outputs: ${{ inputs.publish && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', inputs.image) || '' }}
+          sbom: ${{ inputs.publish }}
+          provenance: ${{ inputs.publish }}
+          cache-from: type=gha,scope=native-${{ matrix.arch }}
+          cache-to: type=gha,scope=native-${{ matrix.arch }},mode=max
+      - name: Verify exact final image on native hardware
+        env:
+          PUBLISH: ${{ inputs.publish }}
+          IMAGE: ${{ inputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+          SOURCE: ${{ steps.source.outputs.sha }}
+        run: |
+          image=clipline:ci
+          version=$(python3 deploy/validate_release.py)
+          if [ "$PUBLISH" = true ]; then
+            image="$IMAGE@$DIGEST"
+            docker pull --platform "linux/$ARCH" "$image"
+            test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE"
+          fi
+          test "$(docker image inspect "$image" --format '{{.Architecture}}')" = "$ARCH"
+          python3 deploy/check_image.py --image "$image" --version "$version"
+          python3 deploy/smoke_release.py --image "$image" --require-native --output "$RUNNER_TEMP/d6"
+      - name: Record verified architecture digest
+        if: inputs.publish
+        env:
+          IMAGE: ${{ inputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+          SOURCE: ${{ steps.source.outputs.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verified-digests'
+          root.mkdir()
+          value = {key.lower(): os.environ[key] for key in ('IMAGE', 'DIGEST', 'ARCH', 'SOURCE')}
+          value['version'] = subprocess.check_output(['python3', 'deploy/validate_release.py'], text=True).strip()
+          (root / (value['arch'] + '.json')).write_text(json.dumps(value))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: inputs.publish
+        with:
+          name: verified-digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/verified-digests/*.json
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-evidence-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/d6/results.json
+            ${{ runner.temp }}/d6/*/container.log
+          retention-days: 7
+          if-no-files-found: ignore

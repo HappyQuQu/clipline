@@ -1,382 +1,52 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/assets/clipline-logo.svg" width="112" alt="Clipline logo" />
-</p>
+# Clipline 一期原型与正式版开发
 
-<h1 align="center">Clipline</h1>
+沿用旧版蓝色主题与 UniFi 风格竖向时间轴的本地录像工作台。默认界面已接通真实录像源、时间轴、回看、片段详情与片段库。源码位于 `frontend/`，旧版源码与资料保留在 `old/`。
 
-<p align="center">
-  <strong>小米 NAS 备份视频片段的扫描、回放、时间线定位和区间导出工作台。</strong>
-</p>
-
-<p align="center">
-  <a href="#快速启动">快速启动</a>
-  ·
-  <a href="#小米-nas-目录怎么挂载">小米 NAS 挂载</a>
-  ·
-  <a href="#界面预览">界面预览</a>
-  ·
-  <a href="#导出模式">导出模式</a>
-  ·
-  <a href="#自动发布">自动发布</a>
-  ·
-  <a href="#本地开发">本地开发</a>
-</p>
-
-<p align="center">
-  <img alt="Docker Hub" src="https://img.shields.io/badge/Docker%20Hub-evanqu%2Fclipline-2496ED?style=flat-square&logo=docker&logoColor=white" />
-  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-backend-009688?style=flat-square&logo=fastapi&logoColor=white" />
-  <img alt="React" src="https://img.shields.io/badge/React-frontend-61DAFB?style=flat-square&logo=react&logoColor=0F172A" />
-  <img alt="FFmpeg" src="https://img.shields.io/badge/FFmpeg-media-22C55E?style=flat-square&logo=ffmpeg&logoColor=white" />
-</p>
-
----
-
-Clipline 用来管理小米 NAS、家庭 NAS 或本地硬盘里持续备份的视频片段。它适合行车记录仪、监控摄像头、停车监控、执法记录仪等按时间切片保存的视频目录：挂载目录后，Clipline 会扫描片段、建立索引、生成缩略图，并提供统一的录像回放、时间线定位、片段墙浏览和后台导出。
-
-## 适合什么场景
-
-| 场景 | Clipline 做什么 |
-| --- | --- |
-| 小米 NAS 自动备份了一堆短视频 | 按录像源扫描入库，统一浏览和检索 |
-| 行车记录仪按 1 分钟/3 分钟切片 | 用时间线连续查看，不用一个文件一个文件点 |
-| 想截取某一段证据视频 | 在时间线上拖动区间，后台导出 |
-| NAS 目录长期增长 | 定时扫描新片段，跳过仍在写入的文件 |
-| 多个备份目录 | 每个目录作为一个录像源独立管理 |
-
-## 快速启动
-
-推荐直接使用 Docker Hub 镜像：
-
-```powershell
-docker pull evanqu/clipline:latest
-```
-
-### 1. 准备两个目录
-
-Clipline 需要两个挂载：
-
-| 用途 | 宿主机目录示例 | 容器目录 |
-| --- | --- | --- |
-| Clipline 数据库、缩略图、导出文件 | `D:\clipline\data` | `/app/data` |
-| 小米 NAS 备份视频目录 | `Z:\XiaomiNAS\CameraBackup` | `/recordings/xiaomi-nas` |
-
-如果你的小米 NAS 是 SMB 共享，建议先在 Windows 里映射成盘符，比如 `Z:`，再给 Docker Desktop 挂载。容器内统一使用 `/recordings/...` 这种 Linux 路径。
-
-### 2. 直接运行
-
-把下面命令里的 `D:\clipline\data` 和 `Z:\XiaomiNAS\CameraBackup` 改成你自己的路径：
-
-```powershell
-docker run -d --name clipline --restart unless-stopped `
-  -p 8080:8080 `
-  -v "D:\clipline\data:/app/data" `
-  -v "Z:\XiaomiNAS\CameraBackup:/recordings/xiaomi-nas:ro" `
-  -e TZ=Asia/Shanghai `
-  evanqu/clipline:latest
-```
-
-打开：
-
-```text
-http://127.0.0.1:8080
-```
-
-### 3. 在页面里添加录像源
-
-进入“录像源”页面，点击“添加录像源”，填：
-
-```text
-名称：小米NAS备份
-路径：/recordings/xiaomi-nas
-```
-
-保存后点击扫描。扫描完成后，回到“录像回放”选择这个源即可浏览视频片段。
-
-## 小米 NAS 目录怎么挂载
-
-### Windows + Docker Desktop
-
-1. 在 Windows 文件资源管理器中打开小米 NAS 共享目录。
-2. 右键“映射网络驱动器”，映射成 `Z:` 这类盘符。
-3. Docker 运行时把这个盘符挂载进容器：
-
-```powershell
--v "Z:\XiaomiNAS\CameraBackup:/recordings/xiaomi-nas:ro"
-```
-
-页面里添加的录像源路径是容器路径：
-
-```text
-/recordings/xiaomi-nas
-```
-
-### Linux / NAS 主机
-
-如果你在 Linux 或 NAS 主机上运行 Docker，可以直接挂载本机目录：
+## 启动
 
 ```bash
-docker run -d --name clipline --restart unless-stopped \
-  -p 8080:8080 \
-  -v /volume1/docker/clipline/data:/app/data \
-  -v /volume1/backup/xiaomi-camera:/recordings/xiaomi-nas:ro \
-  -e TZ=Asia/Shanghai \
-  evanqu/clipline:latest
-```
-
-## Docker Compose
-
-如果你用仓库里的 `docker-compose.yml`，推荐用环境变量指定路径：
-
-```powershell
-$env:CLIPLINE_DATA_HOST = "D:\clipline\data"
-$env:CLIPLINE_RECORDINGS_HOST = "Z:\XiaomiNAS\CameraBackup"
-$env:CLIPLINE_HTTP_PORT = "8080"
-docker compose up -d
-```
-
-等价的完整配置如下：
-
-```yaml
-services:
-  clipline:
-    image: evanqu/clipline:latest
-    container_name: clipline
-    ports:
-      - "${CLIPLINE_HTTP_PORT:-8080}:8080"
-    volumes:
-      - "${CLIPLINE_DATA_HOST:-./data}:/app/data"
-      - "${CLIPLINE_RECORDINGS_HOST:-./recordings}:/recordings/xiaomi-nas:ro"
-    environment:
-      - TZ=${TZ:-Asia/Shanghai}
-      - CLIPLINE_RECORDINGS_ROOT=/recordings
-      - CLIPLINE_SKIP_RECENT_SECONDS=${CLIPLINE_SKIP_RECENT_SECONDS:-30}
-      - CLIPLINE_MAX_EXPORT_MINUTES=${CLIPLINE_MAX_EXPORT_MINUTES:-30}
-    restart: unless-stopped
-```
-
-如果你要从源码构建，把 `image: evanqu/clipline:latest` 换成：
-
-```yaml
-build: .
-```
-
-## 界面预览
-
-<table>
-  <tr>
-    <td width="50%">
-      <strong>录像回放</strong><br />
-      视频和时间线在同一工作区，选择片段后自动定位到对应时间段。
-    </td>
-    <td width="50%">
-      <strong>时间线导出</strong><br />
-      点击导出后显示滑块，拖动左右把手选择区间，再确认创建任务。
-    </td>
-  </tr>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/playback.png" alt="录像回放界面" /></td>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/export-range.png" alt="时间线导出区间" /></td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <strong>片段墙</strong><br />
-      按录像时间倒序展示缩略图，适合快速筛选和切换片段。
-    </td>
-    <td width="50%">
-      <strong>录像源管理</strong><br />
-      管理目录、扫描状态、定时扫描策略和扫描进度。
-    </td>
-  </tr>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/clips.png" alt="片段墙" /></td>
-    <td><img src="https://raw.githubusercontent.com/HappyQuQu/clipline/main/docs/screenshots/sources.png" alt="录像源管理" /></td>
-  </tr>
-</table>
-
-## 核心能力
-
-| 能力 | 说明 |
-| --- | --- |
-| 小米 NAS 备份目录管理 | 将 NAS 备份目录挂载为录像源，统一扫描和浏览。 |
-| 自动扫描 | 使用 FFmpeg / ffprobe 读取视频元数据，保存片段索引。 |
-| 缩略图索引 | 为片段生成缩略图，片段墙可快速识别内容。 |
-| 同步时间线 | 视频播放时间和时间线光标同步，选择片段后自动缩放定位。 |
-| 区间导出 | 在时间线上通过滑块选择范围，支持快速和精准两种模式。 |
-| 后台任务 | 确认导出后创建任务，完成后提示下载，不打断当前回放页面。 |
-| 状态与日志 | 查看系统状态、扫描任务、导出任务和错误信息。 |
-| Docker 优先 | 前后端打包到同一个镜像，适合 NAS 或家庭服务器部署。 |
-
-## 使用流程
-
-```text
-挂载小米 NAS 备份目录 -> 添加录像源 -> 扫描入库 -> 选择片段 -> 时间线定位 -> 选择导出区间 -> 创建导出任务 -> 下载结果
-```
-
-1. 启动 Docker 服务。
-2. 在“录像源”中添加容器内的视频目录。
-3. 等待扫描完成，片段进入索引。
-4. 在“录像回放”中选择源和片段。
-5. 使用时间线定位当前播放点，或切换上一个、下一个事件。
-6. 点击“导出”显示导出区间滑块。
-7. 拖动左右滑块选择范围。
-8. 选择“快速”或“精准”模式。
-9. 点击“确认导出”创建后台导出任务。
-10. 导出完成后根据提示下载文件，或进入“导出任务”查看历史。
-
-## 导出模式
-
-| 模式 | 说明 | 适用场景 |
-| --- | --- | --- |
-| 快速 | 尽量不重新编码，导出速度更快，边界可能贴近关键帧。 | 临时取证、快速分享、长片段导出 |
-| 精准 | 重新编码，起止时间更准确，但速度更慢。 | 对起止点要求更高的短片段 |
-
-## 自动发布
-
-仓库内置 GitHub Actions 流程，推送到 `main` 或推送 `v*.*.*` 标签时会自动构建并发布 Docker Hub 镜像：
-
-```text
-evanqu/clipline:latest
-evanqu/clipline:sha-<commit>
-evanqu/clipline:<version>
-```
-
-需要在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 中配置：
-
-| Secret | 用途 | 必填 |
-| --- | --- | --- |
-| `DOCKERHUB_USERNAME` | Docker Hub 用户名，例如 `evanqu` | 是 |
-| `DOCKERHUB_TOKEN` | Docker Hub Access Token，用于登录并推送镜像 | 是 |
-| `DOCKERHUB_DESCRIPTION_TOKEN` | 用于把 GitHub `README.md` 同步到 Docker Hub Overview | 否 |
-
-`DOCKERHUB_DESCRIPTION_TOKEN` 建议单独创建，只用于 Overview 同步。没有配置它时，Actions 仍会正常发布镜像，并跳过 Docker Hub Overview 更新，避免因为文档同步权限不足导致整个发布失败。
-
-如果你希望 Docker Hub 页面也显示这份 README，需要给 `DOCKERHUB_DESCRIPTION_TOKEN` 使用可以更新仓库描述的 Docker Hub Access Token。配置完成后重新运行一次发布流程，Docker Hub 的 Overview 会和 GitHub README 保持一致。
-
-## 配置项
-
-服务通过 `CLIPLINE_` 前缀读取环境变量。
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `CLIPLINE_PORT` | `8080` | 后端监听端口 |
-| `CLIPLINE_DATA` | `/app/data` | 数据目录 |
-| `CLIPLINE_DB` | `/app/data/clipline.db` | SQLite 数据库路径 |
-| `CLIPLINE_RECORDINGS_ROOT` | `/recordings` | 可浏览的录像根目录 |
-| `CLIPLINE_RECORDINGS_ROOTS` | 空 | 多个录像根目录，使用英文逗号分隔 |
-| `CLIPLINE_SCAN_INTERVAL_SECONDS` | `300` | 调度器扫描间隔 |
-| `CLIPLINE_EXPORT_TTL_HOURS` | `24` | 导出文件保留时间 |
-| `CLIPLINE_MAX_EXPORT_MINUTES` | `30` | 单次最大导出分钟数 |
-| `CLIPLINE_MAX_CONCURRENT_EXPORTS` | `1` | 最大并发导出数 |
-| `CLIPLINE_THUMBNAIL_MODE` | `middle` | 缩略图截取策略 |
-| `CLIPLINE_TIMEZONE` | `Asia/Shanghai` | 时间显示和扫描时区 |
-| `CLIPLINE_SKIP_RECENT_SECONDS` | `30` | 扫描时跳过最近写入的文件，避免读取未写完片段 |
-| `CLIPLINE_LOG_LEVEL` | `INFO` | 日志级别 |
-| `CLIPLINE_LOG_FILE` | `/app/data/logs/clipline.log` | 日志文件路径 |
-
-## 本地开发
-
-### 后端
-
-```powershell
-cd backend
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-
-$env:CLIPLINE_DATA = "../data"
-$env:CLIPLINE_DB = "../data/clipline.db"
-$env:CLIPLINE_RECORDINGS_ROOT = "C:/Users/EvanQ/Desktop/200video"
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8080
-```
-
-### 前端
-
-```powershell
-cd frontend
-npm install
+npm install --prefix frontend
 npm run dev
 ```
 
-前端开发服务器默认运行在：
+先按 [后端说明](backend/README.md) 启动本地 Docker 服务，再打开 <http://127.0.0.1:5173/>。Vite 将 `/api` 转发到 8088；也可直接打开容器页面 <http://127.0.0.1:8088/>。构建：`npm run build`；测试：`npm test`。
 
-```text
-http://127.0.0.1:5173
-```
+默认模式只读取真实 API；连接失败显示错误，不回退到示例。真实裁剪、跨片段拼接和下载已接通；设置分类保存、服务端日志筛选/全量导出、诊断和受使用保护的到期清理已接通。真实 HEVC 等不兼容文件进入后台播放准备，生成 H.264/AAC MP4；原录像始终只读。
 
-`frontend/vite.config.ts` 会把 `/api` 代理到 `VITE_API_TARGET`，默认是：
+## 保留的交互原型
 
-```text
-http://127.0.0.1:8080
-```
+以下演示流程仅在显式打开 <http://127.0.0.1:5173/?mode=demo> 时启用，原型 localStorage 与真实服务端数据独立。
 
-需要改后端地址时：
+- **录像回看**：选择录像源与日期，播放示例视频，点击时间线定位，跨片段连续回看，显示录像断档。
+- **区间导出**：点击“管理片段”，编辑起止时间或拖动竖向时间轴边界，显示实际覆盖时长，选择快速或精准模式，创建演示任务。
+- **片段库**：按录像源、日期筛选，搜索文件名或起止时间，切换网格和列表，多选同源同日片段进行合并导出演示。字幕搜索、画面标签及识别状态显示二期占位。
+- **任务中心**：目录扫描、录像导出、索引重建与播放准备四类演示任务，支持排队、并行处理、分阶段进度、取消、重新提交、失败重试及示例下载；可跳转查看关联日志。
+- **录像源**：浏览示例目录或手动填写路径，自动建议名称，设置扫描频率；可添加后立即后台扫描。支持编辑、启停与手动扫描，校验目录格式及重复路径。
+- **日志中心**：独立导航入口，记录任务入队、处理阶段、完成、取消/失败与配置变更；按级别、类型、源和关键词筛选，查看详情、关联任务、导出日志与诊断 JSON。
+- **设置**：分为基础、扫描、回看、导出、后台任务、识别与模型及关于。按当前分类保存、撤销或恢复默认，切换页面保留未保存草稿；识别、模型和运行设备继续仅占位。
 
-```powershell
-$env:VITE_API_TARGET = "http://127.0.0.1:28080"
-npm run dev
-```
+示例日期为 **2026-10-12、2026-10-13**。「工作室」提供一段 60 秒无声示例视频，六个片段复用这段素材；其他示例源提供静态画面。文件大小、片段总数和占用为示例数据。视频来自旧项目的本地播放样本，缩略图从样本提取，其余图片沿用旧原型。
 
-## 构建验证
+在上述演示模式中，扫描、索引重建、播放准备、转码、拼接和任务进度均为模拟；下载提供完整 60 秒示例视频，不按所选区间裁剪。切换页面后队列继续，关闭页面后暂停。原型不读取用户填写的真实目录，不连接旧版后端。其数据保存在浏览器 `clipline-v1-*` localStorage 键下；默认真实模式不读取这些源、任务或日志。
 
-```powershell
-cd frontend
-npm run build
+## 一期与二期
 
-cd ..
-docker build -t clipline-clipline:latest .
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/system/status
-```
+一期不加载语音转写、视频内容识别、字幕或语义检索功能。识别结果与事件时间点统一在片段详情中预留；搜索、任务中心及设置保留对应的「二期预留」区域。添加和编辑录像源均预留自动语音转写与自动画面识别策略，默认关闭；时间轴扩展插槽保留在代码中，一期不显示识别占位。二期接入方案见 [开发与扩展说明](docs/PROTOTYPE_ARCHITECTURE.md)。
 
-## API 概览
+检查记录见 [原型 QA](frontend/design-qa.md)，截图保存在 `frontend/qa/`。
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/health` | 健康检查 |
-| `GET` | `/api/system/status` | 系统状态、数据库、数据目录和统计信息 |
-| `GET` | `/api/sources` | 录像源列表 |
-| `POST` | `/api/sources` | 创建录像源 |
-| `PATCH` | `/api/sources/{source_id}` | 更新录像源 |
-| `POST` | `/api/sources/{source_id}/scan` | 手动触发扫描 |
-| `GET` | `/api/recording-directories` | 浏览容器内录像目录 |
-| `GET` | `/api/scan-jobs` | 扫描任务列表 |
-| `GET` | `/api/timeline` | 指定源和日期的时间线 |
-| `GET` | `/api/segments` | 片段列表 |
-| `GET` | `/api/segments/{segment_id}/stream` | 视频流 |
-| `GET` | `/api/segments/{segment_id}/thumbnail` | 片段缩略图 |
-| `POST` | `/api/exports` | 创建导出任务 |
-| `GET` | `/api/exports` | 导出任务列表 |
-| `GET` | `/api/exports/{export_id}/download` | 下载导出文件 |
+## 正式版方案与开发文档
 
-更完整的接口和数据结构说明见 [docs/API_AND_DB.md](https://github.com/HappyQuQu/clipline/blob/main/docs/API_AND_DB.md)。
+- [方案与需求文档](docs/REQUIREMENTS.md)：一期/二期范围、页面流程、后台任务、设置、NAS 部署要求与验收标准。
+- [开发文档](docs/DEVELOPMENT.md)：双架构 Docker、API/Worker、数据库、接口、媒体处理、任务恢复与开发里程碑。
+- [开发任务清单](docs/TASKS.md)：按 D1–D6 拆分可勾选任务、依赖和完成标准，附发布验收及独立二期清单。
 
-## 项目结构
+文档以 NAS Docker 部署及 `linux/amd64`、`linux/arm64` 支持为基线，区分已有原型与待实现正式版；不会把演示扫描或示例下载视为真实后端能力。
 
-```text
-clipline/
-├─ backend/                 # FastAPI 后端、扫描、导出、调度、数据库模型
-├─ frontend/                # React + Vite 前端
-├─ docs/                    # 产品、技术、接口和截图文档
-│  ├─ assets/               # README 和品牌素材
-│  └─ screenshots/          # README 截图
-├─ data/                    # 本地数据库、缩略图、导出文件和日志
-├─ Dockerfile               # 前端构建 + 后端运行的一体化镜像
-└─ docker-compose.yml       # Docker Compose 示例
-```
+本地真实录像测试固定使用 `/Volumes/extended/clipline`，容器只读映射到 `/recordings`；新测试数据库、缓存和输出独立放在项目的 `data/local-test`，详见开发文档。
 
-## 技术栈
+## 后端开发进度
 
-| 层 | 技术 |
-| --- | --- |
-| 前端 | React 19、Vite、TypeScript、TanStack Query、Radix UI、Lucide Icons |
-| 后端 | FastAPI、SQLAlchemy、SQLite、Pydantic Settings |
-| 媒体 | FFmpeg、ffprobe |
-| 部署 | Docker 单容器，静态前端由 FastAPI 同进程托管 |
+D1–D6 已实现并完成软件验收：运行基础、后台索引、真实页面接入和录像导出；包含本地日时间轴、断档、跨日定位、Range 播放、后台兼容准备、取消/重试/恢复、详情和文件信息搜索。快速模式复制兼容编码，精准模式按区间裁剪为 H.264/AAC；任务可取消、新 ID 重试和重启恢复。设置使用分类 revision，日志导出使用一致快照，缓存清理保护正在播放/下载的内容。后端 Python 3.11/3.12 各 107 项测试通过，前端 22 项测试及构建通过。
 
-## 注意事项
-
-- Docker 中配置的是容器路径，不是 Windows 主机路径。
-- 小米 NAS / SMB 共享目录建议先映射为本机路径，再挂载给 Docker。
-- 录像目录建议只读挂载，避免服务误改原始文件。
-- 扫描会跳过最近写入的文件，避免索引未写完的视频片段。
-- 大文件导出会占用 CPU 和磁盘空间，建议根据机器性能调整并发数。
-- 如果页面没有加载片段，先确认已经选择录像源，并且该源扫描完成。
+使用方法见 [后端说明](backend/README.md)，验证见 [D1](docs/qa/D1_FOUNDATION.md)、[D2](docs/qa/D2_INDEXING.md)、[D3](docs/qa/D3_PLAYBACK.md)、[D4](docs/qa/D4_EXPORTS.md)、[D5](docs/qa/D5_OPERATIONS.md)及 [D6](docs/qa/D6_ACCEPTANCE.md)。本地接口文档为 <http://127.0.0.1:8088/docs>。指定目录中的 123 个真实文件可查询和回看；设置和日志运维已接入，识别继续占位。amd64/arm64 原生 Linux 镜像验收通过，x86 NAS 实测通过（2 GiB，共存 HA，使用资源上限及 1280 输出档位）。部署与发布门禁见 [部署说明](docs/DEPLOYMENT.md)。版本见 `version.txt`；main 通过检查后自动生成版本，最终双架构镜像验收成功才更新 `latest`，开发分支不发布镜像；正式镜像关闭演示模式并排除演示媒体。

@@ -1,216 +1,338 @@
-from __future__ import annotations
-
-from datetime import datetime, timedelta, timezone
+import hashlib
+import os
+import stat
 from pathlib import Path
 
-from sqlalchemy import delete, select
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
-from app.core.logging import get_logger
-from app.db import SessionLocal
-from app.models import ScanJob, Source, Thumbnail, VideoSegment
-from app.services.common import make_id, now_iso
-from app.services.probe import ffprobe
-from app.services.time_parser import infer_start_time
+from app.core.errors import AppError
+from app.core.time import utc_now_ms
+from app.db.models import Artifact, Segment, new_id
+from app.db.transactions import write_session
+from app.services import media
+from app.services.directories import RecordingDirectories
+from app.services.events import emit
+from app.services.recording_time import infer_start
 
-SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".ts", ".m4v"}
-logger = get_logger(__name__)
+EXTENSIONS = {".mp4", ".mov", ".mkv", ".ts"}
+THUMBNAIL_PROFILE = "thumbnail-first-v1"
 
 
-def create_scan_job(source_id: str | None, trigger: str = "manual") -> str:
-    db = SessionLocal()
+def file_fingerprint(source_id, relative_path, info):
+    return hashlib.sha256(
+        f"{source_id}:{relative_path}:{info.st_size}:{info.st_mtime_ns}".encode()
+    ).hexdigest()
+
+
+def identity(info):
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+
+def collect(root, context, stats):
+    paths = []
+
+    def failed(error):
+        raise AppError("SCAN_INCOMPLETE", "录像目录未能完整读取，原有索引已保留。") from error
+
     try:
-        timestamp = now_iso()
-        job = ScanJob(
-            id=make_id("scan"),
-            source_id=source_id,
-            trigger=trigger,
-            status="queued",
-            created_at=timestamp,
-            updated_at=timestamp,
+        for directory, children, files in os.walk(root, onerror=failed, followlinks=False):
+            context.check()
+            children[:] = sorted(name for name in children if not name.startswith("."))
+            for name in sorted(files):
+                if Path(name).suffix.lower() in EXTENSIONS and not name.startswith("."):
+                    paths.append(Path(directory) / name)
+            stats["discovered"] = len(paths)
+            context.update("discover", 0, stats)
+    except OSError as error:
+        failed(error)
+    return paths
+
+
+def warning(session, context, stats, code, path):
+    stats["warnings"] += 1
+    if stats["warnings"] <= 10:
+        emit(
+            session,
+            kind=context.claim.kind,
+            code=code,
+            title="扫描发现文件异常",
+            source_id=context.claim.source_id,
+            task_id=context.claim.task_id,
+            detail={"relativePath": str(path), "errorCode": code},
+            level="warning",
         )
-        db.add(job)
-        db.commit()
-        logger.info("scan job created", extra={"scan_job_id": job.id, "source_id": source_id})
-        return job.id
-    finally:
-        db.close()
 
 
-def run_scan_job(job_id: str) -> None:
-    settings = get_settings()
-    db = SessionLocal()
+def existing_info(engine, source_id, relative):
+    with Session(engine) as session:
+        row = session.scalar(
+            select(Segment).where(Segment.source_id == source_id, Segment.relative_path == relative)
+        )
+        if row is None:
+            return None
+        artifact = session.scalar(
+            select(Artifact).where(
+                Artifact.segment_id == row.id,
+                Artifact.kind == "thumbnail",
+                Artifact.status == "ready",
+                Artifact.input_fingerprint == row.fingerprint,
+                Artifact.profile_hash == THUMBNAIL_PROFILE,
+            )
+        )
+        return {
+            "id": row.id,
+            "fingerprint": row.fingerprint,
+            "availability": row.availability,
+            "lastSeenScan": row.last_seen_scan,
+            "artifactPath": artifact.relative_path if artifact else None,
+        }
+
+
+def scan_file(path, root, context, stats):
+    context.check()
+    relative = path.relative_to(root).as_posix()
+    existing = existing_info(context.queue.engine, context.claim.source_id, relative)
+    segment_id = existing["id"] if existing else new_id()
+    temporary = None
+    metadata, thumb_error, file_error = None, None, None
+    pending = False
     try:
-        job = db.get(ScanJob, job_id)
-        if not job:
+        canonical = path.resolve(strict=True)
+        if not canonical.is_relative_to(root):
+            raise AppError("SOURCE_PATH_OUTSIDE_ROOT", "文件位置已超出此录像源目录。")
+        before = canonical.stat()
+        if not stat.S_ISREG(before.st_mode) or not os.access(canonical, os.R_OK):
+            raise AppError("FILE_UNREADABLE", "录像文件不可读。")
+        fingerprint = file_fingerprint(context.claim.source_id, relative, before)
+        pending = before.st_mtime_ns // 1_000_000 > (
+            utc_now_ms() - context.claim.payload["skipRecentSeconds"] * 1000
+        )
+        thumbnail_ready = False
+        if existing and existing["artifactPath"]:
+            cached = context.config.data / existing["artifactPath"]
+            thumbnail_ready = (
+                existing["fingerprint"] == fingerprint
+                and cached.resolve().is_relative_to(context.config.data)
+                and cached.is_file()
+            )
+        unchanged = (
+            existing
+            and existing["fingerprint"] == fingerprint
+            and existing["availability"] == "available"
+        )
+        if (
+            not pending
+            and unchanged
+            and thumbnail_ready
+            and (context.claim.kind == "scan" or existing["lastSeenScan"] == context.claim.task_id)
+        ):
+            with write_session(context.queue.engine) as session:
+                context.queue.owned(session, context.claim)
+                row = session.get(Segment, segment_id)
+                row.last_seen_scan = context.claim.task_id
+            stats["unchanged"] += 1
             return
-        source = db.get(Source, job.source_id) if job.source_id else None
-        if not source:
-            job.status = "failed"
-            job.error_message = "Source not found"
-            job.updated_at = now_iso()
-            db.commit()
-            return
-
-        job.status = "running"
-        job.started_at = now_iso()
-        job.updated_at = job.started_at
-        db.commit()
-        logger.info("scan job started", extra={"scan_job_id": job.id, "source_id": source.id})
-
-        root = Path(source.path)
-        cutoff = datetime.now(timezone.utc).astimezone() - timedelta(seconds=settings.skip_recent_seconds)
-
-        paths = sorted(
-            [path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS],
-            key=lambda item: str(item),
-        )
-        job.total_files = len(paths)
-        job.updated_at = now_iso()
-        db.commit()
-
-        discovered_paths: set[str] = set()
-
-        for path in paths:
-            file_path = str(path)
-            discovered_paths.add(file_path)
-            job.scanned_files += 1
-            stat = path.stat()
-            mtime_dt = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).astimezone()
-            ctime_dt = datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).astimezone()
-            mtime = mtime_dt.isoformat(timespec="seconds")
-            ctime = ctime_dt.isoformat(timespec="seconds")
-            existing = db.scalar(
-                select(VideoSegment).where(
-                    VideoSegment.source_id == source.id,
-                    VideoSegment.path == file_path,
-                )
+        if not pending:
+            metadata = media.probe(canonical, context)
+            start, origin, confidence = infer_start(
+                path,
+                before.st_mtime_ns,
+                metadata["duration_ms"],
+                context.claim.payload["recordingTimezone"],
             )
-
-            if existing and existing.size_bytes == stat.st_size and existing.mtime == mtime:
-                continue
-
-            timestamp = now_iso()
-            segment = existing or VideoSegment(
-                id=make_id("seg"),
-                source_id=source.id,
-                path=file_path,
-                filename=path.name,
-                size_bytes=stat.st_size,
-                scan_status="pending",
-                created_at=timestamp,
-                updated_at=timestamp,
+            metadata |= {
+                "start_at": start,
+                "end_at": start + metadata["duration_ms"],
+                "time_source": origin,
+                "time_confidence": confidence,
+            }
+            if identity(canonical.stat()) != identity(before):
+                pending, metadata = True, None
+            elif not thumbnail_ready or context.claim.kind == "reindex":
+                directory = (
+                    context.config.data / "tmp" / context.claim.task_id / context.claim.token
+                )
+                directory.mkdir(parents=True, exist_ok=True)
+                temporary = directory / f"{segment_id}.jpg"
+                try:
+                    with context.media_slot():
+                        media.make_thumbnail(canonical, metadata, temporary, context)
+                except AppError as error:
+                    thumb_error = error.code
+                if identity(canonical.stat()) != identity(before):
+                    pending, metadata = True, None
+        after = canonical.stat()
+        if identity(after) != identity(before):
+            pending, metadata = True, None
+        info = after
+        fingerprint = file_fingerprint(context.claim.source_id, relative, info)
+    except (FileNotFoundError, PermissionError, OSError) as error:
+        raise AppError(
+            "SCAN_INCOMPLETE", "扫描中有文件无法访问，未清理旧索引，请稍后重试。"
+        ) from error
+    except AppError as error:
+        file_error = error.code
+        try:
+            info = path.stat()
+            fingerprint = file_fingerprint(context.claim.source_id, relative, info)
+        except OSError as stat_error:
+            raise AppError("SCAN_INCOMPLETE", "无法确认文件状态，旧索引已保留。") from stat_error
+    try:
+        with write_session(context.queue.engine) as session:
+            context.queue.owned(session, context.claim)
+            row = session.get(Segment, segment_id)
+            if row is None:
+                row = Segment(
+                    id=segment_id,
+                    source_id=context.claim.source_id,
+                    relative_path=relative,
+                    filename=path.name,
+                    size_bytes=info.st_size,
+                    mtime_ns=info.st_mtime_ns,
+                    fingerprint=fingerprint,
+                )
+                session.add(row)
+            changed = row.fingerprint != fingerprint
+            row.size_bytes, row.mtime_ns, row.fingerprint = (
+                info.st_size,
+                info.st_mtime_ns,
+                fingerprint,
             )
-            segment.filename = path.name
-            segment.size_bytes = stat.st_size
-            segment.mtime = mtime
-            segment.ctime = ctime
-            segment.updated_at = timestamp
-
-            if mtime_dt > cutoff:
-                segment.scan_status = "pending"
-                segment.error_message = "File modified recently; waiting for it to become stable"
-                db.add(segment)
-                db.commit()
-                logger.info(
-                    "scan file pending",
-                    extra={"scan_job_id": job.id, "source_id": source.id, "path": file_path},
+            row.last_seen_scan = context.claim.task_id
+            if changed or pending or file_error:
+                session.execute(
+                    update(Artifact).where(Artifact.segment_id == row.id).values(status="stale")
                 )
-                continue
-
-            try:
-                metadata = ffprobe(path)
-                duration = metadata["duration_seconds"]
-                start, source_name, confidence = infer_start_time(path, mtime_dt, duration)
-                end = start + timedelta(seconds=duration or 0)
-
-                segment.start_time = start.isoformat(timespec="seconds")
-                segment.end_time = end.isoformat(timespec="seconds")
-                segment.duration_seconds = duration
-                segment.time_source = source_name
-                segment.time_confidence = confidence
-                segment.container = metadata["container"]
-                segment.video_codec = metadata["video_codec"]
-                segment.audio_codec = metadata["audio_codec"]
-                segment.width = metadata["width"]
-                segment.height = metadata["height"]
-                segment.fps = metadata["fps"]
-                segment.playable = 1 if metadata["playable"] else 0
-                segment.needs_transcode = 0 if metadata["playable"] else 1
-                segment.scan_status = "indexed"
-                segment.error_message = None
-                job.indexed_files += 1
-                logger.info(
-                    "scan file indexed",
-                    extra={
-                        "scan_job_id": job.id,
-                        "source_id": source.id,
-                        "segment_id": segment.id,
-                        "path": file_path,
-                        "duration_seconds": duration,
-                    },
+                row.start_at = row.end_at = row.duration_ms = None
+            if pending:
+                row.availability, row.error_code = "pending", "FILE_STILL_WRITING"
+                row.playback_status = "needs_prepare"
+                stats["pending"] += 1
+            elif file_error:
+                row.availability, row.error_code = "invalid", file_error
+                row.playback_status = "failed"
+                warning(session, context, stats, file_error, relative)
+                stats["failed"] += 1
+            else:
+                for key, value in metadata.items():
+                    setattr(row, key, value)
+                row.availability, row.error_code = "available", None
+                row.playback_status = (
+                    "direct"
+                    if row.container.startswith("mov")
+                    and row.video_codec == "h264"
+                    and row.audio_codec in (None, "aac")
+                    else "needs_prepare"
                 )
-            except Exception as exc:  # noqa: BLE001
-                segment.scan_status = "failed"
-                segment.error_message = str(exc)
-                job.failed_files += 1
-                logger.warning(
-                    "scan file failed",
-                    extra={
-                        "scan_job_id": job.id,
-                        "source_id": source.id,
-                        "path": file_path,
-                        "error": str(exc),
-                    },
-                )
-
-            db.add(segment)
-            db.commit()
-
-        discovered_path_list = sorted(discovered_paths)
-        stale_segment_ids = list(
-            db.scalars(
-                select(VideoSegment.id).where(
-                    VideoSegment.source_id == source.id,
-                    VideoSegment.path.not_in(discovered_path_list),
-                )
-            )
-        )
-        if stale_segment_ids:
-            db.execute(delete(Thumbnail).where(Thumbnail.segment_id.in_(stale_segment_ids)))
-            db.execute(delete(VideoSegment).where(VideoSegment.id.in_(stale_segment_ids)))
-            db.commit()
-            logger.info(
-                "scan stale segments removed",
-                extra={
-                    "scan_job_id": job.id,
-                    "source_id": source.id,
-                    "removed_segments": len(stale_segment_ids),
-                },
-            )
-
-        job.status = "completed"
-        job.finished_at = now_iso()
-        job.updated_at = job.finished_at
-        db.commit()
-        logger.info(
-            "scan job completed",
-            extra={
-                "scan_job_id": job.id,
-                "source_id": source.id,
-                "scanned_files": job.scanned_files,
-                "indexed_files": job.indexed_files,
-                "failed_files": job.failed_files,
-            },
-        )
-    except Exception as exc:  # noqa: BLE001
-        job = db.get(ScanJob, job_id)
-        if job:
-            job.status = "failed"
-            job.error_message = str(exc)
-            job.finished_at = now_iso()
-            job.updated_at = job.finished_at
-            db.commit()
-        logger.exception("scan job failed", extra={"scan_job_id": job_id, "error": str(exc)})
+                row.index_revision = (row.index_revision or 0) + 1
+                session.flush()
+                if temporary and temporary.exists() and not thumb_error:
+                    target = (
+                        context.config.data / "thumbnails" / f"{row.id}-{fingerprint}-first-v1.jpg"
+                    )
+                    os.replace(temporary, target)
+                    artifact = session.scalar(
+                        select(Artifact).where(
+                            Artifact.relative_path
+                            == target.relative_to(context.config.data).as_posix()
+                        )
+                    )
+                    if artifact is None:
+                        artifact = Artifact(
+                            segment_id=row.id,
+                            kind="thumbnail",
+                            relative_path=target.relative_to(context.config.data).as_posix(),
+                            size_bytes=target.stat().st_size,
+                        )
+                        session.add(artifact)
+                    artifact.status, artifact.task_id = "ready", context.claim.task_id
+                    artifact.input_fingerprint, artifact.profile_hash = (
+                        fingerprint,
+                        THUMBNAIL_PROFILE,
+                    )
+                    session.execute(
+                        update(Artifact)
+                        .where(
+                            Artifact.segment_id == row.id,
+                            Artifact.kind == "thumbnail",
+                            Artifact.profile_hash != THUMBNAIL_PROFILE,
+                        )
+                        .values(status="stale")
+                    )
+                    artifact.size_bytes = target.stat().st_size
+                    stats["thumbnails"] += 1
+                if thumb_error:
+                    warning(session, context, stats, thumb_error, relative)
+                    stats["thumbnailFailed"] += 1
+                stats["updated" if existing else "added"] += 1
     finally:
-        db.close()
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def scan(context):
+    directories = RecordingDirectories(context.config.recordings_root)
+    root = directories.resolve(context.claim.payload["sourcePath"])
+    root_identity = identity(root.stat())[:2]
+    stats = dict.fromkeys(
+        (
+            "discovered",
+            "processed",
+            "added",
+            "updated",
+            "unchanged",
+            "pending",
+            "failed",
+            "thumbnails",
+            "thumbnailFailed",
+            "missing",
+            "warnings",
+        ),
+        0,
+    )
+    paths = collect(root, context, stats)
+    for index, path in enumerate(paths):
+        context.update("probe", int(index * 90 / max(1, len(paths))), stats)
+        scan_file(path, root, context, stats)
+        stats["processed"] += 1
+    context.update("index", 95, stats)
+    if not root.is_dir() or identity(root.stat())[:2] != root_identity:
+        raise AppError("SCAN_ROOT_CHANGED", "扫描过程中录像目录发生变化，旧索引已保留。")
+    with Session(context.queue.engine) as session:
+        unseen = list(
+            session.execute(
+                select(Segment.id, Segment.relative_path).where(
+                    Segment.source_id == context.claim.source_id,
+                    (Segment.last_seen_scan != context.claim.task_id)
+                    | Segment.last_seen_scan.is_(None),
+                    Segment.availability != "missing",
+                )
+            )
+        )
+    missing = []
+    for segment_id, relative in unseen:
+        context.check()
+        try:
+            (root / relative).stat()
+        except FileNotFoundError:
+            missing.append(segment_id)
+        except OSError as error:
+            raise AppError("SCAN_INCOMPLETE", "无法确认旧文件状态，原有索引已保留。") from error
+
+    def finalize(session):
+        if not root.is_dir() or identity(root.stat())[:2] != root_identity:
+            raise AppError("SCAN_ROOT_CHANGED", "完成扫描前录像目录发生变化，旧索引已保留。")
+        for start in range(0, len(missing), 250):
+            ids = missing[start : start + 250]
+            session.execute(
+                update(Segment)
+                .where(Segment.id.in_(ids))
+                .values(availability="missing", error_code="FILE_MISSING")
+            )
+            session.execute(
+                update(Artifact).where(Artifact.segment_id.in_(ids)).values(status="stale")
+            )
+
+    context.update("finalize", 99, stats)
+    return {**stats, "missing": len(missing)}, finalize

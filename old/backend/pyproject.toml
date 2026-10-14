@@ -1,0 +1,38 @@
+[project]
+name = "clipline-backend"
+version = "0.1.0"
+description = "Clipline backend API"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "sqlalchemy>=2.0.0",
+  "pydantic-settings>=2.4.0",
+]
+
+[project.optional-dependencies]
+asr = [
+  "funasr>=1.0.0",
+  "torch>=2.0.0",
+  "torchaudio>=2.0.0",
+  "openai-whisper>=20231117",
+]
+vision = [
+  "onnxruntime>=1.18.0",
+  "numpy>=1.26.0",
+  "pillow>=10.0.0",
+]
+dev = [
+  "ruff>=0.6.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

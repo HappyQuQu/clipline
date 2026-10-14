@@ -1,0 +1,59 @@
+name: clipline-phase-one
+services:
+  clipline:
+    build:
+      context: .
+    image: ${CLIPLINE_IMAGE_NAME:-clipline}:${CLIPLINE_IMAGE_TAG:-dev}
+    user: "${CLIPLINE_UID:-1000}:${CLIPLINE_GID:-1000}"
+    cpus: ${CLIPLINE_CPU_LIMIT:-0}
+    mem_limit: ${CLIPLINE_MEMORY_LIMIT:-0}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "${CLIPLINE_HTTP_BIND:-0.0.0.0}:${CLIPLINE_HTTP_PORT:-8080}:8080"
+    environment:
+      TZ: Asia/Shanghai
+      CLIPLINE_TIMEZONE: Asia/Shanghai
+      CLIPLINE_DATA: /app/data
+      CLIPLINE_DB: /app/data/clipline.db
+      CLIPLINE_RECORDINGS_ROOT: /recordings
+      CLIPLINE_MEDIA_THREADS: "${CLIPLINE_MEDIA_THREADS:-2}"
+      CLIPLINE_MAX_CONCURRENT_TRANSCODES: "${CLIPLINE_MAX_CONCURRENT_TRANSCODES:-1}"
+      CLIPLINE_EXPORT_FPS: "${CLIPLINE_EXPORT_FPS:-25}"
+      CLIPLINE_EXPORT_MAX_WIDTH: "${CLIPLINE_EXPORT_MAX_WIDTH:-3840}"
+      CLIPLINE_EXPORT_TIMEOUT_SECONDS: "${CLIPLINE_EXPORT_TIMEOUT_SECONDS:-3600}"
+      CLIPLINE_MAINTENANCE_INTERVAL_SECONDS: "${CLIPLINE_MAINTENANCE_INTERVAL_SECONDS:-60}"
+      CLIPLINE_USAGE_LEASE_SECONDS: "${CLIPLINE_USAGE_LEASE_SECONDS:-90}"
+      CLIPLINE_USAGE_IDLE_SECONDS: "${CLIPLINE_USAGE_IDLE_SECONDS:-30}"
+      CLIPLINE_TEMPORARY_RETENTION_SECONDS: "${CLIPLINE_TEMPORARY_RETENTION_SECONDS:-3600}"
+      CLIPLINE_EVENT_RETENTION_HOURS: "${CLIPLINE_EVENT_RETENTION_HOURS:-24}"
+      CLIPLINE_EVENT_MAX_COUNT: "${CLIPLINE_EVENT_MAX_COUNT:-10000}"
+      CLIPLINE_EXPORT_TTL_HOURS: "${CLIPLINE_EXPORT_TTL_HOURS:-24}"
+      CLIPLINE_LOG_RETENTION_DAYS: "${CLIPLINE_LOG_RETENTION_DAYS:-30}"
+      CLIPLINE_PLAYBACK_MAX_WIDTH: "${CLIPLINE_PLAYBACK_MAX_WIDTH:-1920}"
+      CLIPLINE_PLAYBACK_TIMEOUT_SECONDS: "${CLIPLINE_PLAYBACK_TIMEOUT_SECONDS:-3600}"
+      CLIPLINE_PLAYBACK_CACHE_MAX_BYTES: "${CLIPLINE_PLAYBACK_CACHE_MAX_BYTES:-2147483648}"
+    volumes:
+      - type: bind
+        source: ${CLIPLINE_DATA_DIR:?set-a-local-writable-data-directory}
+        target: /app/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CLIPLINE_RECORDINGS_DIR:?set-the-recordings-directory}
+        target: /recordings
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.healthcheck"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

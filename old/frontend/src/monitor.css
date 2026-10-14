@@ -1,0 +1,1161 @@
+/* Camera-first workspace, informed by the supplied UniFi Protect references. */
+.surveillanceWorkspace {
+  --work-blue: #087bfa;
+  --work-bg: #f6f7f8;
+  --work-ink: #343b45;
+  --work-muted: #647080;
+  --work-line: #e8ebef;
+}
+.surveillanceWorkspace .workspaceTopbar {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 18px;
+  background: #f3f4f5;
+}
+.surveillanceWorkspace .workspaceTopbar > div {
+  color: #66717f;
+  font-size: 12px;
+}
+.surveillanceWorkspace .workspaceTopbar strong {
+  color: var(--work-blue);
+}
+.surveillanceWorkspace .workspaceAvatar {
+  width: 27px;
+  height: 27px;
+  background: #e9edf2;
+}
+.surveillanceWorkspace .workspaceSearchTrigger {
+  width: 250px;
+  padding: 6px 10px;
+  background: #fff;
+}
+.surveillanceWorkspace .workspaceSidebar {
+  padding-top: 16px;
+}
+.surveillanceWorkspace.navCollapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+.surveillanceWorkspace.navCollapsed .workspaceSidebar {
+  padding: 15px 6px 10px;
+}
+.surveillanceWorkspace.navCollapsed .workspaceBrand {
+  padding: 0 7px 25px;
+}
+.surveillanceWorkspace .workspaceBrand img {
+  width: 26px;
+  height: 26px;
+}
+.surveillanceWorkspace .workspaceSidebar nav button {
+  border-radius: 5px;
+  color: #717b89;
+  height: 44px;
+}
+.surveillanceWorkspace .workspaceSidebar nav button.active {
+  color: var(--work-blue);
+  background: #eef6ff;
+}
+.surveillanceWorkspace .workspaceMain {
+  padding: 12px 14px;
+}
+.surveillanceWorkspace.view-playback .workspaceMain {
+  overflow: hidden;
+}
+.surveillanceWorkspace .workReview {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.monitorScreenReaderHeading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.monitorDateNavigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding-bottom: 10px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--work-line);
+}
+.monitorDateNavigation button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 3px 0;
+  background: none;
+  color: #637083;
+}
+.monitorDateNavigation input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: #526074;
+  font-size: 11px;
+}
+.monitorCameraSelect {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #526074;
+}
+.monitorCameraSelect select {
+  min-width: 0;
+  max-width: 190px;
+  font-size: 11px;
+  border: 0;
+  padding: 3px;
+  background: transparent;
+  color: inherit;
+}
+.monitorOverlayOptions {
+  border: 0;
+  border-top: 1px solid var(--work-line);
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+.monitorOverlayOptions legend {
+  font-size: 11px;
+  color: #566376;
+  padding: 0 7px 0 0;
+}
+.monitorOverlayOptions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #526074;
+  cursor: pointer;
+}
+.monitorOverlayOptions input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--work-blue);
+  margin: 0;
+}
+.monitorGridDensity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  color: #566376;
+  font-size: 11px;
+}
+.monitorGridDensity select {
+  font-size: 11px;
+  padding: 5px 8px;
+  border: 1px solid var(--work-line);
+  border-radius: 4px;
+  background: #fff;
+  color: #526074;
+}
+.surveillanceWorkspace .density-comfortable .redesignLibraryGrid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.surveillanceWorkspace [data-duration="false"] .redesignLibraryGrid .redesignLibraryImage > time,
+.surveillanceWorkspace [data-status="false"] .redesignLibraryGrid .libraryRecognitionStatus {
+  display: none;
+}
+.surveillanceWorkspace .workPageHeading {
+  gap: 12px;
+  margin-bottom: 10px;
+  min-height: 34px;
+}
+.surveillanceWorkspace .workPageHeading h1 {
+  font-size: 15px;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.surveillanceWorkspace .workPageHeading p {
+  display: none;
+}
+.surveillanceWorkspace .workSourceSelect,
+.surveillanceWorkspace .workDateSelect {
+  height: 32px;
+  font-size: 11px;
+}
+.surveillanceWorkspace .workReviewGrid,
+.surveillanceWorkspace .workReviewGrid.hideInspector {
+  grid-template-columns: 146px minmax(0, 1fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+.surveillanceWorkspace .workReviewGrid:not(.hideInspector) {
+  grid-template-columns: 146px minmax(0, 1fr) 265px;
+}
+.surveillanceWorkspace .workReviewGrid.managingRange {
+  grid-template-columns: 146px 244px minmax(0, 1fr);
+}
+.surveillanceWorkspace .workViewingColumn {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.surveillanceWorkspace .workVideoHeading {
+  margin: 0 0 7px;
+  min-height: 28px;
+}
+.surveillanceWorkspace .workVideoHeading .workButton {
+  font-size: 11px;
+  padding: 6px 10px;
+  background: #fff;
+  color: var(--work-blue);
+  border-color: #dae5f3;
+}
+.surveillanceWorkspace .workVideoHeading strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+.surveillanceWorkspace .workVideoHeading span {
+  font-size: 10px;
+}
+.surveillanceWorkspace .workPlayer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-radius: 6px;
+  background: #07090c;
+  box-shadow: none;
+}
+.surveillanceWorkspace .workPlayerFrame {
+  flex: 1;
+  min-height: 150px;
+  aspect-ratio: auto;
+}
+.surveillanceWorkspace .workVideoStamp {
+  background: #0008;
+  left: 10px;
+  top: 10px;
+  border-radius: 3px;
+  padding: 5px 7px;
+}
+.surveillanceWorkspace .workVideoStamp span {
+  display: none;
+}
+.surveillanceWorkspace .workVideoStamp time {
+  font-size: 11px;
+}
+.surveillanceWorkspace .workPlayerControls {
+  background: #fff;
+  color: #6c7684;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 9px;
+  gap: 6px;
+  border: 1px solid var(--work-line);
+  border-top: 0;
+}
+.surveillanceWorkspace .workPlayerControls button {
+  color: #66717e;
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+}
+.surveillanceWorkspace .workPlayerControls button:hover {
+  background: #eef3f8;
+}
+.surveillanceWorkspace .workPlayerControls .workPlayButton {
+  color: #657284 !important;
+}
+.surveillanceWorkspace .workPlayerControls time {
+  color: #556273;
+  font-size: 12px;
+  background: #f4f5f6;
+  border-radius: 15px;
+  padding: 5px 10px;
+}
+.surveillanceWorkspace .workPlayerControls time small {
+  color: #66717e;
+  font-size: 10px;
+}
+.surveillanceWorkspace .workPlayerControls select {
+  background: #f4f5f6;
+  color: #576373;
+  border: 0;
+  padding: 4px;
+}
+.surveillanceWorkspace .workCenterPlay {
+  width: 52px;
+  height: 52px;
+}
+.surveillanceWorkspace .workFilmstripSection {
+  margin-top: 10px;
+  background: #fff;
+  border: 1px solid var(--work-line);
+  border-radius: 6px;
+  padding: 9px 11px 10px;
+  flex-shrink: 0;
+}
+.surveillanceWorkspace .workFilmstripSection header {
+  margin-bottom: 8px;
+}
+.surveillanceWorkspace .workFilmstripSection h2 {
+  font-size: 11px;
+  color: #657080;
+  font-weight: 500;
+}
+.surveillanceWorkspace .workFilmstripSection h2 span {
+  font-size: 9px;
+  background: #f2f4f7;
+  color: #637083;
+}
+.surveillanceWorkspace .workFilmstripSection header button {
+  font-size: 10px;
+  color: var(--work-blue);
+}
+.surveillanceWorkspace .workFilmstrip {
+  gap: 7px;
+}
+.surveillanceWorkspace .workFilmstrip > button {
+  width: 132px;
+  flex: 0 0 132px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: #fff;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.surveillanceWorkspace .workFilmstrip > button.active {
+  border-color: var(--work-blue);
+  box-shadow: 0 0 0 1px var(--work-blue);
+}
+.surveillanceWorkspace .workFilmstrip > button > div {
+  height: 82px;
+  border-radius: 3px;
+}
+.surveillanceWorkspace .workFilmstrip strong {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  color: #fff;
+  background: #172029b3;
+  padding: 3px 5px;
+  font-size: 10px;
+  border-radius: 3px;
+  margin: 0;
+}
+.surveillanceWorkspace .workFilmstrip small {
+  color: #647080;
+  font-size: 9px;
+  padding: 2px 6px;
+  margin: 3px 0;
+}
+.surveillanceWorkspace .workFilmstrip time {
+  font-size: 9px;
+}
+.surveillanceWorkspace .workFilmstrip em {
+  font-size: 8px;
+}
+.surveillanceWorkspace .workInspector {
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  border-radius: 6px;
+}
+.surveillanceWorkspace .workReviewFooter {
+  margin-top: 7px;
+  padding-top: 6px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.monitorTimeline {
+  background: #fff;
+  border: 1px solid var(--work-line);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px 8px 8px;
+  overflow: hidden;
+}
+.monitorTimeline header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: #637083;
+  font-size: 10px;
+}
+.monitorTimeline header > span {
+  font-size: 10px;
+}
+.monitorTimeline select {
+  color: #526074;
+  border: 0;
+  background: #f5f6f8;
+  border-radius: 4px;
+  min-width: 0;
+  font-size: 10px;
+  padding: 4px;
+}
+.monitorZoom {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px;
+  border-radius: 16px;
+  background: #f5f6f8;
+}
+.monitorZoom button {
+  width: 23px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: #68778c;
+}
+.monitorZoom select {
+  width: 65px;
+  text-align: center;
+}
+.monitorRuler {
+  position: relative;
+  flex: 1;
+  min-height: 160px;
+  margin: 26px 0 22px;
+  cursor: crosshair;
+  touch-action: none;
+}
+.monitorTick {
+  position: absolute;
+  left: 6px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.monitorTick time {
+  font-size: 9px;
+  color: #6d7888;
+  font-variant-numeric: tabular-nums;
+  width: 33px;
+}
+.monitorTick i {
+  width: 9px;
+  height: 1px;
+  background: #dce0e6;
+}
+.monitorCoverage {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 65px;
+  width: 14px;
+  background: #f1f3f6;
+  border-radius: 2px;
+}
+.monitorRecording {
+  position: absolute;
+  left: 65px;
+  width: 14px;
+  border: 0;
+  border-bottom: 1px solid #fff;
+  background: #add1fd;
+  padding: 0;
+  border-radius: 1px;
+}
+.monitorRecording.active,
+.monitorRecording:hover {
+  background: #218aff;
+}
+.monitorPlayhead {
+  position: absolute;
+  height: 2px;
+  left: 0;
+  right: 0;
+  background: var(--work-blue);
+  pointer-events: none;
+  z-index: 4;
+}
+.monitorPlayhead time {
+  position: absolute;
+  left: 2px;
+  top: -11px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--work-blue);
+  border-radius: 4px;
+  color: #fff;
+  padding: 4px 6px;
+  box-shadow: 0 2px 5px #0c76e533;
+}
+.monitorRange {
+  position: absolute;
+  left: 55px;
+  right: 16px;
+  border-left: 2px solid #687889;
+  border-right: 2px solid #687889;
+  background: #7daae233;
+  pointer-events: none;
+}
+.monitorRangeHandle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 22px;
+  transform: translateY(-50%);
+  border: 0;
+  background: #6f7c8c;
+  color: #fff !important;
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 5px;
+  font-size: 8px !important;
+  border-radius: 2px;
+  cursor: ns-resize !important;
+  touch-action: none;
+  z-index: 5;
+}
+.monitorRangeHandle time {
+  font-variant-numeric: tabular-nums;
+}
+.monitorTimeline footer {
+  display: grid;
+  gap: 7px;
+  text-align: center;
+}
+.monitorTimeline footer small {
+  font-size: 8px;
+  color: #697687;
+}
+.monitorTimeline footer button {
+  border: 0;
+  background: #f3f8ff;
+  color: var(--work-blue);
+  padding: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.monitorRangePanel {
+  background: #fff;
+  border: 1px solid var(--work-line);
+  border-radius: 6px;
+  padding: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+.monitorRangePanel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.monitorRangePanel h2 {
+  font-size: 12px;
+  font-weight: 500;
+  margin: 0;
+}
+.monitorPanelHint {
+  color: #647080;
+  font-size: 10px;
+  line-height: 1.6;
+  margin: 10px 0 13px;
+}
+.monitorRangeTimes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.monitorRangeTimes label {
+  font-size: 10px;
+  color: #647080;
+  background: #f6f7f9;
+  padding: 7px;
+  border-radius: 4px;
+  min-width: 0;
+}
+.monitorRangeTimes input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: #27313d;
+  padding: 7px 0;
+  font-variant-numeric: tabular-nums;
+}
+.monitorRangeTimes button {
+  border: 0;
+  background: none;
+  color: #247cd8;
+  font-size: 8px;
+  padding: 0;
+  text-align: left;
+}
+.monitorRangePanel dl {
+  margin: 14px 0;
+}
+.monitorRangePanel dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 9px;
+  font-size: 10px;
+  padding: 6px 0;
+}
+.monitorRangePanel dt {
+  color: #66717f;
+}
+.monitorRangePanel dd {
+  margin: 0;
+  color: #3e4b5d;
+  text-align: right;
+}
+.monitorRangeWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: #fff8e9;
+  padding: 9px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #936821;
+}
+.monitorRangeWarning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.monitorDownloadOptions {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.monitorDownloadOptions legend {
+  font-size: 10px;
+  color: #66717f;
+  margin-bottom: 9px;
+}
+.monitorDownloadOptions > label:not(.monitorFilename) {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+.monitorDownloadOptions input[type="radio"] {
+  accent-color: var(--work-blue);
+  margin: 1px 0 0;
+}
+.monitorDownloadOptions small {
+  display: block;
+  font-size: 9px;
+  color: #687585;
+  margin-top: 5px;
+  line-height: 1.5;
+}
+.monitorFilename {
+  font-size: 10px;
+  color: #66717f;
+  display: grid;
+  gap: 7px;
+}
+.monitorFilename input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dfe4eb;
+  background: #fff;
+  border-radius: 3px;
+  padding: 7px 8px;
+  font-size: 11px;
+}
+.monitorOriginalNote {
+  color: #697585;
+  font-size: 9px;
+  margin: 14px 0;
+}
+.monitorDownloadActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.monitorDownloadActions p {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: #287451;
+  width: 100%;
+}
+.monitorDownloadActions a {
+  text-decoration: none;
+}
+.surveillanceWorkspace .monitorDownloadActions .workButton {
+  font-size: 11px;
+  padding: 8px 10px;
+}
+.surveillanceWorkspace .monitorLibrary {
+  display: grid;
+  grid-template-columns: 214px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  height: auto;
+  overflow: visible;
+}
+.surveillanceWorkspace .redesignLibraryHeader {
+  grid-column: 2;
+  margin: 0;
+  min-height: 34px;
+  gap: 12px;
+}
+.surveillanceWorkspace .redesignLibraryHeader h1 {
+  font-size: 15px;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.surveillanceWorkspace .redesignLibraryHeader p {
+  display: none;
+}
+.surveillanceWorkspace .monitorLibraryFilters {
+  grid-column: 1;
+  grid-row: 1/3;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  background: #fff;
+  border: 1px solid var(--work-line);
+  border-radius: 6px;
+  padding: 12px;
+}
+.monitorLibraryFilters > header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #566376;
+}
+.monitorLibraryFilters > header button {
+  border: 0;
+  color: var(--work-blue);
+  font-size: 10px;
+  background: none;
+  padding: 0;
+}
+.surveillanceWorkspace .redesignLibraryToolbar {
+  display: grid;
+  gap: 10px;
+  padding: 15px 0;
+  margin: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--work-line);
+}
+.surveillanceWorkspace .redesignLibraryToolbar > *,
+.surveillanceWorkspace .libraryInlineSearch {
+  width: 100%;
+  min-width: 0;
+  border-radius: 4px;
+  height: 34px;
+}
+.surveillanceWorkspace .redesignLibraryToolbar > select {
+  width: 100%;
+}
+.surveillanceWorkspace .redesignLibraryToolbar input {
+  min-width: 0;
+  font-size: 10px;
+}
+.surveillanceWorkspace .libraryMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  gap: 12px;
+}
+.surveillanceWorkspace .libraryTagFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.surveillanceWorkspace .libraryTagFilters > span {
+  width: 100%;
+  font-size: 10px;
+  margin-bottom: 3px;
+}
+.surveillanceWorkspace .libraryMetaRow > span {
+  margin-left: 0;
+  font-size: 10px;
+}
+.monitorFilterNote {
+  font-size: 10px;
+  color: #657283;
+  line-height: 1.8;
+  margin: 15px 0 0;
+  border-top: 1px solid var(--work-line);
+  padding-top: 12px;
+}
+.surveillanceWorkspace .redesignLibraryContent {
+  grid-column: 2;
+  margin: 0;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+.surveillanceWorkspace .inspectorClosed .redesignLibraryContent {
+  grid-template-columns: minmax(0, 1fr);
+}
+.surveillanceWorkspace .redesignLibraryGrid {
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  gap: 7px;
+}
+.surveillanceWorkspace .redesignLibraryGrid .redesignLibraryCard {
+  position: relative;
+  border: 0;
+  border-radius: 4px;
+  background: #22272d;
+  box-shadow: none;
+  transform: none;
+}
+.surveillanceWorkspace .redesignLibraryGrid .redesignLibraryCard:hover {
+  box-shadow: 0 0 0 2px #8ec2ff;
+}
+.surveillanceWorkspace .redesignLibraryGrid .redesignLibraryCard.active {
+  box-shadow: 0 0 0 2px var(--work-blue);
+}
+.surveillanceWorkspace .redesignLibraryGrid .redesignLibraryImage {
+  height: auto;
+  aspect-ratio: 1.05;
+  border-radius: 4px;
+}
+.surveillanceWorkspace .redesignLibraryImage img {
+  object-fit: cover;
+}
+.surveillanceWorkspace .redesignLibraryGrid .redesignLibraryCardCopy {
+  position: absolute;
+  bottom: 7px;
+  right: 7px;
+  padding: 0;
+}
+.surveillanceWorkspace .redesignLibraryGrid .redesignLibraryCardCopy > div {
+  display: none;
+}
+.surveillanceWorkspace .redesignLibraryGrid .libraryRecognitionStatus {
+  color: #fff;
+  background: #202730ad;
+  font-size: 9px;
+  padding: 3px 5px;
+  border-radius: 3px;
+}
+.surveillanceWorkspace .redesignLibraryGrid .redesignLibraryTags {
+  display: none;
+}
+.surveillanceWorkspace .librarySelectCheck {
+  left: auto;
+  right: 7px;
+  top: 7px;
+}
+.surveillanceWorkspace .libraryTagFilters { flex: 0 0 100%; }
+.surveillanceWorkspace .libraryTagFilters > span { white-space: nowrap; }
+.surveillanceWorkspace .libraryTagFilters button { white-space: nowrap; }
+.monitorRangeHandle.rangeStart { transform: none; }
+.monitorRangeHandle.rangeEnd { transform: translateY(-100%); }
+.monitorCardLabel {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  max-width: calc(100% - 35px);
+  border-radius: 3px;
+  background: #202730ad;
+  padding: 5px 6px;
+  color: #fff;
+  font-size: 10px;
+  text-align: left;
+  font-weight: 400;
+}
+.monitorCardLabel small {
+  display: block;
+  color: #fff;
+  font-size: 9px;
+  margin-top: 3px;
+}
+.surveillanceWorkspace .redesignLibraryList .monitorCardLabel {
+  display: none;
+}
+.surveillanceWorkspace .redesignLibraryInspector {
+  border-radius: 6px;
+  display: block;
+}
+.surveillanceWorkspace .libraryBatchBar {
+  left: auto;
+}
+@media (min-width: 1600px) {
+  .surveillanceWorkspace .workReviewGrid,
+  .surveillanceWorkspace .workReviewGrid.hideInspector {
+    grid-template-columns: 154px minmax(0, 1fr);
+  }
+  .surveillanceWorkspace .workReviewGrid:not(.hideInspector) {
+    grid-template-columns: 154px minmax(0, 1fr) 280px;
+  }
+  .surveillanceWorkspace .workReviewGrid.managingRange {
+    grid-template-columns: 154px 250px minmax(0, 1fr);
+  }
+}
+@media (max-width: 1024px) {
+  .surveillanceWorkspace .workReviewGrid.managingRange {
+    grid-template-columns: 132px 224px minmax(0, 1fr);
+  }
+  .surveillanceWorkspace .workReviewGrid,
+  .surveillanceWorkspace .workReviewGrid.hideInspector {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+  .surveillanceWorkspace .workReviewGrid:not(.hideInspector) {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+  .surveillanceWorkspace .workInspector {
+    grid-column: 2;
+    max-height: 350px;
+  }
+  .surveillanceWorkspace .monitorLibrary {
+    grid-template-columns: 185px minmax(0, 1fr);
+  }
+  .surveillanceWorkspace .redesignLibraryContent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .surveillanceWorkspace .redesignLibraryInspector {
+    position: fixed;
+    top: 62px;
+    right: 14px;
+    bottom: 76px;
+    width: min(340px, calc(100vw - 28px));
+    max-height: none;
+    overflow: auto;
+    z-index: 50;
+    background: #fff;
+    box-shadow: 0 8px 32px #17263b24;
+  }
+  .surveillanceWorkspace.view-playback .workspaceMain:has(.managingRange),
+  .surveillanceWorkspace.view-playback .workspaceMain:has(.workInspector) {
+    overflow: auto;
+  }
+  .surveillanceWorkspace .workReview:has(.managingRange),
+  .surveillanceWorkspace .workReview:has(.workInspector) {
+    height: auto;
+  }
+  .surveillanceWorkspace .managingRange .workViewingColumn {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .surveillanceWorkspace .managingRange .monitorTimeline {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 540px;
+  }
+  .surveillanceWorkspace .managingRange .monitorRangePanel {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .surveillanceWorkspace .managingRange .workPlayerFrame,
+  .surveillanceWorkspace .workReviewGrid:has(.workInspector) .workPlayerFrame {
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+    flex: auto;
+  }
+}
+@media (max-width: 760px) {
+  .surveillanceWorkspace.view-playback .workspaceMain {
+    overflow: auto;
+  }
+  .surveillanceWorkspace .workReview {
+    height: auto;
+  }
+  .surveillanceWorkspace .workReviewGrid.managingRange {
+    grid-template-columns: 116px minmax(0, 1fr);
+  }
+  .surveillanceWorkspace .monitorRangePanel {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .surveillanceWorkspace .managingRange .workViewingColumn {
+    grid-column: 1 / -1;
+  }
+  .surveillanceWorkspace .workPlayerFrame {
+    aspect-ratio: 16/9;
+    min-height: 0;
+    flex: auto;
+  }
+  .surveillanceWorkspace .workReviewGrid,
+  .surveillanceWorkspace .workReviewGrid.hideInspector,
+  .surveillanceWorkspace .workReviewGrid:not(.hideInspector) {
+    grid-template-columns: 116px minmax(0, 1fr);
+  }
+  .monitorTimeline {
+    min-height: 430px;
+  }
+  .surveillanceWorkspace .workFilmstrip > button {
+    width: 108px;
+    flex-basis: 108px;
+  }
+  .surveillanceWorkspace .workFilmstrip > button > div {
+    height: 66px;
+  }
+  .surveillanceWorkspace .monitorLibrary {
+    grid-template-columns: 1fr;
+  }
+  .surveillanceWorkspace .monitorLibraryFilters {
+    grid-column: 1;
+    grid-row: 2;
+    position: static;
+  }
+  .surveillanceWorkspace .redesignLibraryHeader {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .surveillanceWorkspace .redesignLibraryContent {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .surveillanceWorkspace .redesignLibraryToolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .surveillanceWorkspace .libraryMetaRow {
+    padding-top: 8px;
+  }
+  .monitorFilterNote {
+    display: none;
+  }
+  .surveillanceWorkspace .redesignLibraryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .surveillanceWorkspace,
+  .surveillanceWorkspace.navCollapsed {
+    display: block;
+  }
+  .surveillanceWorkspace .workspaceSidebar {
+    padding: 4px 10px;
+  }
+  .surveillanceWorkspace .workspaceSidebar nav button {
+    min-height: 48px;
+  }
+  .surveillanceWorkspace .workspaceTopbar {
+    padding: 0 12px;
+  }
+  .surveillanceWorkspace .workspaceTopbar > div {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .surveillanceWorkspace .workspaceSearchTrigger {
+    width: auto;
+    min-width: 0;
+    flex: 1;
+  }
+  .surveillanceWorkspace .workspaceMain {
+    padding: 10px;
+  }
+  .surveillanceWorkspace .workPageHeading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 9px;
+  }
+  .surveillanceWorkspace .workReviewFilters {
+    width: 100%;
+    gap: 5px;
+  }
+  .surveillanceWorkspace .workSourceSelect {
+    flex: 1;
+    width: 0;
+    padding: 0 6px;
+  }
+  .surveillanceWorkspace .workSourceSelect select {
+    width: 100%;
+  }
+  .surveillanceWorkspace .workDateSelect {
+    padding: 0 5px;
+    gap: 4px;
+  }
+  .surveillanceWorkspace .workDateSelect input {
+    width: 104px;
+  }
+  .surveillanceWorkspace .workReviewGrid,
+  .surveillanceWorkspace .workReviewGrid.hideInspector,
+  .surveillanceWorkspace .workReviewGrid:not(.hideInspector),
+  .surveillanceWorkspace .workReviewGrid.managingRange {
+    display: flex;
+    flex-direction: column;
+  }
+  .surveillanceWorkspace .workViewingColumn {
+    order: 0;
+  }
+  .monitorTimeline {
+    order: 1;
+    height: 360px;
+    min-height: 360px;
+  }
+  .surveillanceWorkspace .managingRange .monitorTimeline {
+    min-height: 360px;
+  }
+  .monitorRangePanel {
+    order: 2;
+  }
+  .surveillanceWorkspace .workInspector {
+    order: 3;
+  }
+  .monitorRuler {
+    margin-left: 25%;
+    margin-right: 25%;
+  }
+  .surveillanceWorkspace .workVideoHeading span {
+    display: none;
+  }
+  .surveillanceWorkspace .workPlayerControls {
+    overflow: auto;
+    gap: 2px;
+  }
+  .surveillanceWorkspace .workPlayerControls time {
+    margin-left: 0;
+    padding: 5px;
+  }
+  .surveillanceWorkspace .workPlayerControls time small {
+    display: none;
+  }
+  .surveillanceWorkspace .workFilmstrip > button {
+    flex-basis: 112px;
+    width: 112px;
+  }
+  .surveillanceWorkspace .redesignLibraryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .surveillanceWorkspace .redesignLibraryImage {
+    min-width: 0;
+  }
+  .monitorRangeTimes input {
+    font-size: 16px;
+  }
+  .monitorRangeTimes button {
+    font-size: 11px;
+  }
+  .monitorRangeHandle {
+    min-height: 30px;
+    font-size: 10px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .monitorRangeHandle,
+  .monitorPlayhead {
+    transition: none;
+  }
+}

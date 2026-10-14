@@ -1,26 +1,18 @@
 .git
-.gitignore
-.dockerignore
-
-# Local runtime data
+old
+docs
 data
 recordings
-
-# Python local env/cache
-backend/.venv
+**/.venv
+**/node_modules
 **/__pycache__
+**/.pytest_cache
+**/.ruff_cache
 **/*.pyc
-**/*.pyo
 **/*.egg-info
-.pytest_cache
-.ruff_cache
-.mypy_cache
-
-# Frontend local deps/build output
-frontend/node_modules
+**/*.log
+.env*
 frontend/dist
-frontend/.vite
-frontend/*.tsbuildinfo
-
-# Logs
-*.log
+frontend/qa
+frontend/tests
+backend/tests
