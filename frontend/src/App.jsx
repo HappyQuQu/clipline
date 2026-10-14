@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlayCircle, SquaresFour, Stack, FolderSimple, GearSix, MagnifyingGlass, CaretRight, Plus, HardDrives, FileText, List, X, ArrowRight } from '@phosphor-icons/react';
 import { Badge, EmptyState, ExtensionSlot, IconButton, Modal, Notice, Toast } from './components/UI';
 import Review from './pages/Review';
@@ -12,6 +12,7 @@ import { initialSettings, reconcileSettings, acceptSettings, groupValues, dirtyG
 import { SETTINGS_FIELDS } from './domain';
 import ExportDialog from './components/ExportDialog';
 import SourceDialog from './components/SourceDialog';
+import TaskDialog from './components/TaskDialog';
 import { pages, queryString, request } from './api/client';
 import { bytes, clipView, dateInZone, sourceView, taskView, reviewContext } from './api/adapters';
 import { clock } from './domain';
@@ -20,8 +21,10 @@ const nav = [['review', '录像回看', PlayCircle], ['library', '片段库', Sq
 const defaults = initialSettings;
 
 export default function App() {
+  const contentRef = useRef(null);
   const [exportRange, setExportRange] = useState(null);
   const [page, setPage] = useState('review');
+  useEffect(() => { if (contentRef.current) { contentRef.current.scrollTop = 0; contentRef.current.scrollLeft = 0; } }, [page]);
   const [sources, setSources] = useState([]), [tasks, setTasks] = useState([]);
   const [configState, setConfigState] = useState({ saved: defaults, draft: defaults, revisions: {}, draftRevisions: {} });
   const settings = configState.saved;
@@ -155,7 +158,7 @@ export default function App() {
       const anchor = document.createElement('a'); anchor.href = task.result.downloadUrl; anchor.download = task.result.name; document.body.appendChild(anchor); anchor.click(); anchor.remove();
     } catch (failure) { notify(failure.message); }
   }
-  return <div className={`app-shell ${page === 'review' ? 'review-workspace' : ''}`}>
+  return <div className={`app-shell workspace-shell ${page === 'review' ? 'review-workspace' : ''}`}>
     {mobileNav && <button className="nav-backdrop" aria-label="关闭导航" onClick={() => setMobileNav(false)} />}
     <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
       <button className="brand" onClick={() => navigate('review')}><img src="/assets/clipline-logo.svg" alt="" /><span>Clipline<span className="brand-caption">你的录像，有迹可循。</span></span></button>
@@ -164,7 +167,7 @@ export default function App() {
       <div className="sidebar-bottom"><div className="storage-card"><HardDrives size={20} /><div><strong>NAS 录像目录</strong><span>{sources.length} 个目录 · {bytes(sources.reduce((sum, row) => sum + row.totalBytes, 0))}</span></div><Badge tone="blue" dot>只读</Badge></div><div className="prototype-label"><span className="status-dot" />本地录像工作台<span>{system.version ? `v${system.version}` : '读取版本…'}</span></div></div>
     </aside>
     <div className="main-shell"><header className="topbar"><div className="topbar-context"><span className="mobile-menu"><IconButton icon={mobileNav ? X : List} label="切换导航" onClick={() => setMobileNav(!mobileNav)} /></span><span className="muted">工作空间</span><CaretRight size={12} /><strong>{nav.find(row => row[0] === page)?.[1]}</strong></div><div className="topbar-right"><button className="search-trigger" aria-label="搜索录像文件" onClick={() => setSearchOpen(true)}><MagnifyingGlass size={17} /><span>搜索录像文件</span><kbd>⌘ K</kbd></button><Badge tone="blue" dot>{changeSignal === "live" ? "实时连接" : "轮询同步"}</Badge></div></header>
-      <main className="content">
+      <main className="content" ref={contentRef}>
         {error && <Notice warning>{error}<button className="text-button" onClick={() => setRefresh(value => value + 1)}>重新连接</button></Notice>}
         {loading ? <div className="panel"><EmptyState title="正在连接本地录像服务" description="读取录像源和索引…" /></div> : <>
           {page === 'review' && (source ? <>{timelineError && <Notice warning>{timelineError}</Notice>}<Review key={context} real source={source} clips={clips} clip={clip} setClipId={id => { const target = clips.find(row => row.id === id); if (target) selectClip(target); }} onSelect={selectClip} initialOffset={selection.offset} initialDetails={selection.details} timeline={visibleTimeline} onLoadMore={loadMore} loadingMore={clipPaging?.context === context} dates={dates} reviewRange={reviewRange} onReviewRangeChange={applyReviewRange} date={selection.date || dateInZone(Date.now(), timezone)} setDate={changeDate} onScan={() => scan(source.id)} scanning={tasks.some(row => row.kind === 'scan' && row.sourceId === source.id && ['queued', 'running', 'cancelling'].includes(row.status))} onExport={beginExport} exportEnabled={!!caps?.export} onLibrary={() => navigate('library')} settings={settings} notify={notify} />{!selection.date && <p role="status">正在读取录像日期…</p>}</> : <div className="panel"><EmptyState title="添加你的第一个录像源" description="从只读挂载的录像目录开始建立时间索引。" action={() => setDialog(true)} actionLabel="添加录像源" /></div>)}
@@ -179,7 +182,7 @@ export default function App() {
     </div><Toast message={toast} onClose={closeToast} />
     {exportRange && <ExportDialog range={exportRange} defaultMode={settings.defaultMode} timezone={timezone} source={sources.find(row => row.id === exportRange.sourceId)} onClose={() => setExportRange(null)} onSubmitted={id => { setExportRange(null); setTaskFocus(id); navigate("tasks"); setRefresh(value => value + 1); notify("导出已加入后台队列，可离开页面继续处理。"); }} />}
     {dialog && <SourceDialog real sources={sources} defaultInterval={settings.interval} onClose={() => setDialog(false)} onSubmit={async (row, { scanAfterAdd, key }) => { const result = await request('/sources', { method: 'POST', key, body: { name: row.name, path: row.path, scanIntervalMinutes: row.interval === 'manual' ? null : Number(row.interval), scanOnCreate: scanAfterAdd, autoTranscribe: false, autoDetect: false } }); setDialog(false); changeSource(result.source.id); setRefresh(value => value + 1); notify(result.firstTaskId ? '录像源已添加，首次扫描已加入后台队列。' : '录像源已添加。'); }} />}
-    {taskDialog && <Modal title="新建后台任务" description="扫描与索引重建在后台持续执行。播放准备从回看自动提交，导出从回看或片段库提交。" onClose={() => setTaskDialog(false)}><form onSubmit={async event => { event.preventDefault(); const result = await action('/tasks', { sourceId: source?.id, kind: taskKind }); if (result) { setTaskDialog(false); notify('任务已加入后台队列。'); } }}><label className="field">任务类型<select value={taskKind} onChange={event => setTaskKind(event.target.value)}><option value="scan">目录扫描</option><option value="reindex">索引重建</option></select></label><p>当前录像源：{source?.name || '请先选择录像源'}</p><button className="button primary" disabled={!source?.enabled}>加入后台队列</button></form></Modal>}
-    {searchOpen && <Modal title="查找录像" description="按文件名或起止时间搜索真实索引。" onClose={() => { setSearchOpen(false); setQuery(''); }}><div className="search-field large"><MagnifyingGlass size={21} /><input autoFocus aria-label="搜索录像" value={query} onChange={event => setQuery(event.target.value)} placeholder="输入文件名或 08:25…" /></div>{searchError && <Notice warning>{searchError}</Notice>}<div className="search-results">{searchLoading && <p role="status">正在查询真实录像…</p>}{results.map(row => <button key={row.id} onClick={() => openClip(row)}><img src={row.image} alt="" /><div><strong>{sources.find(item => item.id === row.sourceId)?.name} · {row.date} {clock(row.start)}</strong><span>{row.filename}</span></div><ArrowRight size={18} /></button>)}{query && !searchLoading && !results.length && !searchError && <EmptyState title="没有匹配的录像" description="调整文件名或时间后重试。" />}</div><ExtensionSlot name="search-provider" context={{ query }} /></Modal>}
+    {taskDialog && <TaskDialog source={source} kind={taskKind} setKind={setTaskKind} onClose={() => setTaskDialog(false)} onSubmit={async body => { await request('/tasks', { method: 'POST', body, key: crypto.randomUUID() }); setRefresh(value => value + 1); setTaskDialog(false); notify('任务已加入后台队列。'); }} />}
+    {searchOpen && <Modal title="查找录像" footer={<button type="button" className="button secondary" onClick={() => { setSearchOpen(false); setQuery(''); }}>关闭</button>} description="按文件名或起止时间搜索真实索引。" onClose={() => { setSearchOpen(false); setQuery(''); }}><div className="search-field large"><MagnifyingGlass size={21} /><input autoFocus aria-label="搜索录像" value={query} onChange={event => setQuery(event.target.value)} placeholder="输入文件名或 08:25…" /></div>{searchError && <Notice warning>{searchError}</Notice>}<div className="search-results">{searchLoading && <p role="status">正在查询真实录像…</p>}{results.map(row => <button key={row.id} onClick={() => openClip(row)}><img src={row.image} alt="" /><div><strong>{sources.find(item => item.id === row.sourceId)?.name} · {row.date} {clock(row.start)}</strong><span>{row.filename}</span></div><ArrowRight size={18} /></button>)}{query && !searchLoading && !results.length && !searchError && <EmptyState title="没有匹配的录像" description="调整文件名或时间后重试。" />}</div><ExtensionSlot name="search-provider" context={{ query }} /></Modal>}
   </div>;
 }

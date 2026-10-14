@@ -35,6 +35,6 @@ export default function PlaybackDetails({ clip, source, onClose, onManage, onExp
   const actions = <div className="inspector-actions"><button className="button primary full" disabled={!exportEnabled} onClick={() => onExport({ sourceId: source.id, date: exportDate || clip.date, ...(clip.real ? { startAt: clip.startAt, endAt: clip.endAt } : { start: clip.start, end: clip.end }), clipIds: [clip.id] })}><DownloadSimple size={17} />导出这个片段</button><button className="button secondary full" onClick={onWatch || onManage}><Scissors size={17} />{onWatch ? '在时间线中回看' : '在时间轴中截取'}</button><p>{clip.real ? '文件信息来自真实索引，原始录像只读，导出在后台处理。' : '文件信息为示例数据，原始录像只读。'}</p></div>;
   const scrollContent = <div className="inspector-scroll" ref={scrollRef} role="region" aria-label="片段详情内容" tabIndex={0}>{content}</div>;
 
-  if (drawer) return <Modal title="片段详情" className="playback-details-drawer" onClose={onClose}>{scrollContent}{actions}</Modal>;
+  if (drawer) return <Modal title="片段详情" className="playback-details-drawer" onClose={onClose} scrollKey={clip.id} footer={actions}>{content}</Modal>;
   return <aside className="review-inspector panel" aria-label="片段详情"><header className="inspector-heading"><h2><FilmStrip size={18} />片段详情</h2><IconButton icon={X} label="关闭片段详情" onClick={onClose} /></header>{scrollContent}{actions}</aside>;
 }

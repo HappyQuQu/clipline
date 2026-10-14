@@ -24,7 +24,7 @@ export default function ExportDialog({ range, timezone, source, defaultMode = 'f
     return () => { clearTimeout(timer); controller.abort(); };
   }, [range, timezone, mode, name]);
   async function submit(event) {
-    event.preventDefault(); if (!preview || loading || busy) return;
+    event.preventDefault(); if (!preview || loading || busy || !name.trim()) return;
     setBusy(true); setError('');
     const body = { ...preview.body, planHash: preview.plan.planHash };
     const encoded = JSON.stringify(body);
@@ -33,8 +33,7 @@ export default function ExportDialog({ range, timezone, source, defaultMode = 'f
     catch (failure) { if (mounted.current) { setError(failure.message); setBusy(false); } }
   }
   const format = at => new Date(at).toLocaleString('zh-CN', { timeZone: timezone, hour12: false });
-  return <Modal title="导出录像" description="提交后在后台处理，可继续回看。完成后从任务中心下载。" onClose={onClose}>
-    <form onSubmit={submit}>
+  return <Modal title="导出录像" description="提交后在后台处理，可继续回看。完成后从任务中心下载。" onClose={onClose} busy={busy} form={{ onSubmit: submit }} footer={<><button type="button" className="button secondary" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={loading || !preview || busy || !name.trim()}><DownloadSimple size={17} />{busy ? '正在提交…' : '加入导出队列'}</button></>}>
       <p>{source?.name} · {range.date}</p>
       <label className="field">导出文件名<input value={name} maxLength={100} required disabled={busy} onChange={event => setName(event.target.value)} /></label>
       <label className="field">导出模式<select aria-label="导出模式" value={mode} disabled={busy} onChange={event => setMode(event.target.value)}><option value="fast">快速 · 保留原编码</option><option value="precise">精准 · 按区间重新编码</option></select></label>
@@ -42,7 +41,5 @@ export default function ExportDialog({ range, timezone, source, defaultMode = 'f
       {loading && <p role="status">正在核对真实录像区间…</p>}
       {preview && !loading && <section className="export-plan"><p>{format(preview.plan.startAt)} → {format(preview.plan.endAt)}</p><dl><div><dt>实际录像</dt><dd>{duration(preview.plan.selectedCoverageMs / 1000)}</dd></div><div><dt>包含片段</dt><dd>{preview.plan.pieceCount} 个</dd></div><div><dt>无录像断档</dt><dd>{duration(preview.plan.unrecordedMs / 1000)}</dd></div><div><dt>未选中录像</dt><dd>{duration(preview.plan.omittedMs / 1000)}</dd></div></dl><p className="muted">断档和未选中区间会跳过，拼接后连续播放。跨午夜文件仅导出当前日期的部分。</p></section>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="modal-actions"><button type="button" className="button secondary" disabled={busy} onClick={onClose}>取消</button><button className="button primary" disabled={loading || !preview || busy}><DownloadSimple size={17} />{busy ? '正在提交…' : '加入导出队列'}</button></div>
-    </form>
   </Modal>;
 }

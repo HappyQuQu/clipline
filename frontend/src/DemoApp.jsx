@@ -191,7 +191,7 @@ function ExportDialog({ range, sources, onClose, onSubmit, maxDuration }) {
   const relevant = demoClips.filter(c => c.sourceId === range.sourceId && c.date === range.date && (!range.clipIds || range.clipIds.includes(c.id)));
   const summary = summarizeRange(relevant, seconds(start), seconds(end));
   const withinLimit = seconds(end) - seconds(start) <= maxDuration;
-  return <Modal title="导出录像区间" description="确认时间范围，创建一个后台导出任务。" onClose={onClose}><form onSubmit={e => { e.preventDefault(); if (summary.valid && withinLimit) onSubmit({ ...range, name: name.trim(), start: seconds(start), end: seconds(end), mode }); }}>
+  return <Modal title="导出录像区间" description="确认时间范围，创建一个后台导出任务。" onClose={onClose} form={{ onSubmit: e => { e.preventDefault(); if (summary.valid && withinLimit) onSubmit({ ...range, name: name.trim(), start: seconds(start), end: seconds(end), mode }); } }} footer={<><button className="button secondary" type="button" onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={!summary.valid || !withinLimit || !name.trim()}><DownloadSimple size={17} />创建导出任务</button></>}>
     <div className="export-source"><img src={source?.image} alt="" /><div><strong>{source?.name}</strong><span>{range.date} · {summary.clips.length} 个片段</span></div><Badge>MP4</Badge></div>
     <label className="field">文件名称<input value={name} onChange={e => setName(e.target.value)} required maxLength={100} /><small>下载示例视频时会使用演示文件名。</small></label>
     <div className="field-row"><label className="field">开始时间<input type="time" step="1" required value={start} onInput={e => setStart(e.currentTarget.value)} onChange={e => setStart(e.target.value)} /></label><label className="field">结束时间<input type="time" step="1" required value={end} onInput={e => setEnd(e.currentTarget.value)} onChange={e => setEnd(e.target.value)} /></label></div>
@@ -200,18 +200,16 @@ function ExportDialog({ range, sources, onClose, onSubmit, maxDuration }) {
     {summary.gap > 0 && <Notice warning>所选区间有 {duration(summary.gap)} 无录像，导出将跳过这些时间。</Notice>}
     {(!summary.valid || !withinLimit) && <Notice warning>{!withinLimit ? `单次导出范围不能超过 ${maxDuration / 60} 分钟。` : summary.message}</Notice>}
     <p className="demo-note">原型模拟任务进度，下载为 60 秒示例视频；正式版将接入 FFmpeg 区间拼接。</p>
-    <div className="modal-footer"><button className="button secondary" type="button" onClick={onClose}>取消</button><button className="button primary" disabled={!summary.valid || !withinLimit || !name.trim()}><DownloadSimple size={17} />创建导出任务</button></div>
-  </form></Modal>;
+  </Modal>;
 }
 
 function BackgroundTaskDialog({ sources, onClose, onSubmit }) {
   const [kind, setKind] = useState('scan');
   const [sourceId, setSourceId] = useState(sources.find(source => source.enabled)?.id || '');
-  return <Modal title="新建后台任务" description="提交后可以继续操作，在任务中心查看结果。" onClose={onClose}><form onSubmit={event => { event.preventDefault(); onSubmit({ kind, sourceId }); }}>
+  return <Modal title="新建后台任务" description="提交后可以继续操作，在任务中心查看结果。" onClose={onClose} form={{ onSubmit: event => { event.preventDefault(); onSubmit({ kind, sourceId }); } }} footer={<><button className="button secondary" type="button" onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={!sourceId}><Plus size={17} />加入后台队列</button></>}>
     <label className="field">任务类型<select aria-label="后台任务类型" value={kind} onChange={event => setKind(event.target.value)}>{Object.entries(TASK_TYPES).filter(([id]) => id !== 'export').map(([id, config]) => <option key={id} value={id}>{config.label}</option>)}</select></label>
     <p className="background-task-description">{TASK_TYPES[kind].description}</p>
     <label className="field">录像源<select aria-label="后台任务录像源" value={sourceId} onChange={event => setSourceId(event.target.value)}>{!sourceId && <option value="">暂无启用的录像源</option>}{sources.map(source => <option key={source.id} value={source.id} disabled={!source.enabled}>{source.name}{!source.enabled ? ' · 已停用' : ''}</option>)}</select></label>
     <p className="demo-note">原型演示排队、进度与日志，不读取真实目录或执行转码。录像导出请在回看或片段库中选定时间范围后提交。</p>
-    <div className="modal-footer"><button className="button secondary" type="button" onClick={onClose}>取消</button><button className="button primary" disabled={!sourceId}><Plus size={17} />加入后台队列</button></div>
-  </form></Modal>;
+  </Modal>;
 }

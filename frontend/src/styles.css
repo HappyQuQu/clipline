@@ -4340,6 +4340,93 @@ td {
 .playback-details-drawer .modal-content{height:100%;display:flex;flex-direction:column;min-height:0}
 .playback-details-drawer .modal-heading,.playback-details-drawer .inspector-actions{flex-shrink:0}
 .playback-details-drawer .inspector-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c7d2e0 transparent}
+
+/* Shared workspace scrolling and visible page actions. */
+.workspace-shell .main-shell{height:100dvh;display:flex;flex-direction:column;min-height:0}
+.workspace-shell .topbar{flex:0 0 70px;min-height:70px;background:#fff}
+.workspace-shell .content{flex:1;min-height:0;padding:16px 24px 24px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c7d2e0 transparent}
+.workspace-shell .app-footer{flex-shrink:0;padding:12px 24px}
+.workspace-shell .sidebar{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c7d2e0 transparent}
+.workspace-shell .sidebar>*{flex-shrink:0}
+.workspace-shell .page-heading{position:sticky;top:0;z-index:10;background:#f6f7f8;padding:0 0 16px;margin-bottom:16px;gap:16px;border-bottom:1px solid #e8ebef}
+.workspace-shell .page-heading>div:first-child{min-width:0}
+.workspace-shell .heading-actions{justify-content:flex-end;flex-shrink:0;padding-top:0}
+.workspace-shell .optimized-settings .settings-nav{top:calc(var(--page-heading-height,120px) + 12px);max-height:calc(100dvh - var(--page-heading-height,120px) - 140px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c7d2e0 transparent}
+.workspace-shell .optimized-settings .settings-nav>button{flex-shrink:0}
+.workspace-shell .settings-save-bar{bottom:0}
+.workspace-shell .library-page:has(.batch-bar){padding-bottom:120px}
+.workspace-shell:not(.review-workspace) .review-inspector{position:sticky;top:calc(var(--page-heading-height,120px) + 12px);height:calc(100dvh - var(--page-heading-height,120px) - 160px);min-height:250px;max-height:none;display:flex;flex-direction:column;overflow:hidden}
+.workspace-shell:not(.review-workspace) .review-inspector .inspector-heading,.workspace-shell:not(.review-workspace) .review-inspector .inspector-actions{flex-shrink:0}
+.workspace-shell:not(.review-workspace) .review-inspector .inspector-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c7d2e0 transparent}
+@media(min-width:1100px) and (min-height:650px){.workspace-shell.review-workspace .content{overflow:hidden;padding-bottom:16px}}
+@media(max-width:768px){
+  .workspace-shell .topbar{flex-basis:60px;min-height:60px}
+  .workspace-shell .content{padding:14px 18px 22px}
+  .workspace-shell .app-footer{padding:10px 18px}
+  .workspace-shell .page-heading{flex-direction:column;align-items:stretch;gap:12px;padding-bottom:13px}
+  .workspace-shell .heading-actions{justify-content:flex-start;width:100%;gap:8px}
+  .workspace-shell .heading-actions>.button{min-width:0;white-space:normal;min-height:38px;font-size:12px;padding:0 12px;gap:7px}
+  .workspace-shell .heading-actions>.button>svg{display:block;width:16px;height:16px;flex-shrink:0}
+  .workspace-shell .optimized-settings .settings-nav{position:static;max-height:none}
+  .workspace-shell .settings-save-actions .button{font-size:12px;min-height:38px;height:auto;padding:8px 10px}
+  .workspace-shell .library-page:has(.batch-bar){padding-bottom:170px}
+}
+
+/* Every dialog keeps its heading and actions outside the scrollable body. */
+.modal{max-height:calc(100dvh - 32px);width:min(560px,calc(100vw - 24px));overflow:hidden}
+.modal .modal-content{display:flex;flex-direction:column;min-height:0;max-height:calc(100dvh - 34px);padding:0}
+.modal-form{display:flex;flex-direction:column;min-height:0;max-height:inherit;margin:0}
+.modal .modal-heading{flex-shrink:0;padding:22px 24px 18px;margin:0;border-bottom:1px solid var(--line);gap:16px}
+.modal .modal-heading>div{min-width:0}
+.modal .modal-heading .icon-button{flex-shrink:0;margin:0}
+.modal-body{flex:1;min-height:0;padding:20px 24px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c7d2e0 transparent}
+.modal-fields{min-width:0;margin:0;padding:0;border:0}
+.modal-actions{flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:16px 24px;border-top:1px solid var(--line);background:#fff;margin:0}
+.modal-actions>.button{min-height:40px;min-width:78px;height:auto;padding:10px 16px;gap:8px;justify-content:center;line-height:1.5;white-space:normal}
+.modal-actions>.button svg{flex-shrink:0}
+.modal-actions>.inspector-actions{width:100%;border:0;padding:0;margin:0}
+.modal-body .log-json{max-height:none;overflow:visible;overflow-wrap:anywhere;white-space:pre-wrap}
+.modal-body .source-directory-list{max-height:none;overflow:visible}
+.modal-body .search-results>button{min-width:0}
+.modal-body .search-results strong{overflow-wrap:anywhere}
+.modal-body .background-task-description{font-size:12px;line-height:1.8;margin:14px 0}
+.modal-fields>p,.export-plan>p{font-size:12px;line-height:1.8;overflow-wrap:anywhere}
+.modal-fields>p:first-child{margin-bottom:14px}
+.export-plan{margin-bottom:0}
+.modal.playback-details-drawer{width:min(360px,calc(100vw - 12px));height:100dvh;max-height:100dvh}
+.playback-details-drawer .modal-content{height:100%;max-height:100%;padding:0}
+.playback-details-drawer .modal-heading{padding:20px 18px 16px;margin:0}
+.playback-details-drawer .modal-body{padding:18px}
+.playback-details-drawer .modal-actions{padding:14px 18px}
+.recording-range-dialog{display:flex;flex-direction:column;overflow:hidden;padding:0}
+.recording-range-dialog>header{flex-shrink:0;padding:18px 20px 14px;margin:0;border-bottom:1px solid var(--line)}
+.range-picker-body{min-height:0;overflow-y:auto;padding:16px 20px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c7d2e0 transparent}
+.recording-range-dialog>footer{flex-shrink:0;padding:12px 20px;gap:10px;flex-wrap:wrap}
+.recording-range-dialog footer>div{margin-left:auto;gap:8px}
+@media(max-width:768px){
+  .modal .modal-heading{padding:18px 18px 14px}
+  .modal-body{padding:16px 18px}
+  .modal-actions{padding:14px 18px;gap:10px}
+  .modal-actions>.button{flex:1;min-width:0;font-size:12px}
+  .recording-range-dialog{padding:0}
+  .recording-range-dialog>header{padding:15px 16px 12px}
+  .range-picker-body{padding:14px 16px}
+  .recording-range-dialog>footer{padding:12px 16px}
+}
+@media(max-width:1100px){
+  .workspace-shell .task-table{display:block;min-width:0;width:100%;border-spacing:0}
+  .workspace-shell .task-table thead{display:none}
+  .workspace-shell .task-table tbody{display:grid;gap:12px}
+  .workspace-shell .task-table tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+  .workspace-shell .task-table tbody td{display:block;min-width:0;border:0;padding:12px;text-align:left;overflow-wrap:anywhere}
+  .workspace-shell .task-table tbody td:first-child,.workspace-shell .task-table tbody td:nth-child(4),.workspace-shell .task-table tbody td:last-child{grid-column:1/-1}
+  .workspace-shell .task-table tbody td:nth-child(2):before{content:'录像源';display:block;font-size:10px;color:var(--muted);margin-bottom:6px}
+  .workspace-shell .task-table tbody td:nth-child(3):before{content:'状态与进度';display:block;font-size:10px;color:var(--muted);margin-bottom:6px}
+  .workspace-shell .task-table tbody td:nth-child(4):before{content:'创建时间';display:block;font-size:10px;color:var(--muted);margin-bottom:6px}
+  .workspace-shell .task-table tbody td:last-child{border-top:1px solid var(--line)}
+  .workspace-shell .task-table .task-name strong{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+  .workspace-shell .task-table .task-row-actions{flex-direction:row;justify-content:flex-start;align-items:center;flex-wrap:wrap}
+}
 @media(min-width:1100px) and (max-width:1300px) and (min-height:650px){
   .review-workspace .unifi-review-layout.managing{grid-template-columns:138px 230px minmax(0,1fr)}
   .review-workspace .managing .range-panel{padding:20px 16px}
