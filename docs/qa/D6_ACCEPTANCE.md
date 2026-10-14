@@ -185,3 +185,23 @@ Ubuntu amd64/arm64 原生 runner 验收不使用 QEMU；本地 ARM64 Docker VM �
 - 实测发现请求在 `response.json()` 读取期间中止会被误报为“服务返回了无效响应”，修正为保留 `AbortError`，正常错误 JSON 仍报告 `INVALID_RESPONSE`。新增中止正文读取/部分 JSON/真正无效 JSON 回归用例，前端 36 项测试通过；新版本 Docker 构建与健康检查通过，重试操作期间未再出现该误报。
 - 最终浏览器保留失败重试的成功结果、执行关联记录和下载操作；证据为 `data/qa/merge-fast-completed.png`、`data/qa/merge-cancelled.png`、`data/qa/merge-retry-progress.png`、`data/qa/merge-controlled-failure.png`、`data/qa/merge-retry-verified.png`。测试任务以 `QA_Merge_20261014_*` 命名；受控失败记录作为测试证据保留。
 - 最终容器数据库、Worker、存储 readiness 正常，录像映射为只读，二期识别继续占位。本次没有 NAS 重部署、双架构重验或正式版本发布。
+
+## 导出处理中重启 Docker 的真实恢复回归（2026-10-14）
+
+仅重启本地 `clipline` 服务容器，保持 `/Volumes/extended/clipline:ro` 与既有数据卷，不重启 Docker Desktop、其他容器或 NAS。测试使用两段真实录像的 09:35:38–09:35:58 精准合并（20 秒、4K、H.264/AAC）。预跑任务 `b55ac1a4-9b0e-4893-96f2-2417cea0b525` 在容器停止前已完成，未计入恢复验收；随后另建下面的测试任务，并在服务端确认仍处于转码阶段时立即执行重启。
+
+实际恢复任务 ID：`11b88050-8fc8-4cfb-9a5d-77e56ff02e94`，名称 `QA_Restart_20261014_active.mp4`。整个测试只创建一个该名称/计划的任务。
+
+| 中断点 | 操作与结果 |
+| --- | --- |
+| 第一次执行，精准裁剪 12%，已输出时间 2360ms | `docker compose --env-file deploy/local-test.env.example restart --timeout 15 clipline`；原执行记为 `shutdown`，同一 ID 自动重新排队并开始第二次执行 |
+| 第二次执行，精准裁剪 12% | 同一服务 `restart --timeout 0`；模拟未能优雅退出，原执行记为 `interrupted`，`recoveryCount=1`，同一 ID 自动开始第三次执行 |
+| 第三次执行完成 | `attemptNo=3`、`progress=100`，前两次记录保留，最终状态为 `completed`；没有人工重试或另建恢复任务 |
+
+- 每次重启后，重放最初的相同幂等键返回原 ID；使用新幂等键提交同一个正在处理的导出计划也返回原 ID（`reused=true`）。完成后再次重放原键仍返回原 ID。
+- SQLite 只读核对：该测试名称下任务数为 **1**，`export` Artifact 数为 **1**，发布目录中该任务 MP4 数为 **1**，`TASK_COMPLETED` 事件为 **1**；`TASK_RUNNING` 为 3，对应三个执行记录，不是三个导出任务。正常重排队和崩溃恢复事件各 1 次。
+- 网页在整个重启过程中保持打开，重连后可显示同一任务第二次执行、裁剪进度和最终完成；日志中重排队、恢复、检查、裁剪、拼接、校验、发布和完成均关联同一任务 ID。恢复会重新处理未完成的裁剪步骤，进度按新执行重新计数；不是从任意帧断点续编，最终只发布一个结果。
+- 从任务中心实际下载 `/Users/qu/Downloads/QA_Restart_20261014_active.mp4`：20.000000 秒，3840×2160、25fps、500 帧，音视频时长均 20 秒，23,591,447 字节。SHA-256 为 `70202ee01cfc914d6976e855bbfb5196ed2ef3fe788f20c668e858fe34bbc869`，与任务及发布文件一致，全程解码无错误。
+- 下载 HEAD 返回 200、正确 Content-Length；字节范围请求返回 206，`bytes 0-1023/23591447` 的内容与已下载文件一致。没有因为下载或请求重放创建额外任务。
+- 正常停止的临时目录已清理；强制停止留下的旧执行 `part-0000.nut` 和进度文件仍在隔离的临时目录，按现有 3600 秒保留期由维护清理，不登记为下载资源。未提前删除文件，也未把尚未经过保留期的自动清理计为本次通过项目。
+- 证据保存在忽略目录 `data/qa/restart-active-evidence.json`、`restart-active-before-1.json`、`restart-active-before-2.json`、`restart-active-verification.json`、`restart-graceful-recovered.png`、`restart-active-completed.png`。最终容器健康，数据库、Worker、存储 readiness 通过；二期识别保持占位。本次不改业务代码，只记录真实恢复验收，不重新执行历史 NAS/双架构发布检查。
