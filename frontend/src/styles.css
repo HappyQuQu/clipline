@@ -430,8 +430,9 @@ kbd {
 
 .content {
   padding:29px 32px 42px;
-  max-width:1760px;
-  margin:0 auto
+  width:100%;
+  max-width:none;
+  margin:0
 }
 
 .app-footer {
@@ -3848,18 +3849,18 @@ td {
 .unifi-viewing-column .video-stage:fullscreen{height:100vh}
 .unifi-viewing-column .player-controls{height:40px}
 .unifi-viewing-column .player-caption{min-height:30px}
-.unifi-viewing-column .clip-section{margin:0;background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px}
-.unifi-viewing-column .clip-section .section-heading{margin-bottom:10px}
-.unifi-viewing-column .clip-section h2{font-size:11px;font-weight:500;color:#647080}
-.unifi-viewing-column .clip-section .text-button{font-size:10px}
-.unifi-viewing-column .clip-strip{display:flex;gap:9px;overflow-x:auto;padding:2px 1px 5px}
-.unifi-viewing-column .strip-card{width:128px;flex:0 0 128px;min-width:0;border:1px solid transparent;border-radius:4px}
-.unifi-viewing-column .strip-card.selected{border-color:var(--primary)}
-.unifi-viewing-column .clip-image{height:74px;aspect-ratio:auto;border-radius:3px;border-width:0}
-.unifi-viewing-column .strip-card.selected .clip-image{border:0;box-shadow:none}
-.unifi-viewing-column .strip-card>strong{font-size:10px;margin:7px 6px 0}
-.unifi-viewing-column .strip-card>span{font-size:8px;margin:5px 6px 6px}
-.unifi-viewing-column .clip-image>.now-playing{font-size:7px;padding:3px}
+.unifi-review-layout .clip-section{margin:0;background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px}
+.unifi-review-layout .clip-section .section-heading{margin-bottom:10px}
+.unifi-review-layout .clip-section h2{font-size:11px;font-weight:500;color:#647080}
+.unifi-review-layout .clip-section .text-button{font-size:10px}
+.unifi-review-layout .clip-strip{display:flex;gap:9px;overflow-x:auto;padding:2px 1px 5px}
+.unifi-review-layout .strip-card{width:128px;flex:0 0 128px;min-width:0;border:1px solid transparent;border-radius:4px}
+.unifi-review-layout .strip-card.selected{border-color:var(--primary)}
+.unifi-review-layout .clip-image{height:74px;aspect-ratio:auto;border-radius:3px;border-width:0}
+.unifi-review-layout .strip-card.selected .clip-image{border:0;box-shadow:none}
+.unifi-review-layout .strip-card>strong{font-size:10px;margin:7px 6px 0}
+.unifi-review-layout .strip-card>span{font-size:8px;margin:5px 6px 6px}
+.unifi-review-layout .clip-image>.now-playing{font-size:7px;padding:3px}
 .unifi-viewing-column .static-preview{top:auto;bottom:16px;left:16px;right:auto;max-width:380px;align-items:flex-start;padding:10px 13px;gap:4px;text-align:left;background:#172029cf;border-color:#ffffff1a}
 .unifi-viewing-column .static-preview>svg{display:none}
 .unifi-viewing-column .static-preview strong{font-size:11px}
@@ -3899,7 +3900,7 @@ td {
 .rail-footer>button:hover,.rail-footer>button.active{background:#e7f1ff}
 @media(max-width:1300px) and (min-width:769px){.review-page .unifi-review-layout.managing{grid-template-columns:154px minmax(0,1fr)}.managing .unifi-viewing-column{grid-column:1/-1;grid-row:1}.managing .vertical-timeline{grid-column:1;grid-row:2;min-height:550px}.managing .range-panel{grid-column:2;grid-row:2;padding:22px}.camera-resolution{display:none}}
 @media(max-width:1000px) and (min-width:769px){.review-page .unifi-review-layout{grid-template-columns:138px minmax(0,1fr);gap:12px}.unifi-viewing-column .video-stage{height:clamp(300px,calc(100dvh - 375px),560px)}.vertical-timeline{padding:10px 7px}.rail-heading h2{font-size:8px}.rail-heading select{width:51px}.unifi-camera-heading .button.quiet{font-size:0;gap:0;padding:0 5px}.unifi-camera-heading .button.quiet svg{width:16px}.rail-tick{left:47px}.rail-tick.major{left:43px}.rail-coverage,.rail-recording{left:60px}}
-@media(max-width:768px){.review-page .unifi-review-layout,.review-page .unifi-review-layout.managing{grid-template-columns:122px minmax(0,1fr);gap:13px}.unifi-viewing-column,.managing .unifi-viewing-column{grid-column:1/-1;grid-row:1}.vertical-timeline,.managing .vertical-timeline{grid-column:1;grid-row:2;min-height:450px}.review-page .unifi-review-layout:not(.managing) .vertical-timeline{grid-column:1/-1;min-height:370px;max-width:none}.review-page .unifi-review-layout:not(.managing) .rail-ruler{min-height:280px}.review-page .unifi-review-layout:not(.managing) .rail-date{max-width:220px}.review-page .unifi-review-layout:not(.managing) .rail-heading,.review-page .unifi-review-layout:not(.managing) .rail-zoom{max-width:220px}.review-page .unifi-review-layout:not(.managing) .rail-coverage,.review-page .unifi-review-layout:not(.managing) .rail-recording{left:calc(50% - 7px)}.review-page .unifi-review-layout:not(.managing) .rail-tick{left:calc(50% - 20px)}.review-page .unifi-review-layout:not(.managing) .rail-tick.major{left:calc(50% - 24px)}.unifi-viewing-column .video-stage{height:auto;aspect-ratio:16/9;min-height:0}.unifi-camera-heading{gap:7px}.unifi-camera-heading .source-select{gap:5px}.unifi-camera-heading .source-select select{font-size:11px;width:86px;max-width:96px}.camera-resolution{display:none}.unifi-camera-heading .button.quiet{font-size:0;gap:0;padding:0 5px}.unifi-camera-heading .button.secondary{font-size:10px;height:32px;padding:0 8px}.unifi-camera-heading>div:last-child{gap:5px}.unifi-viewing-column .clip-section{padding:11px 10px}.unifi-viewing-column .clip-section .text-button{font-size:9px}.unifi-viewing-column .strip-card{width:108px;flex-basis:108px}.unifi-viewing-column .clip-image{height:64px}.unifi-viewing-column .static-preview{max-width:calc(100% - 25px);left:10px;bottom:28px;right:10px;padding:8px 10px}.unifi-viewing-column .static-preview span{font-size:8px}.vertical-timeline{padding:10px 6px}.rail-date{gap:0}.rail-date .icon-button{width:15px}.rail-date input[type=date]{font-size:9px}.rail-heading{gap:2px}.rail-heading h2{font-size:8px}.rail-heading select{width:50px;font-size:8px;padding-left:3px}.rail-zoom .icon-button{width:20px;min-height:26px;height:26px}.rail-zoom select{font-size:9px;max-width:62px;padding-left:0;padding-right:11px}.rail-ruler{min-height:300px;margin:26px 0 30px}.rail-tick{left:43px}.rail-tick.major{left:39px}.rail-tick time{font-size:8px;right:11px}.rail-coverage,.rail-recording{left:56px;width:12px}.rail-playhead time{font-size:10px}.rail-range{left:47px;right:9px}.rail-range-handle{height:24px;font-size:7px;padding:0 3px}.rail-range-handle time{font-size:8px}.managing .range-panel{grid-column:2;grid-row:2;display:flex;padding:15px 10px}.managing .range-panel .section-heading h2{font-size:12px}.managing .range-panel .section-description{font-size:9px;margin-top:9px;margin-bottom:17px}.managing .range-panel .time-input{flex-wrap:wrap;gap:5px;min-height:58px;height:auto;padding:5px 7px}.managing .range-panel .time-input>input[type=time]{width:90px;font-size:11px;flex:1}.managing .range-panel .time-input>.text-button{width:100%;justify-content:flex-end;font-size:8px;min-height:18px}.managing .range-panel .range-facts{display:grid;grid-template-columns:1fr;gap:14px;margin-top:3px;padding-top:13px}.managing .range-panel .range-facts>div{padding:0}.managing .range-panel .range-facts strong{font-size:20px}.managing .range-panel .button.primary{height:39px;font-size:10px;padding:0 8px;gap:4px;white-space:normal;line-height:1.5}.managing .range-panel .button.primary svg:last-child{display:none}.managing .range-panel .range-hint{font-size:8px}.rail-footer>span{font-size:7px}.rail-footer>button{min-height:38px;font-size:9px}}
+@media(max-width:768px){.review-page .unifi-review-layout,.review-page .unifi-review-layout.managing{grid-template-columns:122px minmax(0,1fr);gap:13px}.unifi-viewing-column,.managing .unifi-viewing-column{grid-column:1/-1;grid-row:1}.vertical-timeline,.managing .vertical-timeline{grid-column:1;grid-row:2;min-height:450px}.review-page .unifi-review-layout:not(.managing) .vertical-timeline{grid-column:1/-1;min-height:370px;max-width:none}.review-page .unifi-review-layout:not(.managing) .rail-ruler{min-height:280px}.review-page .unifi-review-layout:not(.managing) .rail-date{max-width:220px}.review-page .unifi-review-layout:not(.managing) .rail-heading,.review-page .unifi-review-layout:not(.managing) .rail-zoom{max-width:220px}.review-page .unifi-review-layout:not(.managing) .rail-coverage,.review-page .unifi-review-layout:not(.managing) .rail-recording{left:calc(50% - 7px)}.review-page .unifi-review-layout:not(.managing) .rail-tick{left:calc(50% - 20px)}.review-page .unifi-review-layout:not(.managing) .rail-tick.major{left:calc(50% - 24px)}.unifi-viewing-column .video-stage{height:auto;aspect-ratio:16/9;min-height:0}.unifi-camera-heading{gap:7px}.unifi-camera-heading .source-select{gap:5px}.unifi-camera-heading .source-select select{font-size:11px;width:86px;max-width:96px}.camera-resolution{display:none}.unifi-camera-heading .button.quiet{font-size:0;gap:0;padding:0 5px}.unifi-camera-heading .button.secondary{font-size:10px;height:32px;padding:0 8px}.unifi-camera-heading>div:last-child{gap:5px}.unifi-review-layout .clip-section{padding:11px 10px}.unifi-review-layout .clip-section .text-button{font-size:9px}.unifi-review-layout .strip-card{width:108px;flex-basis:108px}.unifi-review-layout .clip-image{height:64px}.unifi-viewing-column .static-preview{max-width:calc(100% - 25px);left:10px;bottom:28px;right:10px;padding:8px 10px}.unifi-viewing-column .static-preview span{font-size:8px}.vertical-timeline{padding:10px 6px}.rail-date{gap:0}.rail-date .icon-button{width:15px}.rail-date input[type=date]{font-size:9px}.rail-heading{gap:2px}.rail-heading h2{font-size:8px}.rail-heading select{width:50px;font-size:8px;padding-left:3px}.rail-zoom .icon-button{width:20px;min-height:26px;height:26px}.rail-zoom select{font-size:9px;max-width:62px;padding-left:0;padding-right:11px}.rail-ruler{min-height:300px;margin:26px 0 30px}.rail-tick{left:43px}.rail-tick.major{left:39px}.rail-tick time{font-size:8px;right:11px}.rail-coverage,.rail-recording{left:56px;width:12px}.rail-playhead time{font-size:10px}.rail-range{left:47px;right:9px}.rail-range-handle{height:24px;font-size:7px;padding:0 3px}.rail-range-handle time{font-size:8px}.managing .range-panel{grid-column:2;grid-row:2;display:flex;padding:15px 10px}.managing .range-panel .section-heading h2{font-size:12px}.managing .range-panel .section-description{font-size:9px;margin-top:9px;margin-bottom:17px}.managing .range-panel .time-input{flex-wrap:wrap;gap:5px;min-height:58px;height:auto;padding:5px 7px}.managing .range-panel .time-input>input[type=time]{width:90px;font-size:11px;flex:1}.managing .range-panel .time-input>.text-button{width:100%;justify-content:flex-end;font-size:8px;min-height:18px}.managing .range-panel .range-facts{display:grid;grid-template-columns:1fr;gap:14px;margin-top:3px;padding-top:13px}.managing .range-panel .range-facts>div{padding:0}.managing .range-panel .range-facts strong{font-size:20px}.managing .range-panel .button.primary{height:39px;font-size:10px;padding:0 8px;gap:4px;white-space:normal;line-height:1.5}.managing .range-panel .button.primary svg:last-child{display:none}.managing .range-panel .range-hint{font-size:8px}.rail-footer>span{font-size:7px}.rail-footer>button{min-height:38px;font-size:9px}}
 /* Fit the camera, filmstrip and rail controls into the desktop viewport. */
 @media(min-width:769px){.unifi-viewing-column .video-stage{height:clamp(280px,calc(100dvh - 460px),660px)}}
 
@@ -4245,3 +4246,47 @@ td {
 .recording-range-dialog .recording-range-fields .range-date-value{min-height:34px;height:34px;padding:5px 8px}
 .recording-range-dialog .available-recording-times>div{max-height:56px}
 .recording-range-dialog .calendar-days button{width:34px;justify-self:center}
+
+
+/* The workspace follows the available viewport, including ultrawide screens. */
+.main-shell,.content,.content>div{min-width:0}
+.source-edit,.batch-bar{max-width:none}
+.library-clips.grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr))}
+.source-cards{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))}
+.review-page .unifi-review-layout{align-items:start;--review-player-height:clamp(300px,calc(100dvh - 365px),700px)}
+.unifi-review-layout .unifi-viewing-column{grid-row:1}
+.unifi-review-layout .clip-section{grid-column:2;grid-row:2;min-width:0}
+.unifi-review-layout .clip-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:10px;position:relative;max-height:clamp(240px,35dvh,520px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:2px 1px 5px}
+.unifi-review-layout .clip-strip .strip-card{width:100%;min-width:0}
+.unifi-review-layout .clip-strip .clip-image{height:auto;aspect-ratio:16/9}
+.unifi-review-layout .clip-strip .strip-card>strong{font-size:11px}
+.unifi-review-layout .clip-strip .strip-card>span{font-size:9px}
+@media(min-width:769px){
+  .review-page .vertical-timeline{grid-column:1;grid-row:1/span 2;position:sticky;top:16px;align-self:start;height:calc(var(--review-player-height) + 116px);min-height:600px}
+  .managing .clip-section{grid-column:3;grid-row:2}
+  .with-details .playback-inspector{grid-row:1/span 2;position:sticky;top:16px;align-self:start}
+}
+@media(min-width:769px) and (max-width:1300px){
+  .review-page .unifi-review-layout.managing .vertical-timeline{grid-row:2;position:static;height:550px}
+  .review-page .unifi-review-layout.managing .clip-section{grid-column:1/-1;grid-row:3}
+}
+@media(max-width:768px){
+  .review-page .unifi-review-layout .vertical-timeline{position:static;height:auto}
+  .review-page .unifi-review-layout .clip-section{grid-column:1/-1;grid-row:3}
+  .library-clips.grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .unifi-review-layout .clip-strip{grid-template-columns:repeat(auto-fill,minmax(min(100%,140px),1fr))}
+  .task-table{display:block;min-width:0;width:100%;border-spacing:0}
+  .task-table thead{display:none}
+  .task-table tbody{display:grid;gap:12px}
+  .task-table tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+  .task-table tbody td{display:block;min-width:0;border:0;padding:12px;text-align:left;overflow-wrap:anywhere}
+  .task-table tbody td:first-child,.task-table tbody td:nth-child(4),.task-table tbody td:last-child{grid-column:1/-1}
+  .task-table tbody td:nth-child(2):before{content:'录像源';display:block;font-size:9px;color:var(--muted);margin-bottom:6px}
+  .task-table tbody td:nth-child(3):before{content:'状态与进度';display:block;font-size:9px;color:var(--muted);margin-bottom:6px}
+  .task-table tbody td:nth-child(4):before{content:'创建时间';display:block;font-size:9px;color:var(--muted);margin-bottom:6px}
+  .task-table tbody td:last-child{border-top:1px solid var(--line)}
+  .task-table .task-name strong{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+  .task-table .task-row-actions{flex-direction:row;justify-content:flex-start;align-items:center}
+}
+.review-load-more{display:flex;margin:12px auto 0}
+.review-gallery-hint{margin:0 0 9px;color:var(--muted);font-size:10px;line-height:1.6}

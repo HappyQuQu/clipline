@@ -6,7 +6,7 @@ import RecordingRangePicker from './RecordingRangePicker';
 import { recordingTime, adjacentRecordingDate, recordedAt, recordingCoverage, nearestRecording } from '../recordingSelection';
 
 // Like the original UniFi rail: later times are at the top, earlier times at the bottom.
-export default function VerticalTimeline({ clips, clip, date, current, onDateChange, onSeek, managing, range, onRangeChange, onManage, coverage, dayRecordings, onWindow, dates = [], source, timezone, reviewRange, onReviewRangeChange, real = false, bounds = { start: 0, end: 86400 } }) {
+export default function VerticalTimeline({ clips, clip, date, current, onDateChange, onSeek, managing, range, onRangeChange, onManage, coverage, dayRecordings, dates = [], source, timezone, reviewRange, onReviewRangeChange, real = false, bounds = { start: 0, end: 86400 } }) {
   const available = recordingCoverage(coverage || clips, bounds.start, bounds.end);
   const navigationDates = dates.filter(day => !reviewRange || day >= reviewRange.startDate && day <= reviewRange.endDate);
   const previousDate = adjacentRecordingDate(navigationDates, date, -1), nextDate = adjacentRecordingDate(navigationDates, date, 1);
@@ -31,7 +31,6 @@ export default function VerticalTimeline({ clips, clip, date, current, onDateCha
   const start = span === 3600 ? hour * 3600 : Math.max(hour * 3600, Math.min((hour + 1) * 3600 - span, Math.floor((anchor - span / 2) / 60) * 60));
   const end = start + span;
   const position = value => Math.max(0, Math.min(100, (end - value) / span * 100));
-  useEffect(() => { onWindow?.(start, end); }, [start, end, onWindow]);
   const visible = clips.filter(item => item.start < end && item.end > start);
   const ticks = span === 300 ? 5 : 12;
   useEffect(() => {
@@ -74,6 +73,6 @@ export default function VerticalTimeline({ clips, clip, date, current, onDateCha
       {!available.some(item => item.start < end && item.end > start) && <div className="rail-no-recordings">此时段无录像{available[0] && <button className="text-button" onClick={e => { e.stopPropagation(); onSeek(available[0].start); }}>跳到可用录像</button>}</div>}
     </div>}
     <ExtensionSlot name="timeline-track" showPlaceholder={false} context={{ clips: visible, current, seek: onSeek }} />
-    <footer className="rail-footer"><span>当前范围 {visible.length} 段 · 蓝色可回看</span><button className={managing ? 'active' : ''} onClick={onManage} disabled={!clip} aria-pressed={managing}><Scissors size={15} />{managing ? '结束管理' : '管理片段'}</button></footer>
+    <footer className="rail-footer"><span>时间轴内 {visible.length} 段 · 蓝色可回看</span><button className={managing ? 'active' : ''} onClick={onManage} disabled={!clip} aria-pressed={managing}><Scissors size={15} />{managing ? '结束管理' : '管理片段'}</button></footer>
   </section>;
 }

@@ -29,11 +29,6 @@ export function reviewContext({ sourceId, date, generation = 0 }) {
   return `${sourceId}:${date}:${generation}`;
 }
 
-// Select the first recording of a new source/day before narrowing to the visible rail.
-export function timelineWindow(initial, startSeconds, endSeconds) {
-  return initial ? { startSeconds: 0, endSeconds: 90000 } : { startSeconds, endSeconds };
-}
-
 export function exportRequest(range, day, mode, name, timezone) {
   const left = Date.parse(day.dayStartAt), right = Date.parse(day.dayEndAt);
   const start = range.startAt ? Date.parse(range.startAt) : left + range.start * 1000;

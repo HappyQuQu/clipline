@@ -42,3 +42,21 @@ test('时间输入拒绝无效数值并支持午夜结束，日历按周一排�
   assert.equal(monthDays('2026-06')[0].date, '2026-06-01');
   assert.equal(monthDays('2024-02').filter(day => day.inMonth).length, 29);
 });
+
+test('回看片段查询覆盖整天，时间轴的五分钟或十五分钟缩放不限制片段列表', async () => {
+  const { reviewQueryRange } = await import('../src/recordingSelection.js');
+  assert.deepEqual(reviewQueryRange(null, '2026-06-02'), { startSeconds: 0, endSeconds: 90000 });
+  const range = { startDate: '2026-06-01', endDate: '2026-06-02', start: 86340, end: 60 };
+  assert.deepEqual(reviewQueryRange(range, '2026-06-01'), { startSeconds: 86340, endSeconds: 90000 });
+  assert.deepEqual(reviewQueryRange(range, '2026-06-02'), { startSeconds: 0, endSeconds: 60 });
+});
+
+test('全天列表分页不重复追加同一回复，切换日期后旧分页不覆盖新列表', async () => {
+  const { appendReviewPage } = await import('../src/recordingSelection.js');
+  const current = { windowKey: 'one:day', items: [{ id: 'a' }], nextCursor: 'page2' };
+  const data = { items: [{ id: 'a' }, { id: 'b' }], nextCursor: 'page3' };
+  const next = appendReviewPage(current, data, 'one:day', 'page2');
+  assert.deepEqual(next.items.map(row => row.id), ['a', 'b']);
+  assert.equal(appendReviewPage(next, data, 'one:day', 'page2'), next);
+  assert.equal(appendReviewPage(current, data, 'two:day', 'page2'), current);
+});

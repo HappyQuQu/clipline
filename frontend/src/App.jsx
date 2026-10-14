@@ -13,9 +13,9 @@ import { SETTINGS_FIELDS } from './domain';
 import ExportDialog from './components/ExportDialog';
 import SourceDialog from './components/SourceDialog';
 import { pages, queryString, request } from './api/client';
-import { bytes, clipView, dateInZone, sourceView, taskView, reviewContext, timelineWindow } from './api/adapters';
+import { bytes, clipView, dateInZone, sourceView, taskView, reviewContext } from './api/adapters';
 import { clock } from './domain';
-import { reviewDayBounds } from './recordingSelection';
+import { reviewQueryRange, appendReviewPage } from './recordingSelection';
 const nav = [['review', '录像回看', PlayCircle], ['library', '片段库', SquaresFour], ['tasks', '任务中心', Stack], ['logs', '日志中心', FileText], ['sources', '录像源', FolderSimple], ['settings', '设置', GearSix]];
 const defaults = initialSettings;
 
@@ -29,8 +29,9 @@ export default function App() {
   const [caps, setCaps] = useState(null);
   const [selection, setSelection] = useState({ sourceId: '', date: '', clipId: '', offset: 0, details: false, dateAuto: true, generation: 0 });
   const [timeline, setTimeline] = useState(null), [active, setActive] = useState(null);
+  const [clipPaging, setClipPaging] = useState(null);
   const [reviewRange, setReviewRange] = useState(null);
-  const [windowRange, setWindowRange] = useState(null), [dates, setDates] = useState([]);
+  const [dates, setDates] = useState([]);
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [timelineError, setTimelineError] = useState('');
   const [refresh, setRefresh] = useState(0), [toast, setToast] = useState(''), [dialog, setDialog] = useState(false);
   const [mobileNav, setMobileNav] = useState(false), [searchOpen, setSearchOpen] = useState(false), [query, setQuery] = useState(''), [results, setResults] = useState([]), [searchError, setSearchError] = useState(''), [searchLoading, setSearchLoading] = useState(false);
@@ -74,22 +75,22 @@ export default function App() {
     }).catch(failure => { if (failure.name !== 'AbortError') setTimelineError(failure.message); });
     return () => controller.abort();
   }, [selection.sourceId, refresh, timezone, indexStamp]);
-  const reviewBounds = reviewDayBounds(reviewRange, selection.date, 90000);
-  const startSeconds = windowRange?.context === context ? Math.max(reviewBounds.start, Math.min(windowRange.start, reviewBounds.end - 1)) : reviewBounds.start;
-  const endSeconds = windowRange?.context === context ? Math.min(reviewBounds.end, Math.max(windowRange.end, startSeconds + 1)) : reviewBounds.end;
-  const needsInitialClip = !selection.clipId && active?.context !== context;
+  const { startSeconds, endSeconds } = reviewQueryRange(reviewRange, selection.date);
   useEffect(() => {
     if (!selection.sourceId || !selection.date) return;
+    const windowKey = `${context}:${startSeconds}:${endSeconds}`;
+    // Task progress updates do not invalidate the recording catalog or its loaded pages.
+    if (visibleTimeline?.windowKey === windowKey && visibleTimeline.indexedAt === indexStamp && visibleTimeline.timezone === timezone) return;
     const controller = new AbortController(); setTimelineError('');
-    const range = needsInitialClip && reviewRange ? { startSeconds: reviewBounds.start, endSeconds: reviewBounds.end } : timelineWindow(needsInitialClip, startSeconds, endSeconds);
-    request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, ...range, limit: 200 })}`, { signal: controller.signal }).then(data => {
+    const range = { startSeconds, endSeconds };
+    request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, ...range, limit: 100 })}`, { signal: controller.signal }).then(data => {
       if (controller.signal.aborted) return;
-      setTimeline({ ...data, context, windowKey: `${context}:${startSeconds}:${endSeconds}` });
+      setTimeline({ ...data, context, windowKey, indexedAt: indexStamp });
       setActive(current => { const row = data.items.find(item => item.id === (selection.clipId || current?.clip?.id)) || (!selection.clipId && current?.context !== context ? data.items[0] : null); return row ? { context, clip: clipView(row, data.dayStartAt, timezone) } : current?.context === context ? current : null; });
-      if (!selection.clipId && data.items[0] && active?.context !== context) { const first = clipView(data.items[0], data.dayStartAt, timezone); setSelection(current => current.sourceId === selection.sourceId && current.date === selection.date ? { ...current, offset: Math.max(0, (reviewRange ? reviewBounds.start : 0) - first.start) } : current); }
+      if (!selection.clipId && data.items[0] && active?.context !== context) { const first = clipView(data.items[0], data.dayStartAt, timezone); setSelection(current => current.sourceId === selection.sourceId && current.date === selection.date ? { ...current, offset: Math.max(0, startSeconds - first.start) } : current); }
     }).catch(failure => { if (failure.name !== 'AbortError') { setTimelineError(failure.message); setTimeline(null); } });
     return () => controller.abort();
-  }, [context, startSeconds, endSeconds, needsInitialClip, refresh, timezone, indexStamp]);
+  }, [context, startSeconds, endSeconds, refresh, timezone, indexStamp]);
   useEffect(() => {
     if (!selection.clipId || !visibleTimeline?.dayStartAt) return;
     const controller = new AbortController();
@@ -109,20 +110,26 @@ export default function App() {
     window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler);
   }, []);
   function navigate(value) { if (page === "settings" && Object.keys(SETTINGS_FIELDS).some(group => dirtyGroup(configState.draft, settings, group))) notify("未保存的修改已保留，保存后才生效。"); setPage(value); setMobileNav(false); }
-  function changeSource(id) { setReviewRange(null); setActive(null); setTimeline(null); setSelection(current => ({ sourceId: id, date: '', clipId: '', offset: 0, details: false, dateAuto: true, generation: (current.generation || 0) + 1 })); setDates([]); setWindowRange(null); navigate('review'); }
-  function changeDate(date) { if (!dates.includes(date)) return; setActive(null); setTimeline(null); setSelection(current => ({ ...current, date, clipId: '', offset: 0, details: false, dateAuto: false, generation: (current.generation || 0) + 1 })); setWindowRange(null); }
+  function changeSource(id) { setReviewRange(null); setActive(null); setTimeline(null); setSelection(current => ({ sourceId: id, date: '', clipId: '', offset: 0, details: false, dateAuto: true, generation: (current.generation || 0) + 1 })); setDates([]); navigate('review'); }
+  function changeDate(date) { if (!dates.includes(date)) return; setActive(null); setTimeline(null); setSelection(current => ({ ...current, date, clipId: '', offset: 0, details: false, dateAuto: false, generation: (current.generation || 0) + 1 })); }
   function applyReviewRange(range) { setReviewRange(range); changeDate(range?.startDate || (dates.includes(selection.date) ? selection.date : dates[0])); }
   function selectClip(target, offset = 0, details = true) {
     setActive({ context, clip: target }); setSelection(current => ({ ...current, clipId: target.id, offset, details }));
   }
-  function openClip(target) { setReviewRange(null); setActive(null); setSelection(current => ({ sourceId: target.sourceId, date: target.date, clipId: target.id, offset: 0, details: true, dateAuto: false, generation: (current.generation || 0) + 1 })); setWindowRange(null); setSearchOpen(false); navigate('review'); }
+  function openClip(target) { setReviewRange(null); setActive(null); setSelection(current => ({ sourceId: target.sourceId, date: target.date, clipId: target.id, offset: 0, details: true, dateAuto: false, generation: (current.generation || 0) + 1 })); setSearchOpen(false); navigate('review'); }
   async function action(path, body = {}) { try { const result = await request(path, { method: 'POST', body, key: crypto.randomUUID() }); setRefresh(value => value + 1); return result; } catch (failure) { notify(failure.message); return null; } }
   async function scan(id) { const result = await action(`/sources/${id}/scan`); if (result) notify(result.reused ? '这个源已有扫描任务，已定位现有任务。' : '扫描已加入后台队列，可继续回看。'); }
   async function patchSource(row, patch) { await request(`/sources/${row.id}`, { method: 'PATCH', body: { ...patch, revision: row.revision } }); setRefresh(value => value + 1); }
-  const onWindow = useCallback((start, end) => setWindowRange(current => current?.context === context && current.start === start && current.end === end ? current : { context, start, end }), [context]);
   async function loadMore() {
+    const cursor = visibleTimeline?.nextCursor;
+    if (!cursor || clipPaging?.context === context) return;
+    const operation = { context, cursor }; setClipPaging(operation);
     const captured = `${context}:${startSeconds}:${endSeconds}`;
-    try { const data = await request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, startSeconds, endSeconds, cursor: visibleTimeline.nextCursor, limit: 200 })}`); setTimeline(current => current?.windowKey === captured ? { ...current, items: [...current.items, ...data.items], nextCursor: data.nextCursor } : current); } catch (failure) { notify(failure.message); }
+    try {
+      const data = await request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, startSeconds, endSeconds, cursor, limit: 100 })}`);
+      setTimeline(current => appendReviewPage(current, data, captured, cursor));
+    } catch (failure) { notify(failure.message); }
+    finally { setClipPaging(current => current === operation ? null : current); }
   }
   async function followTask(path, body = {}) { const result = await action(path, body); if (result?.taskId) { setTaskFocus(result.taskId); notify("已重新加入后台队列，原任务记录保留。"); } }
   const updateDraft = update => setConfigState(current => ({ ...current, draft: typeof update === 'function' ? update(current.draft) : update }));
@@ -160,7 +167,7 @@ export default function App() {
       <main className="content">
         {error && <Notice warning>{error}<button className="text-button" onClick={() => setRefresh(value => value + 1)}>重新连接</button></Notice>}
         {loading ? <div className="panel"><EmptyState title="正在连接本地录像服务" description="读取录像源和索引…" /></div> : <>
-          {page === 'review' && (source ? <>{timelineError && <Notice warning>{timelineError}</Notice>}<Review key={context} real source={source} clips={clips} clip={clip} setClipId={id => { const target = clips.find(row => row.id === id); if (target) selectClip(target); }} onSelect={selectClip} initialOffset={selection.offset} initialDetails={selection.details} timeline={visibleTimeline} onWindow={onWindow} onLoadMore={loadMore} dates={dates} reviewRange={reviewRange} onReviewRangeChange={applyReviewRange} date={selection.date || dateInZone(Date.now(), timezone)} setDate={changeDate} onScan={() => scan(source.id)} scanning={tasks.some(row => row.kind === 'scan' && row.sourceId === source.id && ['queued', 'running', 'cancelling'].includes(row.status))} onExport={beginExport} exportEnabled={!!caps?.export} onLibrary={() => navigate('library')} settings={settings} notify={notify} />{!selection.date && <p role="status">正在读取录像日期…</p>}</> : <div className="panel"><EmptyState title="添加你的第一个录像源" description="从只读挂载的录像目录开始建立时间索引。" action={() => setDialog(true)} actionLabel="添加录像源" /></div>)}
+          {page === 'review' && (source ? <>{timelineError && <Notice warning>{timelineError}</Notice>}<Review key={context} real source={source} clips={clips} clip={clip} setClipId={id => { const target = clips.find(row => row.id === id); if (target) selectClip(target); }} onSelect={selectClip} initialOffset={selection.offset} initialDetails={selection.details} timeline={visibleTimeline} onLoadMore={loadMore} loadingMore={clipPaging?.context === context} dates={dates} reviewRange={reviewRange} onReviewRangeChange={applyReviewRange} date={selection.date || dateInZone(Date.now(), timezone)} setDate={changeDate} onScan={() => scan(source.id)} scanning={tasks.some(row => row.kind === 'scan' && row.sourceId === source.id && ['queued', 'running', 'cancelling'].includes(row.status))} onExport={beginExport} exportEnabled={!!caps?.export} onLibrary={() => navigate('library')} settings={settings} notify={notify} />{!selection.date && <p role="status">正在读取录像日期…</p>}</> : <div className="panel"><EmptyState title="添加你的第一个录像源" description="从只读挂载的录像目录开始建立时间索引。" action={() => setDialog(true)} actionLabel="添加录像源" /></div>)}
           {page === 'library' && <Library real sources={sources} clips={[]} onOpen={openClip} onExport={beginExport} defaultDate={selection.date} timezone={timezone} exportEnabled={!!caps?.export} />}
           {page === 'sources' && <Sources real sources={sources} tasks={tasks} onScan={scan} onAdd={() => setDialog(true)} onOpen={changeSource} notify={notify} onSave={patchSource} onToggle={row => patchSource(row, { enabled: !row.enabled })} />}
           {page === 'tasks' && <Tasks key={taskFocus || "all"} real tasks={tasks.map(row => taskView(row, sources))} sources={sources} onDownload={download} onResubmit={id => followTask(`/exports/${id}/resubmit`)} onCreate={() => setTaskDialog(true)} onCancel={id => action(`/tasks/${id}/cancel`)} onRetry={(id, mode) => followTask(`/tasks/${id}/retry`, mode ? { mode } : {})} onViewLogs={id => { setLogTask(id); navigate('logs'); }} focusId={taskFocus} onClearFocus={() => setTaskFocus(null)} />}

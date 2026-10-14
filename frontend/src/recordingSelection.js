@@ -43,3 +43,14 @@ export function monthDays(month) {
     return { date: day.toISOString().slice(0, 10), day: day.getUTCDate(), inMonth: day.getUTCMonth() === number - 1 };
   });
 }
+
+// Clip browsing follows the selected day/range; rail zoom never filters this catalog.
+export function reviewQueryRange(range, date) {
+  const bounds = reviewDayBounds(range, date, 90000);
+  return { startSeconds: bounds.start, endSeconds: bounds.end };
+}
+
+export function appendReviewPage(current, data, windowKey, cursor) {
+  if (!current || current.windowKey !== windowKey || current.nextCursor !== cursor) return current;
+  return { ...current, items: [...new Map([...current.items, ...data.items].map(row => [row.id, row])).values()], nextCursor: data.nextCursor };
+}
