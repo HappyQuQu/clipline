@@ -1,6 +1,6 @@
 # Clipline 一期部署与发布检查
 
-应用候选版本：0.7.0。支持 Linux amd64 / arm64，使用 FFmpeg 软件处理；二期识别保持占位。指定目录的开发验证与 NAS 设备性能验证分别记录。
+应用版本见仓库 `version.txt`；已发布版本见 GitHub Releases 与 Docker Hub。支持 Linux amd64 / arm64，使用 FFmpeg 软件处理；二期识别保持占位。指定目录的开发验证与 NAS 设备性能验证分别记录。
 
 ## NAS Docker Compose
 
@@ -44,7 +44,7 @@ CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) \
 uv run --directory backend --frozen pytest -q
 npm test
 npm run build
-python3 deploy/check_image.py --image clipline:d6-local --platform linux/arm64 --version 0.7.0
+python3 deploy/check_image.py --image clipline:d6-local --platform linux/arm64 --version "$(cat version.txt)"
 python3 deploy/smoke_release.py --image clipline:d6-local --platform linux/arm64 --require-native
 # ARM 本机的 amd64 运行是仿真，不传 --require-native
 python3 deploy/smoke_release.py --image clipline:d6-local --platform linux/amd64 --output data/qa/d6-amd64-emulated
@@ -56,15 +56,30 @@ python3 deploy/smoke_release.py --image clipline:d6-local --platform linux/amd64
 
 ## 发布门禁
 
-每次 push/PR 均执行 Python 3.11/3.12 测试、lint/format/锁文件检查、前端测试与构建，以及 Ubuntu amd64、Ubuntu ARM64 **原生**候选镜像验收。原生 runner 构建各自架构，不安装 QEMU；脚本要求主机/镜像架构相同。[GitHub runner 规格](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)提供 `ubuntu-24.04` 与 `ubuntu-24.04-arm`。
+开发分支 push、PR 与手动检查执行 Python 3.11/3.12 测试、lint/format/锁文件检查、前端测试与构建，以及 Ubuntu amd64、Ubuntu ARM64 **原生**镜像验收。原生 runner 构建各自架构，不安装 QEMU；脚本要求主机/镜像架构相同。[GitHub runner 规格](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)提供 `ubuntu-24.04` 与 `ubuntu-24.04-arm`。
 
-通过验收的准确镜像以 image.tar + image ID + acceptance.json 保存为 candidate-amd64/arm64，证据保留 7 天。发布工作流先复用上述全部检查，再加载并核对候选 image ID；上传这两份已测试镜像，组合候选 manifest，检查恰有 Linux amd64/arm64，最后更新发布标签。不会测试一个镜像再重新构建另一个镜像发布。[Docker 测试后发布说明](https://docs.docker.com/build/ci/github-actions/test-before-push/)。
+`main` 通过源码检查后，Release Please 根据 Conventional Commits 生成版本 PR 与变更记录。仅自动合并来自本仓库 Actions bot、基于当前 main、且只修改版本和变更记录的 PR；依赖或业务代码改动会使门禁失败。版本提交同步 `version.txt`、前后端版本、npm/uv 锁文件及发布 manifest，再显式重新运行源码检查。使用 `feat:`、`fix:` 等提交前缀产生版本；只有文档或 CI 改动时可能不升版。[Release Please 配置说明](https://github.com/googleapis/release-please-action)。
 
-- 主分支/手动运行只更新 `edge` 开发标签。
-- `vX.Y.Z` 必须与后端、前端和锁文件的应用版本一致，才发布固定版本，最后更新 `latest`。
-- 同一固定版本不覆盖不同架构内容；检查失败不更新发布标签。当前开发分支不会推送 Docker Hub 镜像。
-- Docker Hub 使用已有 DOCKERHUB_USERNAME/TOKEN；说明同步可使用独立 DESCRIPTION_TOKEN。候选检查无需发布凭据。
-- 发布前由操作者选择版本并推送 tag；本次 D6 开发不创建正式发布 tag。
+对最终提交分别构建 amd64/arm64 镜像，以 digest 暂存并拉取验收。两份验收都成功后，直接用已验证的 digest 组合双架构 manifest，核对运行镜像与验收记录一致，再发布标签。SBOM 与来源证明保留在镜像中；不传递大体积 image.tar，也不在发布阶段重新构建。[Docker 双架构发布说明](https://docs.docker.com/build/ci/github-actions/multi-platform/)。
+
+| 触发方式 | 发布标签 |
+| --- | --- |
+| main 自动生成新版本 | `X.Y.Z`、`X.Y`、`edge`、`latest`、`sha-完整提交SHA` |
+| main 没有需要升版的提交 | `edge`、`latest`、`sha-完整提交SHA` |
+| 已存在的 `vX.Y.Z` 标签 | `X.Y.Z`、`X.Y`、`latest`、`sha-完整提交SHA` |
+| 手动输入 `edge` 或自定义预览标签 | 指定预览标签、`sha-完整提交SHA` |
+
+`latest` 最后更新。发布工作流串行执行；过时的 main/版本发布不会覆盖当前 `edge`、`latest` 或次版本指针。同一固定版本与 SHA 标签拒绝覆盖不同镜像内容。开发分支 push/PR 不推送 Docker Hub。
+
+仓库配置要求：
+
+- Settings → Actions → General → Workflow permissions 启用 **Allow GitHub Actions to create and approve pull requests**，用于创建版本 PR；默认 workflow 权限仍可保留只读，仅版本 job 请求写权限。已有分支保护继续生效，自动合并不使用管理员绕过。
+- Secrets 配置 `DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`；可选 `DOCKERHUB_DESCRIPTION_TOKEN` 同步仓库说明。说明同步失败不阻止已验收的镜像发布。
+- 可选 variable `DOCKERHUB_NAMESPACE`，默认 `evanqu`。更换命名空间前先确认账号有推送权限。
+
+若检查失败，`latest` 不更新；保留 Actions 日志修复后重跑。若 GitHub 版本已经生成而镜像发布失败，在 **Publish Docker image → Run workflow** 选择对应 `vX.Y.Z` 标签，输入 `release` 重试；不要重新生成版本。已有固定标签若与重建内容不同，会拒绝覆盖，应使用新版本。手动预览禁止输入 `latest`、版本号、`sha-*` 或 `candidate-*`。
+
+验收证据 `native-evidence-amd64/arm64` 保留 7 天；元数据与已验证 digest 小文件保留 3 天，主要用于同次工作流的发布组合。首次自动发布需要合并该配置到 main；开发分支 CI 成功不表示稳定镜像已经发布。
 
 Actions 中两份 native-evidence 记录证明原生 Linux 软件流程；本机 ARM64 Docker 实测/amd64 仿真与 NAS 实机性能不是同一证据。实际 NAS CPU/内存、挂载权限、长任务耗时和设备故障应在部署后按同一场景记录，不用仿真结果替代设备指标。
 

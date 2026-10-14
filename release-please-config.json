@@ -1,0 +1,94 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-v-in-tag": true,
+  "include-component-in-tag": false,
+  "bootstrap-sha": "bd117b373e1107aa66920d9d050ea24206912484",
+  "pull-request-title-pattern": "chore${scope}: release${component} ${version} [skip ci]",
+  "group-pull-request-title-pattern": "chore${scope}: release${component} ${version} [skip ci]",
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "新功能"
+    },
+    {
+      "type": "fix",
+      "section": "修复"
+    },
+    {
+      "type": "perf",
+      "section": "改进"
+    },
+    {
+      "type": "refactor",
+      "section": "改进"
+    },
+    {
+      "type": "revert",
+      "section": "修复"
+    },
+    {
+      "type": "docs",
+      "section": "docs",
+      "hidden": true
+    },
+    {
+      "type": "test",
+      "section": "test",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "build",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "ci",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "chore",
+      "hidden": true
+    }
+  ],
+  "packages": {
+    ".": {
+      "component": "clipline",
+      "version-file": "version.txt",
+      "exclude-paths": [
+        "old"
+      ],
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "frontend/package-lock.json",
+          "jsonpath": "$.packages[''].version"
+        },
+        {
+          "type": "generic",
+          "path": "backend/pyproject.toml"
+        },
+        {
+          "type": "generic",
+          "path": "backend/uv.lock"
+        },
+        {
+          "type": "generic",
+          "path": "backend/app/__init__.py"
+        }
+      ]
+    }
+  }
+}

@@ -223,3 +223,14 @@ Ubuntu amd64/arm64 原生 runner 验收不使用 QEMU；本地 ARM64 Docker VM �
 - 新临时对照为自建 36 字节样本；确认正常维护周期按保留期保护它后，仅撤销这个测试样本。过期导出、旧临时样本和真实崩溃分片均由维护循环删除；本节不把人工撤销对照算作自动清理通过项目，也未计入运行中临时文件保护测试。
 - 两段原录像在测试前后 SHA-256、大小与修改时间完全一致；原录像只读映射不变。既有源、其他导出和全局保留配置未调整，二期识别继续保持占位。
 - 证据保存在忽略目录 `data/qa/expiry-temp-first-cycle.json`、`expiry-cleaned.json`、`expiry-final-verification.json`、`expiry-originals-unchanged.json`、`expiry-expired-and-renewed.png`；界面截图同时显示原过期任务和新可下载任务。最终容器、数据库、Worker、存储 readiness 正常。本次业务代码没有变更，仅补充实际清理、过期提示和重新导出下载的验收记录。
+
+
+## 自动版本与双架构发布流程检查（2026-10-14）
+
+参考 `library-cover-studio` 的自动发布模式，main 源码检查通过后生成并合并仅含版本/变更记录的 PR，显式验证最终版本提交，原生 amd64/arm64 镜像各验收一次，再组合已验证的 registry digest 发布；`latest` 最后更新。开发分支不发布镜像。发布配置与恢复说明见 [部署文档](../DEPLOYMENT.md)。
+
+- 本地后端 115 项、前端 36 项、正式前端构建、Ruff lint/format、actionlint 工作流检查通过。
+- 使用 Release Please 17.11.2 的实际更新器生成隔离的 0.8.0 测试版本，前后端、npm/uv 锁文件和 manifest 全部对齐；只更改版本与变更记录，版本 PR 校验及 `uv lock --check` 通过。应用当前版本仍为 0.7.0，未手动升版。
+- 发布回归覆盖双架构缺失、来源 SHA/版本不一致、SBOM 运行镜像提取、ARM64 v8 variant、固定标签冲突、latest 最后更新、过时 main 禁止移动稳定指针、手动预览保留标签限制，以及版本 PR 禁止修改依赖/业务代码或降版。固定标签冲突在任何 registry 写入前拒绝。
+- 已启用仓库 Actions 创建版本 PR 的必要设置；默认 workflow 权限保持只读，只有版本 job 请求写权限，自动合并不绕过分支保护。
+- 此次没有合并 main、创建正式版本或更新 Docker Hub 稳定标签。新配置需合并 main 后才开始自动发布；本地 Docker、NAS、原录像与二期占位均未修改。

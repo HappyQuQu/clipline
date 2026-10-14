@@ -2,11 +2,24 @@ name: Phase-one checks
 
 on:
   push:
+    branches: ['**', '!main']
   pull_request:
+  workflow_dispatch:
   workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+      build_images:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
@@ -19,6 +32,9 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.9.20"
@@ -41,6 +57,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -51,51 +70,7 @@ jobs:
       - run: npm run build
 
   native-image:
-    name: Native image (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Build candidate without publishing
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/${{ matrix.arch }}
-          load: true
-          tags: clipline:ci
-          cache-from: type=gha,scope=native-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=native-${{ matrix.arch }}
-      - name: Inspect and exercise exact candidate on native hardware
-        run: |
-          python3 deploy/check_image.py --image clipline:ci
-          python3 deploy/smoke_release.py --image clipline:ci --require-native --output "$RUNNER_TEMP/d6"
-      - name: Save tested image
-        run: |
-          mkdir -p "$RUNNER_TEMP/candidate"
-          docker save clipline:ci -o "$RUNNER_TEMP/candidate/image.tar"
-          docker image inspect clipline:ci --format '{{.Id}}' > "$RUNNER_TEMP/candidate/image-id.txt"
-          cp "$RUNNER_TEMP/d6/results.json" "$RUNNER_TEMP/candidate/acceptance.json"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: candidate-${{ matrix.arch }}
-          path: ${{ runner.temp }}/candidate/
-          retention-days: 3
-          compression-level: 1
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: native-evidence-${{ matrix.arch }}
-          path: |
-            ${{ runner.temp }}/d6/results.json
-            ${{ runner.temp }}/d6/*/container.log
-          retention-days: 7
-          if-no-files-found: ignore
+    if: toJSON(inputs.build_images) != 'false'
+    uses: ./.github/workflows/native-images.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}

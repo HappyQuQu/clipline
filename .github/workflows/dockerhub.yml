@@ -2,88 +2,310 @@ name: Publish Docker image
 
 on:
   push:
-    branches: [main]
-    tags: ["v*.*.*"]
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: edge/custom preview tag; release retries an existing vX.Y.Z ref
+        required: true
+        default: edge
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: dockerhub-${{ github.ref }}
+  group: clipline-publish
   cancel-in-progress: false
 
 env:
-  IMAGE_NAME: evanqu/clipline
+  IMAGE_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'evanqu' }}
 
 jobs:
-  checks:
+  verify:
+    name: Verify source before release
     uses: ./.github/workflows/phase-one-checks.yml
+    with:
+      build_images: false
 
-  publish:
-    name: Promote tested candidates
-    needs: checks
+  credentials:
+    name: Check publishing configuration
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Validate release version
-        id: version
-        env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ "$REF_TYPE" = tag ]; then
-            VERSION=$(python3 deploy/validate_release.py --tag "$REF_NAME")
-          else
-            VERSION=$(python3 deploy/validate_release.py)
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
         with:
-          pattern: candidate-*
-          path: candidates
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v4
+          persist-credentials: false
+      - name: Check required secrets and publishing input
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DISPATCH_TAG: ${{ inputs.image_tag || 'edge' }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          test -n "$DOCKERHUB_USERNAME" || { echo "::error::Configure DOCKERHUB_USERNAME"; exit 1; }
+          test -n "$DOCKERHUB_TOKEN" || { echo "::error::Configure DOCKERHUB_TOKEN"; exit 1; }
+          python3 deploy/release_metadata.py --check-input --event "$EVENT_NAME" --ref "$SOURCE_REF" --manual "$DISPATCH_TAG"
+
+  release:
+    name: Prepare, merge, and publish release
+    needs: [verify, credentials]
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    timeout-minutes: 15
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      eligible: ${{ steps.current.outputs.eligible }}
+      release_created: ${{ steps.result.outputs.release_created }}
+      tag_name: ${{ steps.result.outputs.tag_name }}
+      version: ${{ steps.result.outputs.version }}
+      major: ${{ steps.result.outputs.major }}
+      minor: ${{ steps.result.outputs.minor }}
+      build_sha: ${{ steps.result.outputs.build_sha }}
+    steps:
+      - name: Skip superseded main pushes
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "${main_sha}" == "${SOURCE_SHA}" ]]; then
+            echo 'eligible=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'eligible=false' >> "${GITHUB_OUTPUT}"
+            echo '::notice::A newer main commit exists; skipping this superseded release run'
+          fi
+
+      - name: Update release pull request or create release
+        id: prepare
+        if: steps.current.outputs.eligible == 'true'
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - uses: actions/checkout@v4
+        if: steps.prepare.outputs.prs_created == 'true'
+        with:
+          persist-credentials: false
+      - name: Validate generated version-only PR before merging
+        id: generated
+        if: steps.prepare.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_JSON: ${{ steps.prepare.outputs.pr }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          pr_number=$(jq -er '.number' <<<"$PR_JSON")
+          python3 deploy/check_release_pr.py --repo "$GITHUB_REPOSITORY" --pr "$pr_number" --source "$SOURCE_SHA" --output "$RUNNER_TEMP/release-pr-output"
+          cat "$RUNNER_TEMP/release-pr-output" >> "$GITHUB_OUTPUT"
+      - name: Merge validated release PR
+        if: steps.prepare.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_JSON: ${{ steps.prepare.outputs.pr }}
+          PR_HEAD: ${{ steps.generated.outputs.head }}
+          PR_TITLE: ${{ steps.generated.outputs.title }}
+        run: |
+          pr_number=$(jq -er '.number' <<<"$PR_JSON")
+          gh pr merge "$pr_number" --repo "$GITHUB_REPOSITORY" --squash \
+            --match-head-commit "$PR_HEAD" --subject "$PR_TITLE" --body "" --delete-branch
+
+      - name: Finalize automatically merged release
+        id: finalize
+        if: steps.prepare.outputs.prs_created == 'true'
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
+
+      - name: Normalize release outputs
+        id: result
+        shell: bash
+        env:
+          PREPARE_CREATED: ${{ steps.prepare.outputs.release_created }}
+          PREPARE_TAG: ${{ steps.prepare.outputs.tag_name }}
+          PREPARE_VERSION: ${{ steps.prepare.outputs.version }}
+          PREPARE_MAJOR: ${{ steps.prepare.outputs.major }}
+          PREPARE_MINOR: ${{ steps.prepare.outputs.minor }}
+          PREPARE_SHA: ${{ steps.prepare.outputs.sha }}
+          FINALIZE_CREATED: ${{ steps.finalize.outputs.release_created }}
+          FINALIZE_TAG: ${{ steps.finalize.outputs.tag_name }}
+          FINALIZE_VERSION: ${{ steps.finalize.outputs.version }}
+          FINALIZE_MAJOR: ${{ steps.finalize.outputs.major }}
+          FINALIZE_MINOR: ${{ steps.finalize.outputs.minor }}
+          FINALIZE_SHA: ${{ steps.finalize.outputs.sha }}
+        run: |
+          if [[ "${FINALIZE_CREATED}" == "true" ]]; then
+            release_created=true
+            tag_name="${FINALIZE_TAG}"
+            version="${FINALIZE_VERSION}"
+            major="${FINALIZE_MAJOR}"
+            minor="${FINALIZE_MINOR}"
+            build_sha="${FINALIZE_SHA}"
+          elif [[ "${PREPARE_CREATED}" == "true" ]]; then
+            release_created=true
+            tag_name="${PREPARE_TAG}"
+            version="${PREPARE_VERSION}"
+            major="${PREPARE_MAJOR}"
+            minor="${PREPARE_MINOR}"
+            build_sha="${PREPARE_SHA}"
+          else
+            release_created=false
+            tag_name=""
+            version=""
+            major=""
+            minor=""
+            build_sha="${GITHUB_SHA}"
+          fi
+          {
+            echo "release_created=${release_created}"
+            echo "tag_name=${tag_name}"
+            echo "version=${version}"
+            echo "major=${major}"
+            echo "minor=${minor}"
+            echo "build_sha=${build_sha}"
+          } >> "${GITHUB_OUTPUT}"
+
+  release-verify:
+    name: Verify generated release commit
+    needs: [verify, credentials, release]
+    if: needs.release.outputs.release_created == 'true'
+    uses: ./.github/workflows/phase-one-checks.yml
+    with:
+      ref: ${{ needs.release.outputs.build_sha }}
+      build_images: false
+
+  prepare-images:
+    name: Prepare final image metadata
+    needs: [verify, credentials, release, release-verify]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.verify.result == 'success' &&
+      needs.credentials.result == 'success' &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped') &&
+      (needs.release-verify.result == 'success' || needs.release-verify.result == 'skipped') &&
+      (github.event_name != 'push' || github.ref != 'refs/heads/main' || needs.release.outputs.eligible == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      source: ${{ needs.release.outputs.build_sha || github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.build_sha || github.sha }}
+
+      - name: Resolve exact source, version and publication tags
+        env:
+          RELEASE_CREATED: ${{ needs.release.outputs.release_created || 'false' }}
+          DISPATCH_TAG: ${{ inputs.image_tag || 'edge' }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.ref }}
+          BUILD_SHA: ${{ needs.release.outputs.build_sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$BUILD_SHA"
+          python3 deploy/release_metadata.py --image "$IMAGE_NAMESPACE/clipline" --source "$BUILD_SHA" \
+            --event "$EVENT_NAME" --ref "$SOURCE_REF" --manual "$DISPATCH_TAG" \
+            --release-created "$RELEASE_CREATED" --output "$RUNNER_TEMP/final-image-metadata.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-image-metadata
+          path: ${{ runner.temp }}/final-image-metadata.json
+          if-no-files-found: error
+          retention-days: 3
+
+  images:
+    name: Build and verify final images
+    needs: prepare-images
+    # A release may be unnecessary; its skipped verification must not skip final images.
+    if: >-
+      !cancelled() &&
+      needs.prepare-images.result == 'success'
+    uses: ./.github/workflows/native-images.yml
+    with:
+      ref: ${{ needs.prepare-images.outputs.source }}
+      publish: true
+      image: ${{ format('{0}/clipline', vars.DOCKERHUB_NAMESPACE || 'evanqu') }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  publish:
+    name: Publish verified multi-platform image
+    needs: [prepare-images, images]
+    if: >-
+      !cancelled() &&
+      needs.prepare-images.result == 'success' &&
+      needs.images.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout verified source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-images.outputs.source }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Push exact tested architecture images and candidate manifest
+
+      - name: Download both verified digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: verified-digest-*
+          path: ${{ runner.temp }}/verified-digests
+          merge-multiple: true
+
+      - name: Download final image metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: final-image-metadata
+          path: ${{ runner.temp }}/image-metadata
+
+      - name: Publish verified digests; latest is the final pointer
         env:
-          REVISION: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE: ${{ needs.prepare-images.outputs.source }}
         run: |
-          for ARCH in amd64 arm64; do
-            docker load -i "candidates/candidate-$ARCH/image.tar"
-            ACTUAL=$(docker image inspect clipline:ci --format '{{.Id}}')
-            test "$ACTUAL" = "$(cat "candidates/candidate-$ARCH/image-id.txt")"
-            docker tag clipline:ci "$IMAGE_NAME:candidate-$REVISION-$ARCH"
-            docker push "$IMAGE_NAME:candidate-$REVISION-$ARCH"
-          done
-          docker buildx imagetools create -t "$IMAGE_NAME:candidate-$REVISION" \
-            "$IMAGE_NAME:candidate-$REVISION-amd64" "$IMAGE_NAME:candidate-$REVISION-arm64"
-          docker buildx imagetools inspect "$IMAGE_NAME:candidate-$REVISION" --raw > candidate-manifest.json
-          python3 deploy/check_manifest.py candidate-manifest.json
-      - name: Promote candidate after manifest verification
-        env:
-          REVISION: ${{ github.sha }}
-          VERSION: ${{ steps.version.outputs.version }}
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          if [ "$REF_TYPE" = tag ]; then
-            # Publish immutable version first; stable pointer is the final operation.
-            if docker buildx imagetools inspect "$IMAGE_NAME:$VERSION" --raw > existing-manifest.json 2>/dev/null; then
-              python3 deploy/check_manifest.py candidate-manifest.json --existing existing-manifest.json
-            else
-              docker buildx imagetools create -t "$IMAGE_NAME:$VERSION" "$IMAGE_NAME:candidate-$REVISION"
-            fi
-            docker buildx imagetools create -t "$IMAGE_NAME:latest" "$IMAGE_NAME:$VERSION"
-          else
-            docker buildx imagetools create -t "$IMAGE_NAME:edge" "$IMAGE_NAME:candidate-$REVISION"
-          fi
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          version=$(python3 deploy/validate_release.py)
+          python3 deploy/publish_manifest.py --image "$IMAGE_NAMESPACE/clipline" --source "$SOURCE" --version "$version" \
+            --current-main "$main_sha" --digests "$RUNNER_TEMP/verified-digests" \
+            --metadata "$RUNNER_TEMP/image-metadata/final-image-metadata.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          data = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'image-metadata/final-image-metadata.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write('## Clipline verified image publication\n\n')
+              out.write('Source: `' + data['source'] + '`\n\n')
+              out.write('Platforms: linux/amd64, linux/arm64\n\n')
+              out.write('Requested tags: ' + ', '.join('`' + tag + '`' for tag in data['tags']) + '\n')
+          PY
+
       - name: Update Docker Hub overview
+        continue-on-error: true
         uses: peter-evans/dockerhub-description@e98e4d1628a5f3be2be7c231e50981aee98723ae
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN || secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.IMAGE_NAME }}
+          repository: ${{ env.IMAGE_NAMESPACE }}/clipline
           readme-filepath: README.dockerhub.md
           short-description: NAS recording replay and export workbench for amd64 and arm64.

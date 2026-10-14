@@ -15,6 +15,13 @@ def validate(root, tag=None):
     assert re.fullmatch(r"\d+\.\d+\.\d+", app), "Use a fixed release version"
     lock = json.loads((root / "frontend/package-lock.json").read_text())
     assert lock["version"] == lock["packages"][""]["version"] == app
+    if (root / "version.txt").exists():
+        assert (root / "version.txt").read_text().strip() == app, "Release version must agree"
+    if (root / ".release-please-manifest.json").exists():
+        assert json.loads((root / ".release-please-manifest.json").read_text())["."] == app
+    if (root / "backend/uv.lock").exists():
+        packages = tomllib.loads((root / "backend/uv.lock").read_text())["package"]
+        assert next(row["version"] for row in packages if row["name"] == "clipline-backend") == app
     if tag:
         assert tag == "v" + app, f"Tag {tag} does not match application {app}"
     return app
