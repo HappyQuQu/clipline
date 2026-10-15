@@ -1,4 +1,5 @@
 import os
+import subprocess
 import threading
 from datetime import date
 
@@ -287,3 +288,172 @@ def test_explicit_manual_source_interval_is_stored_as_sql_null(client, config):
     assert response.status_code == 201
     assert response.json()["source"]["scanIntervalMinutes"] is None
     assert client.get("/api/sources").json()["items"][0]["nextScanAt"] is None
+
+
+@pytest.fixture
+def indexed_hevc(client, config, database):
+    path = config.recordings_root / "alpha" / "20261013_091500.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=160x90:r=10",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440",
+            "-t",
+            "4",
+            "-c:v",
+            "libx265",
+            "-x265-params",
+            "pools=none:frame-threads=1:log-level=error",
+            "-threads",
+            "1",
+            "-tag:v",
+            "hvc1",
+            "-c:a",
+            "libopus",
+            "-y",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    os.utime(path, (1_700_000_000, 1_700_000_000))
+    source = client.post(
+        "/api/sources",
+        json={
+            "name": "HEVC",
+            "path": str(path.parent),
+            "scanOnCreate": True,
+            "scanIntervalMinutes": None,
+        },
+    ).json()["source"]
+    perform(config, database)
+    segment = client.get("/api/segments", params={"sourceId": source["id"]}).json()["items"][0]
+    assert segment["videoCodec"] == "hevc" and segment["audioCodec"] == "opus"
+    return source, segment, path
+
+
+def test_hevc_native_cold_playback_no_task_or_proxy_and_source_guards(
+    client,
+    config,
+    database,
+    indexed_hevc,
+):
+    _, segment, path = indexed_hevc
+    before = path.read_bytes()
+    endpoint = f"/api/segments/{segment['id']}"
+    legacy = client.get(endpoint + "/playback").json()
+    assert legacy["status"] == "needs_prepare"
+    native = client.get(endpoint + "/playback?mode=original").json()
+    assert native["status"] == "direct" and not native["proxy"]
+    assert native["mode"] == "original" and native["taskId"] is None
+    assert (
+        client.get(native["mediaUrl"], headers={"Range": "bytes=0-1023"}).content == before[:1024]
+    )
+    assert client.head(native["mediaUrl"]).headers["content-length"] == str(len(before))
+    assert client.post(endpoint + "/prepare", json={"mode": "original"}).json()["taskId"] is None
+    assert not list((config.data / "playback-proxies").glob("*.mp4"))
+    with Session(database) as session:
+        from app.db.models import Task
+
+        assert not list(session.scalars(select(Task).where(Task.kind == "prepare")))
+    os.utime(path, ns=(path.stat().st_atime_ns, path.stat().st_mtime_ns + 1))
+    assert client.get(native["mediaUrl"]).status_code == 409
+
+
+def test_hevc_audio_remux_preserves_video_and_keeps_h264_fallback_cache(
+    client,
+    config,
+    database,
+    indexed_hevc,
+):
+    _, segment, path = indexed_hevc
+    before = path.read_bytes()
+    endpoint = f"/api/segments/{segment['id']}"
+    first = client.post(endpoint + "/prepare", json={"mode": "hevc"}).json()
+    duplicate = client.post(endpoint + "/prepare", json={"mode": "hevc"}).json()
+    assert first["taskId"] == duplicate["taskId"] and duplicate["reused"]
+    perform(config, database)
+    done = client.get("/api/tasks/" + first["taskId"]).json()
+    assert done["status"] == "completed", done
+    state = client.get(endpoint + "/playback?mode=hevc").json()
+    assert state["status"] == "ready" and state["mode"] == "hevc"
+    assert client.get(endpoint + "/playback").json()["status"] == "needs_prepare"
+    assert client.get(state["mediaUrl"], headers={"Range": "bytes=0-255"}).status_code == 206
+    with Session(database) as session:
+        row = session.get(Segment, segment["id"])
+        artifact, output = playback.cached(session, config, row, "hevc")
+        assert artifact.duration_ms == pytest.approx(segment["durationMs"], abs=100)
+        import json
+
+        info = json.loads(
+            subprocess.check_output(
+                ["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(output)]
+            )
+        )["streams"]
+        assert info[0]["codec_name"] == "hevc" and info[0]["codec_tag_string"] == "hvc1"
+        assert info[0]["width"] == 160 and info[1]["codec_name"] == "aac"
+
+        def video_hash(file):
+            return subprocess.check_output(
+                [
+                    "ffmpeg",
+                    "-nostdin",
+                    "-v",
+                    "error",
+                    "-i",
+                    str(file),
+                    "-map",
+                    "0:v:0",
+                    "-c:v",
+                    "copy",
+                    "-f",
+                    "hash",
+                    "-hash",
+                    "sha256",
+                    "-",
+                ]
+            )
+
+        assert video_hash(path) == video_hash(output)
+    lease = client.post(
+        endpoint + "/lease?mode=hevc", json={"clientId": "10000000-0000-4000-8000-000000000001"}
+    ).json()
+    assert lease["leased"]
+    fallback = submit(client, segment)
+    perform(config, database)
+    assert client.get("/api/tasks/" + fallback["taskId"]).json()["status"] == "completed"
+    assert client.get(endpoint + "/playback").json()["status"] == "ready"
+    assert client.get(endpoint + "/playback?mode=hevc").json()["status"] == "ready"
+    assert path.read_bytes() == before
+
+
+def test_hevc_cancel_retry_retains_mode(client, config, database, indexed_hevc):
+    _, segment, _ = indexed_hevc
+    endpoint = f"/api/segments/{segment['id']}"
+    queued = client.post(endpoint + "/prepare", json={"mode": "hevc"}).json()
+    client.post("/api/tasks/" + queued["taskId"] + "/cancel")
+    # Queued cancellation is immediate; retry keeps the low-cost profile.
+    retry = client.post("/api/tasks/" + queued["taskId"] + "/retry", json={}).json()
+    perform(config, database)
+    done = client.get("/api/tasks/" + retry["taskId"]).json()
+    assert done["status"] == "completed", done
+    assert done["payload"]["mode"] == "hevc"
+    assert client.get(endpoint + "/playback?mode=hevc").json()["status"] == "ready"
+
+
+def test_hevc_mode_does_not_bypass_non_hevc_incompatibility(client, indexed):
+    _, segment, _ = indexed
+    endpoint = f"/api/segments/{segment['id']}"
+    assert client.get(endpoint + "/playback?mode=original").json()["mode"] == "compatible"
+    assert client.get(endpoint + "/playback?mode=unknown").status_code == 422
+    assert client.post(endpoint + "/prepare", json={"mode": "unknown"}).status_code == 422

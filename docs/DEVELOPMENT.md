@@ -223,7 +223,7 @@ CLIPLINE_IMAGE_TAG=d1-local
 | GET `/sources/{id}/resolve` | at（含时区的 ISO 时间） | 对应片段与 offsetMs；无覆盖时返回 gap 与下一片段信息 |
 | GET `/segments/{id}/thumbnail` | — | 已有缩略图；未生成时返回可识别的占位状态 |
 | GET `/segments/{id}/playback` | — | `{status, mediaUrl, taskId, proxy}`；未准备不触发同步转码 |
-| POST `/segments/{id}/prepare` | 空对象或 force=true；profile 由部署规格生成 | 202，创建或复用播放准备任务 |
+| POST `/segments/{id}/prepare` | mode=compatible/hevc/original（默认 compatible），可 force=true；profile 由服务端生成 | 202，创建或复用播放准备任务 |
 | GET/HEAD `/segments/{id}/media` | fingerprint、HTTP Range/If-Range/ETag | 原文件或已完成代理的字节流；206、416 等范围行为正确 |
 
 定位路由使用 `/sources/{id}/resolve`，避免片段 ID 与静态定位路径冲突。所有源和片段路径由 ID 在服务端解析，客户端不能指定任意文件作为 stream 输入。
@@ -304,6 +304,8 @@ export payload 示例：
 ### 6.3 真实播放与兼容准备
 
 浏览器支持的容器/编码直接提供 Range 流，客户端根据实际播放失败或媒体能力检测决定是否需要 prepare，不能仅因 H.264 标签就保证所有浏览器都可播放。
+
+前端对 H.265 按实际 `canPlayType` 能力选择 `mode`：支持视频和原音轨时使用 `original` Range 直读（不排队、不生成缓存）；支持 H.265/AAC 但不支持原音轨时用 `hevc`，仅流复制视频、转 AAC，并写 hvc1/faststart MP4。服务端只允许符合索引容器和音轨条件的 H.265 文件走原片路径，仍检查路径、指纹和大小/mtime。若浏览器解码失败，自动按 original → hevc → compatible 回退，保留定位和播放意图，不循环重试。状态、媒体和视图租约携带同一个 mode；不同输出 profile 的缓存并存，仍受统一容量、任务取消/恢复和原子发布约束。旧客户端不传 mode，保持原有 H.264 路径。
 
 播放代理默认采用 MP4 + H.264，存在音轨时转 AAC，无音轨不补音频；使用适合 HTTP 播放的封装。建议默认限制代理宽度为 1920，低性能设备允许通过部署配置调低，不改变原文件。
 

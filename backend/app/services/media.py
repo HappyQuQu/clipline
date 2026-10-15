@@ -137,6 +137,14 @@ def make_thumbnail(path, metadata, target: Path, context):
 
 
 def make_proxy(path, duration_ms, target, context):
+    return _make_playback(path, duration_ms, target, context, copy_hevc=False)
+
+
+def remux_hevc(path, duration_ms, target, context):
+    return _make_playback(path, duration_ms, target, context, copy_hevc=True)
+
+
+def _make_playback(path, duration_ms, target, context, *, copy_hevc):
     progress_file = target.parent / "progress.txt"
     last_update = 0
 
@@ -161,6 +169,22 @@ def make_proxy(path, duration_ms, target, context):
                 {"outTimeMs": processed},
             )
 
+    video_options = (
+        ["-c:v", "copy", "-tag:v", "hvc1"]
+        if copy_hevc
+        else [
+            "-vf",
+            f"scale=w='min({context.config.playback_max_width},iw)':h=-2",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+    )
     run_process(
         [
             "ffmpeg",
@@ -181,16 +205,7 @@ def make_proxy(path, duration_ms, target, context):
             "0:V:0",
             "-map",
             "0:a:0?",
-            "-vf",
-            f"scale=w='min({context.config.playback_max_width},iw)':h=-2",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
+            *video_options,
             "-threads",
             str(context.config.media_threads),
             "-c:a",

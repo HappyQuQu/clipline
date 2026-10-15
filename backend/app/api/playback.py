@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
 from app.api.indexing import KeyHeader
-from app.api.schemas import PlaybackLeaseRequest, PrepareRequest
+from app.api.schemas import PlaybackLeaseRequest, PlaybackMode, PrepareRequest
 from app.api.streaming import ClosingStreamingResponse
 from app.core.errors import AppError
 from app.core.time import utc_now_ms
@@ -60,15 +60,20 @@ def resolve(request: Request, source_id: str, at: datetime):
 
 
 @router.get("/segments/{segment_id}/playback")
-def status(request: Request, segment_id: str):
+def status(request: Request, segment_id: str, mode: PlaybackMode = "compatible"):
     with Session(request.app.state.engine) as session:
-        return playback.playback_status(session, request.app.state.config, segment_id)
+        return playback.playback_status(session, request.app.state.config, segment_id, mode)
 
 
 @router.post("/segments/{segment_id}/prepare", status_code=202)
 def prepare(request: Request, segment_id: str, body: PrepareRequest, key: KeyHeader = None):
     return submit_prepare(
-        request.app.state.engine, request.app.state.config, segment_id, key, force=body.force
+        request.app.state.engine,
+        request.app.state.config,
+        segment_id,
+        key,
+        force=body.force,
+        mode=body.mode,
     )
 
 
@@ -87,14 +92,20 @@ def parse_range(value, size):
 
 
 @router.api_route("/segments/{segment_id}/media", methods=["GET", "HEAD"])
-def stream(request: Request, segment_id: str, fingerprint: str = Query(..., max_length=128)):
+def stream(
+    request: Request,
+    segment_id: str,
+    fingerprint: str = Query(..., max_length=128),
+    mode: PlaybackMode = "compatible",
+):
     config = request.app.state.config
     with write_session(request.app.state.engine) as session:
         segment = playback.get_segment(session, segment_id)
         if segment.fingerprint != fingerprint:
             raise AppError("RECORDING_CHANGED", "录像已变化，请重新加载。", 409)
         original = playback.original_path(session, config, segment)
-        cache = playback.cached(session, config, segment)
+        mode = playback.playback_mode(segment, mode)
+        cache = playback.cached(session, config, segment, mode) if mode != "original" else None
         usage = None
         if cache:
             artifact, path = cache
@@ -102,7 +113,7 @@ def stream(request: Request, segment_id: str, fingerprint: str = Query(..., max_
             expected_size, expected_mtime = artifact.size_bytes, None
             usage = FileUse(session, request.app.state.engine, config, artifact, path)
             etag = f'"{fingerprint}-{artifact.profile_hash}"'
-        elif segment.playback_status == "direct":
+        elif mode == "original" or segment.playback_status == "direct":
             path, expected_size, expected_mtime = original, segment.size_bytes, segment.mtime_ns
             etag = f'"{fingerprint}"'
         else:
@@ -185,10 +196,13 @@ def serve_file(
 
 
 @router.post("/segments/{segment_id}/lease")
-def lease_view(request: Request, segment_id: str, body: PlaybackLeaseRequest):
+def lease_view(
+    request: Request, segment_id: str, body: PlaybackLeaseRequest, mode: PlaybackMode = "compatible"
+):
     with write_session(request.app.state.engine) as session:
         segment = playback.get_segment(session, segment_id)
-        cache = playback.cached(session, request.app.state.config, segment)
+        mode = playback.playback_mode(segment, mode)
+        cache = playback.cached(session, request.app.state.config, segment, mode)
         if cache is None:
             return {"leased": False}
         return view_lease(session, request.app.state.config, cache[0], body.client_id, body.active)
