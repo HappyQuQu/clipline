@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/HappyQuQu/clipline/compare/v0.9.1...v0.9.2) (2026-10-15)
+
+
+### 修复
+
+* show newest recordings first in playback browsing ([#11](https://github.com/HappyQuQu/clipline/issues/11)) ([9d4e4d8](https://github.com/HappyQuQu/clipline/commit/9d4e4d8da8f227c0711bb96aa92af2487977a728))
+
 ## [0.9.1](https://github.com/HappyQuQu/clipline/compare/v0.9.0...v0.9.1) (2026-10-15)
 
 
