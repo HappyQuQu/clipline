@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.5](https://github.com/HappyQuQu/clipline/compare/v0.9.4...v0.9.5) (2026-10-15)
+
+
+### 修复
+
+* allow fast export when only estimated frame rate differs ([#17](https://github.com/HappyQuQu/clipline/issues/17)) ([e7fce61](https://github.com/HappyQuQu/clipline/commit/e7fce617b44fd617608a6ad95090ff17ed304a3c))
+
 ## [0.9.4](https://github.com/HappyQuQu/clipline/compare/v0.9.3...v0.9.4) (2026-10-15)
 
 
