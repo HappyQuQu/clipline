@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/HappyQuQu/clipline/compare/v0.8.2...v0.9.0) (2026-10-15)
+
+
+### 新功能
+
+* stream compatible playback and show full recording dates ([#7](https://github.com/HappyQuQu/clipline/issues/7)) ([420fbf4](https://github.com/HappyQuQu/clipline/commit/420fbf453bc0f0ca212c4a41dfea8b8ecfbff7b4))
+
 ## [0.8.2](https://github.com/HappyQuQu/clipline/compare/v0.8.1...v0.8.2) (2026-10-15)
 
 
