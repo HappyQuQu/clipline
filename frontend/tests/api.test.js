@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ApiError, pages, queryString, request } from '../src/api/client.js';
-import { clipView, sourceView, reviewContext } from '../src/api/adapters.js';
+import { clipView, sourceView, reviewContext, exportRequest, taskView } from '../src/api/adapters.js';
 
 test('跨日片段保留原始 UTC 与定位偏移，不把前一天误当零点', () => {
   const row = { id: 'clip', sourceId: 'one', startAt: '2026-06-01T15:42:00Z', endAt: '2026-06-01T16:04:56Z', durationMs: 1376000, sizeBytes: 1024, videoCodec: 'hevc', availability: 'available' };
@@ -65,4 +65,21 @@ test('导出区间按服务端日期边界裁剪，选中 ID 和 UTC 精度保�
   assert.deepEqual(result.segmentIds, ['a']);
   const fall = exportRequest({ sourceId: 'one', date: '2026-11-01', start: 89000, end: 91000 }, { dayStartAt: '2026-11-01T04:00:00Z', dayEndAt: '2026-11-02T05:00:00Z' }, 'fast', 'file', 'America/New_York');
   assert.equal(fall.endAt, '2026-11-02T05:00:00.000Z');
+});
+
+test('跨日导出使用结束日期边界，不截断到第一天，并保留夏令时日期长度', () => {
+  const range = { sourceId: 'one', date: '2026-10-08', endDate: '2026-10-15', start: 3600, end: 3600 };
+  const plan = exportRequest(range, { dayStartAt: '2026-10-07T16:00:00Z', dayEndAt: '2026-10-08T16:00:00Z' }, 'fast', 'week', 'Asia/Shanghai', { dayStartAt: '2026-10-14T16:00:00Z', dayEndAt: '2026-10-15T16:00:00Z' });
+  assert.equal(Date.parse(plan.endAt) - Date.parse(plan.startAt), 7 * 86400000);
+  assert.equal(plan.endAt, '2026-10-14T17:00:00.000Z');
+  const fall = exportRequest({ ...range, date: '2026-10-31', endDate: '2026-11-01', start: 23 * 3600, end: 25 * 3600 }, { dayStartAt: '2026-10-31T04:00:00Z', dayEndAt: '2026-11-01T04:00:00Z' }, 'fast', 'fall', 'America/New_York', { dayStartAt: '2026-11-01T04:00:00Z', dayEndAt: '2026-11-02T05:00:00Z' });
+  assert.equal(fall.endAt, '2026-11-02T05:00:00.000Z');
+});
+
+test('跨日任务同时显示起止日期，同日任务只简写结束时间', () => {
+  const row = { kind: 'export', createdAt: '2026-10-15T00:00:00Z', payload: { startAt: '2026-10-07T17:00:00Z', endAt: '2026-10-14T17:00:00Z', viewTimezone: 'Asia/Shanghai', name: 'week' } };
+  const label = taskView(row, []).rangeLabel;
+  assert.match(label, /2026\/10\/8/);
+  assert.match(label, /2026\/10\/15/);
+  assert.equal((taskView({ ...row, payload: { ...row.payload, endAt: '2026-10-07T18:00:00Z' } }, []).rangeLabel.match(/2026/g) || []).length, 1);
 });

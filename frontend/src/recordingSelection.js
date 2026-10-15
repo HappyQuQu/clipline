@@ -65,3 +65,14 @@ export function recordingRailStart(span, hour, anchor, managing = false) {
   if (managing) return Math.max(0, Math.min(86400 - span, centered));
   return span === 3600 ? hour * 3600 : Math.max(hour * 3600, Math.min((hour + 1) * 3600 - span, centered));
 }
+
+// Keep export boundaries reachable when zooming or editing beyond the visible rail.
+export function recordingRangeHandle(value, start, end) {
+  const visibleTime = Math.max(start, Math.min(end, value));
+  return { visibleTime, position: (end - visibleTime) / (end - start) * 100, outside: value < start ? 'before' : value > end ? 'after' : null };
+}
+
+export function draggedRecordingTime(origin, clientY) {
+  // Use the geometry at pointer-down: moving the range must not move its coordinate system.
+  return Math.max(0, Math.min(86400, Math.round(origin.time - (clientY - origin.clientY) / origin.height * origin.span)));
+}

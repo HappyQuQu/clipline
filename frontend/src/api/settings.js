@@ -1,5 +1,5 @@
 import { SETTINGS_FIELDS } from '../domain.js';
-export const initialSettings = { interval: '5', skipRecent: '30', autoNext: true, skipGaps: true, defaultMode: 'fast', maxDuration: '30', concurrency: '2', timezone: 'Asia/Shanghai' };
+export const initialSettings = { interval: '5', skipRecent: '30', autoNext: true, skipGaps: true, defaultMode: 'fast', maxDuration: '10080', concurrency: '2', timezone: 'Asia/Shanghai' };
 const stringFields = new Set(['interval', 'skipRecent', 'maxDuration', 'concurrency']);
 export function groupValues(group, values) {
   return Object.fromEntries(SETTINGS_FIELDS[group].map(field => [field, field === 'interval' && values[field] === 'manual' ? null : stringFields.has(field) ? Number(values[field]) : values[field]]));

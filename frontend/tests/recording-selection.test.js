@@ -1,6 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordingCoverage, recordedAt, nearestRecording, adjacentRecordingDate, reviewDayBounds, parseRecordingTime, recordingTime, monthDays, selectedExportClip, recordingRailStart } from '../src/recordingSelection.js';
+import { recordingCoverage, recordedAt, nearestRecording, adjacentRecordingDate, reviewDayBounds, parseRecordingTime, recordingTime, monthDays, selectedExportClip, recordingRailStart, recordingRangeHandle, draggedRecordingTime } from '../src/recordingSelection.js';
+
+test('超出可视时间轴的起止边界仍在两端可达，午夜不丢失', () => {
+  const start = 22 * 3600 + 55 * 60, end = start + 3600;
+  assert.deepEqual(recordingRangeHandle(22 * 3600 + 51 * 60 + 6, start, end), { visibleTime: start, position: 100, outside: 'before' });
+  assert.deepEqual(recordingRangeHandle(86400, start, end), { visibleTime: end, position: 0, outside: 'after' });
+  assert.deepEqual(recordingRangeHandle(end - 1800, start, end), { visibleTime: end - 1800, position: 50, outside: null });
+  // Zooming to five minutes still leaves both controls available.
+  assert.equal(recordingRangeHandle(86400, end - 300, end).position, 0);
+  assert.equal(recordingRangeHandle(start - 234, end - 300, end).position, 100);
+});
+test('轴外手柄从可见边缘立即拖入，跨出原可视范围也继续移动并吸附录像', () => {
+  const origin = { time: 86100, clientY: 100, height: 400, span: 3600 };
+  assert.equal(draggedRecordingTime(origin, 110), 86010);
+  assert.equal(draggedRecordingTime(origin, 90), 86190);
+  assert.equal(draggedRecordingTime(origin, -100), 86400);
+  assert.equal(draggedRecordingTime({ ...origin, time: 600 }, 500), 0);
+  const coverage = [{ start: 85512, end: 86400 }];
+  assert.equal(nearestRecording(coverage, draggedRecordingTime(origin, 110), true), 86010);
+  assert.equal(nearestRecording(coverage, draggedRecordingTime(origin, 300), true), 85512.001);
+});
 
 const recordings = [{ start: -100, end: 100 }, { start: 300, end: 600 }, { start: 500, end: 700 }, { start: 86300, end: 86500 }];
 test('跨整点截取居中显示两个边界，日初和日末保持在当天内', () => {
