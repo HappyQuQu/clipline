@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import threading
@@ -405,3 +406,77 @@ def test_low_disk_fails_without_publication_and_new_id_retry_succeeds(
     assert task(client, retry)["status"] == "completed"
     assert task(client, id)["status"] == "failed"
     assert [path.read_bytes() for path in archive[2]] == before
+
+
+def test_fast_merge_accepts_different_frame_intervals_with_matching_codec_headers(
+    client, config, database, archive
+):
+    source, _, paths = archive
+    original = paths[0].read_bytes()
+    retimed = config.data / "retimed.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-itsscale",
+            "1.25",
+            "-i",
+            str(paths[1]),
+            "-c",
+            "copy",
+            "-video_track_timescale",
+            "12800",
+            str(retimed),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    retimed.replace(paths[1])
+    os.utime(paths[1], (time.time() - 120, time.time() - 120))
+    metadata = [
+        json.loads(
+            subprocess.check_output(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_data_hash",
+                    "sha256",
+                    "-show_entries",
+                    "stream=codec_type,r_frame_rate,time_base,extradata_hash",
+                    "-of",
+                    "json",
+                    str(path),
+                ]
+            )
+        )["streams"][0]
+        for path in paths[:2]
+    ]
+    assert metadata[0]["r_frame_rate"] != metadata[1]["r_frame_rate"]
+    assert metadata[0]["extradata_hash"] == metadata[1]["extradata_hash"]
+    assert metadata[0]["time_base"] == metadata[1]["time_base"]
+    assert client.post(f"/api/sources/{source['id']}/scan").status_code == 202
+    perform(config, database)
+    rows = sorted(
+        client.get("/api/segments", params={"sourceId": source["id"]}).json()["items"],
+        key=lambda row: row["startAt"],
+    )
+    data = body((source, rows, paths), "fast")
+    data.update(startAt=rows[0]["startAt"], endAt=rows[1]["endAt"])
+    id = enqueue(client, data)
+    perform(config, database)
+    result = task(client, id)
+    assert result["status"] == "completed", result
+    assert result["result"]["mode"] == "fast"
+    assert result["result"]["videoCodec"] == "h264"
+    assert result["result"]["pieceCount"] == 2
+    assert client.head(result["result"]["downloadUrl"]).status_code == 200
+    output = config.data / "vfr-download.mp4"
+    output.write_bytes(client.get(result["result"]["downloadUrl"]).content)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-xerror", "-i", str(output), "-f", "null", "-"],
+        check=True,
+        capture_output=True,
+    )
+    assert paths[0].read_bytes() == original

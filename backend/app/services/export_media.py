@@ -113,6 +113,8 @@ def compatible(metadata):
             audio and audio["codec_name"] not in ("aac", "mp3", "ac3", "eac3", "opus")
         ):
             raise AppError("FAST_UNSUPPORTED", "原编码无法快速封装为 MP4，请选择精准模式重试。")
+        # r_frame_rate is a probe estimate, not a codec parameter. Matching
+        # codec headers/time bases can carry different packet frame intervals.
         keys = (
             "codec_name",
             "profile",
@@ -122,7 +124,6 @@ def compatible(metadata):
             "height",
             "sample_aspect_ratio",
             "time_base",
-            "r_frame_rate",
             "extradata_hash",
         )
         audio_keys = (
