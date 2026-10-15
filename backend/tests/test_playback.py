@@ -252,6 +252,19 @@ def test_timeline_union_cross_day_resolve_gap_window_cursor_dst(client, database
         ).status_code
         == 422
     )
+    descending = params | {"endSeconds": 30, "order": "desc", "limit": 2}
+    newest = client.get("/api/timeline", params=descending).json()
+    assert [row["id"] for row in newest["items"]] == ["d", "c"]
+    older = client.get("/api/timeline", params=descending | {"cursor": newest["nextCursor"]}).json()
+    assert [row["id"] for row in older["items"]] == ["b", "a"]
+    assert older["nextCursor"] is None
+    assert newest["coverage"] == result["coverage"] and newest["gaps"] == result["gaps"]
+    assert (
+        client.get(
+            "/api/timeline", params=descending | {"cursor": newest["nextCursor"], "order": "asc"}
+        ).status_code
+        == 422
+    )
     found = client.get(
         f"/api/sources/{source['id']}/resolve", params={"at": "2026-10-13T00:00:04+08:00"}
     ).json()

@@ -2,6 +2,7 @@ import os
 import re
 from datetime import date as Date
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
@@ -39,6 +40,7 @@ def get_timeline(
     endSeconds: float = Query(90000, gt=0, le=90000),
     cursor: str | None = Query(None, max_length=2048),
     limit: int = Query(100, ge=1, le=200),
+    order: Literal["asc", "desc"] = "asc",
 ):
     with Session(request.app.state.engine) as session:
         return timeline.timeline(
@@ -50,6 +52,7 @@ def get_timeline(
             endSeconds,
             cursor,
             limit,
+            order,
         )
 
 
