@@ -60,9 +60,16 @@ def resolve(request: Request, source_id: str, at: datetime):
 
 
 @router.get("/segments/{segment_id}/playback")
-def status(request: Request, segment_id: str, mode: PlaybackMode = "compatible"):
+def status(
+    request: Request,
+    segment_id: str,
+    mode: PlaybackMode = "compatible",
+    startMs: int = Query(0, ge=0, le=31536000000),
+):
     with Session(request.app.state.engine) as session:
-        return playback.playback_status(session, request.app.state.config, segment_id, mode)
+        return playback.playback_status(
+            session, request.app.state.config, segment_id, mode, startMs
+        )
 
 
 @router.post("/segments/{segment_id}/prepare", status_code=202)
@@ -74,6 +81,7 @@ def prepare(request: Request, segment_id: str, body: PrepareRequest, key: KeyHea
         key,
         force=body.force,
         mode=body.mode,
+        start_ms=body.start_ms,
     )
 
 
@@ -206,3 +214,57 @@ def lease_view(
         if cache is None:
             return {"leased": False}
         return view_lease(session, request.app.state.config, cache[0], body.client_id, body.active)
+
+
+@router.get("/segments/{segment_id}/hls/{task_id}/index.m3u8")
+def hls_playlist(request: Request, segment_id: str, task_id: str, fingerprint: str):
+    from app.services import hls
+
+    with Session(request.app.state.engine) as session:
+        segment = playback.get_segment(session, segment_id)
+        if segment.fingerprint != fingerprint:
+            raise AppError("RECORDING_CHANGED", "录像已变化，请重新加载。", 409)
+        text = hls.playlist(session, request.app.state.config, segment, task_id)
+    return Response(
+        text, media_type="application/vnd.apple.mpegurl", headers={"Cache-Control": "no-store"}
+    )
+
+
+@router.api_route("/segments/{segment_id}/hls/{task_id}/{artifact_id}.ts", methods=["GET", "HEAD"])
+def hls_fragment(
+    request: Request, segment_id: str, task_id: str, artifact_id: str, fingerprint: str
+):
+    from app.services import hls
+
+    with write_session(request.app.state.engine) as session:
+        segment = playback.get_segment(session, segment_id)
+        if segment.fingerprint != fingerprint:
+            raise AppError("RECORDING_CHANGED", "录像已变化，请重新加载。", 409)
+        task = hls.get_task(session, request.app.state.config, segment, task_id)
+        items = hls.checkpoint(session, task).get("hlsChunks", [])
+        item = next((item for item in items if item["id"] == artifact_id), None)
+        if item is None:
+            raise AppError("ARTIFACT_NOT_FOUND", "播放分片不存在。", 404)
+        artifact, path = hls.chunk_path(session, request.app.state.config, segment, task, item)
+        artifact.last_access_at = utc_now_ms()
+        usage = FileUse(session, request.app.state.engine, request.app.state.config, artifact, path)
+        return serve_file(
+            request,
+            path,
+            artifact.size_bytes,
+            None,
+            f'"{artifact.id}-{fingerprint}"',
+            usage=usage,
+            content_type="video/mp2t",
+        )
+
+
+@router.post("/segments/{segment_id}/hls/{task_id}/lease")
+def hls_lease(request: Request, segment_id: str, task_id: str, body: PlaybackLeaseRequest):
+    from app.services import hls
+
+    with write_session(request.app.state.engine) as session:
+        segment = playback.get_segment(session, segment_id)
+        return hls.lease(
+            session, request.app.state.config, segment, task_id, body.client_id, body.active
+        )

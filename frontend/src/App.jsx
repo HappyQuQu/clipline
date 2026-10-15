@@ -74,7 +74,7 @@ export default function App() {
     if (!selection.sourceId) return;
     const controller = new AbortController();
     request(`/sources/${selection.sourceId}/dates?${queryString({ viewTimezone: timezone })}`, { signal: controller.signal }).then(data => {
-      if (controller.signal.aborted) return; setDates(data.items);
+      if (controller.signal.aborted) return; setTimelineError(''); setDates(data.items);
       setSelection(current => current.sourceId === selection.sourceId && (!current.date || (data.items.length && !data.items.includes(current.date))) ? { ...current, date: data.items[0] || dateInZone(Date.now(), timezone), generation: (current.generation || 0) + 1 } : current);
     }).catch(failure => { if (failure.name !== 'AbortError') setTimelineError(failure.message); });
     return () => controller.abort();

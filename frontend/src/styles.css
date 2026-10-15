@@ -4472,3 +4472,13 @@ td {
   .batch-actions{gap:10px;width:100%}
   .batch-actions .button{flex:1;min-width:0;padding:0 10px;font-size:12px;height:38px}
 }
+
+/* Full dates remain visible alongside the timeline and on every recording card. */
+.recording-date-caption{display:flex;flex-wrap:wrap;align-items:center;gap:7px 10px;padding:10px 14px;border-top:1px solid #e7ecf2;background:#fbfcfe;font-size:12px;color:#637187}
+.recording-date-caption>svg{color:#087fff;flex-shrink:0}.recording-date-caption>strong{color:#334155;font-weight:600}.recording-date-caption>span{font-variant-numeric:tabular-nums}
+.strip-card .strip-card-date{display:block;font-size:11px;font-weight:500;color:#64748b;margin-top:7px;margin-bottom:3px;line-height:1.5;white-space:normal}
+.strip-card.selected .strip-card-date{color:#087fff}.strip-card .strip-cross-day{display:block;white-space:normal;overflow-wrap:anywhere;font-size:10px;line-height:1.5;color:#718096;margin-top:4px}
+.stream-buffer-status{position:absolute;left:14px;bottom:14px;display:flex;align-items:center;gap:7px;max-width:calc(100% - 28px);padding:9px 12px;background:#15212ce8;border:1px solid #ffffff26;border-radius:7px;color:#fff;font-size:12px}
+@media(max-width:600px){.clip-section>.section-heading{flex-wrap:wrap;gap:8px}.clip-section>.section-heading h2{line-height:1.6}.recording-date-caption{padding:9px 11px;gap:5px 7px}.strip-card .strip-card-date{font-size:10px}}
+
+.review-workspace .recording-date-caption{flex-shrink:0}

@@ -15,7 +15,11 @@ from app.services.directories import RecordingDirectories
 from app.services.maintenance import evict_playback
 
 
-def profile(config, mode="compatible"):
+def profile(config, mode="compatible", start_ms=0):
+    if mode == "stream":
+        from app.services.hls import profile as hls_profile
+
+        return hls_profile(config, start_ms)
     if mode == "hevc":
         return hashlib.sha256(b"hevc-copy-hvc1-aac-faststart-v1").hexdigest()
     return hashlib.sha256(
@@ -25,6 +29,8 @@ def profile(config, mode="compatible"):
 
 def playback_mode(segment, requested):
     # Only opt in after the client has checked its decoder. Legacy clients keep H.264.
+    if requested == "stream":
+        return "stream"
     if segment.video_codec != "hevc":
         return "compatible"
     if requested == "original":
@@ -90,10 +96,23 @@ def cached(session, config, segment, mode="compatible"):
     return None
 
 
-def playback_status(session, config, segment_id, mode="compatible"):
+def playback_status(session, config, segment_id, mode="compatible", start_ms=0):
     segment = get_segment(session, segment_id)
     original_path(session, config, segment)
     mode = playback_mode(segment, mode)
+    if mode == "stream":
+        legacy = cached(session, config, segment)
+        if legacy:
+            return {
+                "status": "ready",
+                "mediaUrl": f"/api/segments/{segment.id}/media?fingerprint={segment.fingerprint}",
+                "taskId": None,
+                "proxy": True,
+                "mode": "compatible",
+            }
+        from app.services.hls import state
+
+        return state(session, config, segment, start_ms)
     url = f"/api/segments/{segment.id}/media?fingerprint={segment.fingerprint}&mode={mode}"
     if mode == "original":
         return {"status": "direct", "mediaUrl": url, "taskId": None, "proxy": False, "mode": mode}
@@ -139,6 +158,10 @@ def playback_status(session, config, segment_id, mode="compatible"):
 
 
 def prepare(context):
+    if context.claim.payload.get("mode") == "stream":
+        from app.services.hls import prepare as prepare_hls
+
+        return prepare_hls(context)
     context.update("validate", 1, {})
     mode = context.claim.payload.get("mode", "compatible")
     with Session(context.queue.engine) as session:

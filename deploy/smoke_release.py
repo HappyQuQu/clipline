@@ -353,6 +353,21 @@ class Smoke:
         assert streams[1]["codec_name"] == "aac"
         assert self.call(f"/segments/{hevc['id']}/playback?mode=hevc")["status"] == "ready"
         self.check("hevc-native-cold-range-and-audio-only-remux")
+        stream_id = self.call(f"/segments/{hevc['id']}/prepare", {"mode": "stream"})["taskId"]
+        stream = self.wait(stream_id)
+        assert stream["status"] == "completed", stream
+        stream_state = self.call(f"/segments/{hevc['id']}/playback?mode=stream")
+        assert stream_state["format"] == "hls" and stream_state["status"] == "ready"
+        with urllib.request.urlopen(self.base + stream_state["mediaUrl"]) as response:
+            listing = response.read().decode()
+        assert "#EXT-X-ENDLIST" in listing
+        fragment_url = next(line for line in listing.splitlines() if line.startswith("/api/"))
+        with urllib.request.urlopen(
+            urllib.request.Request(self.base + fragment_url, headers={"Range": "bytes=0-187"})
+        ) as response:
+            data = response.read()
+            assert response.status == 206 and len(data) == 188 and data[0] == 0x47
+        self.check("h264-hls-fragments-playlist-cache-and-range")
         proxy_id = self.call(f"/segments/{rows[2]['id']}/prepare", {})["taskId"]
         assert self.wait(proxy_id)["status"] == "completed"
         prepared = self.call(f"/segments/{rows[2]['id']}/playback")

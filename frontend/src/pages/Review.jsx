@@ -5,6 +5,8 @@ import { Badge, IconButton, Notice } from '../components/UI';
 import VerticalTimeline from '../components/VerticalTimeline';
 import PlaybackDetails from '../components/PlaybackDetails';
 import usePlayback from '../hooks/usePlayback';
+import useHlsSource from '../hooks/useHlsSource';
+import { recordingDateLabel, recordingMoment } from '../recordingDates';
 import useRangePlan from '../hooks/useRangePlan';
 import { request, queryString } from '../api/client';
 import { clipView } from '../api/adapters';
@@ -25,7 +27,10 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
   const [detailsOpen, setDetailsOpen] = useState(initialDetails);
   const [mediaError, setMediaError] = useState(false);
   const [rangeDirty, setRangeDirty] = useState(false);
-  const playback = usePlayback(clip, real);
+  const playback = usePlayback(clip, real, initialOffset);
+  const streamBase = playback.format === "hls" ? (playback.startMs || 0) / 1000 : 0;
+  const [buffering, setBuffering] = useState(false);
+  useHlsSource(video, playback, message => { setMediaError(message); setPlaying(false); });
   const mediaUrl = real ? playback.mediaUrl : clip?.media;
   const clipDuration = real ? (clip?.duration || 0) : 60;
   const seekGeneration = useRef(0);
@@ -37,6 +42,8 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
   const rangePlan = useRangePlan({ enabled: real && managing && summary.valid && rangeBoundariesValid, sourceId: source.id, date, start: rangeStart, end: rangeEnd, timezone: settings.timezone, mode: settings.defaultMode, timeline, clipId: exportClipId });
   const canExportRange = summary.valid && rangeBoundariesValid && exportEnabled && (!real || !!rangePlan.plan);
   const current = (clip?.start || 0) + offset;
+  const moment = recordingMoment(clip, offset, date, settings.timezone);
+  const playbackLabel = playback.format === "hls" ? "边转边播 · H.264" : playback.proxy ? playback.mode === "hevc" ? "音频兼容 · H.265" : "兼容播放 · H.264" : "原始录像 · 只读";
   const minimumOffset = clip ? Math.max(0, bounds.start - clip.start) : 0;
   const maximumOffset = clip ? Math.max(minimumOffset, Math.min(clipDuration, bounds.end - clip.start)) : clipDuration;
 
@@ -55,9 +62,9 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
     const player = video.current;
     if (!player) return;
     player.playbackRate = Number(speed);
-    if (playing) player.play().catch(() => setPlaying(false)); else player.pause();
+    if (playing) { if (playback.format !== "hls" || player.readyState >= 1) player.play().catch(() => setPlaying(false)); } else player.pause();
   }, [playing, speed, clip?.id, mediaUrl]);
-  useEffect(() => { if (real) { pendingSeek.current = initialOffset; setOffset(initialOffset); if (video.current?.readyState >= 1) video.current.currentTime = initialOffset; } }, [initialOffset, clip?.id, real]);
+  useEffect(() => { if (real) { pendingSeek.current = initialOffset; setOffset(initialOffset); if (video.current?.readyState >= 1) seekPlayer(initialOffset); } }, [initialOffset, clip?.id, real]);
 
   useEffect(() => {
     const container = gallery.current;
@@ -66,13 +73,18 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
     if (card.offsetTop < container.scrollTop || card.offsetTop + card.offsetHeight > container.scrollTop + container.clientHeight) container.scrollTop = card.offsetTop;
   }, [clip?.id]);
 
+  function seekPlayer(value) {
+    pendingSeek.current = value; setOffset(value);
+    if (playback.seek(value)) return;
+    if (video.current) video.current.currentTime = Math.max(0, value - streamBase);
+  }
   function select(target, seekOffset = 0, showDetails = false) {
     if (!target) return;
     seekOffset = Math.max(0, bounds.start - target.start, Math.min(seekOffset, bounds.end - target.start - .001));
     seekGeneration.current++;
     if (showDetails) openDetails();
     pendingSeek.current = seekOffset;
-    if (target.id === clip?.id) { if (video.current) video.current.currentTime = seekOffset; setOffset(seekOffset); }
+    if (target.id === clip?.id) { seekPlayer(seekOffset); }
     else if (real) onSelect(target, seekOffset, showDetails); else setClipId(target.id);
   }
   async function seekAbsolute(value) {
@@ -118,7 +130,7 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
   }
   function togglePlaying() {
     if (!playing && offset >= maximumOffset - .05) {
-      if (video.current) video.current.currentTime = minimumOffset;
+      seekPlayer(minimumOffset);
       setOffset(minimumOffset);
     }
     setPlaying(value => !value);
@@ -142,19 +154,21 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
           <header className="unifi-camera-heading"><div className="source-select"><span className={`source-dot ${source.enabled ? 'blue' : 'neutral'}`} /><FilmStrip size={17} /><strong className="camera-source-name" title={source.name}>{source.name}</strong><span className="camera-resolution">{real ? clip?.resolution || '—' : '1920 × 1080'}</span></div><div><IconButton icon={SidebarSimple} label={detailsOpen ? '收起片段详情' : '打开片段详情'} aria-expanded={detailsOpen} disabled={!clip} onClick={() => detailsOpen ? setDetailsOpen(false) : openDetails()} />{clip && <button className="button quiet small" disabled={scanning || !source.enabled} onClick={onScan}>{scanning ? <CircleNotch className="spin" size={16} /> : <ArrowClockwise size={16} />}{scanning ? '扫描中' : '扫描新录像'}</button>}</div></header>
         {!clip ? <ReviewEmpty loading={real && !timeline} date={date} dates={dates} source={source} scanning={scanning} onScan={onScan} onSelectDate={day => { if (reviewRange) onReviewRangeChange(null); setDate(day); }} /> : <section className="player-panel" aria-label="录像播放器">
           <div className="video-stage" ref={stage} onClick={openDetails}>
-            {mediaUrl && !mediaError ? <video key={`${clip.id}:${mediaUrl}`} ref={video} src={mediaUrl} poster={clip.image} muted={muted} playsInline preload="metadata" onLoadedMetadata={() => { if (!video.current) return; video.current.currentTime = pendingSeek.current; pendingSeek.current = 0; if (playing) video.current.play().catch(() => setPlaying(false)); }} onTimeUpdate={() => { const player = video.current; if (!player) return; if (player.currentTime > maximumOffset && maximumOffset < clipDuration) { player.pause(); player.currentTime = maximumOffset; setPlaying(false); } setOffset(player.currentTime); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={onEnded} onError={() => { pendingSeek.current = video.current?.currentTime || offset; if (real && playback.fallback(video.current?.error)) { setMediaError(false); return; } setMediaError(true); setPlaying(false); }} onClick={togglePlaying} aria-label={`${source.name}${real ? '录像' : '示例录像'}`} /> : <img src={clip.image} alt={`${source.name}录像预览`} />}
-            <div className="video-top"><Badge tone="video" dot>{source.name}</Badge><span>{date.replaceAll('-', '/')}<strong>{clock(current)}</strong></span></div>
+            {mediaUrl && !mediaError ? <video key={`${clip.id}:${mediaUrl}`} ref={video} src={playback.format === "hls" ? undefined : mediaUrl} poster={clip.image} muted={muted} playsInline preload="metadata" onLoadedMetadata={() => { if (!video.current) return; video.current.currentTime = Math.max(0, pendingSeek.current - streamBase); pendingSeek.current = 0; if (playing) video.current.play().catch(() => setPlaying(false)); }} onTimeUpdate={() => { const player = video.current; if (!player) return; const absolute = player.currentTime + streamBase; if (absolute > maximumOffset && maximumOffset < clipDuration) { player.pause(); player.currentTime = Math.max(0, maximumOffset - streamBase); setPlaying(false); } setOffset(absolute); }} onWaiting={() => setBuffering(true)} onPlaying={() => { setBuffering(false); setPlaying(true); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={onEnded} onError={() => { pendingSeek.current = (video.current?.currentTime || 0) + streamBase || offset; if (real && playback.fallback(video.current?.error, pendingSeek.current)) { setMediaError(false); return; } setMediaError(true); setPlaying(false); }} onClick={togglePlaying} aria-label={`${source.name}${real ? '录像' : '示例录像'}`} /> : <img src={clip.image} alt={`${source.name}录像预览`} />}
+            <div className="video-top"><Badge tone="video" dot>{source.name}</Badge><span>{recordingDateLabel(moment.date)}<strong>{moment.time || clock(current)}</strong></span></div>
             {!playing && mediaUrl && !mediaError && <button className="stage-play" onClick={event => { event.stopPropagation(); togglePlaying(); }} aria-label="播放录像"><Play size={30} weight="fill" /></button>}
-            {(!mediaUrl || mediaError) && <div className="static-preview"><Info size={22} /><strong>{real ? mediaError ? '浏览器无法播放当前文件' : playback.status === 'preparing' ? '正在准备播放版本' : playback.status === 'loading' ? '读取播放状态…' : '播放暂不可用' : mediaError ? '示例视频加载失败' : '静态画面预览'}</strong><span>{real ? playback.status === 'preparing' ? `${playback.progress || 0}% · 后台处理，可以继续查看详情或切换录像。` : playback.message || '可重新生成兼容播放版本，原录像保持只读。' : '切换「工作室」体验示例视频。'}</span>{real && !['preparing', 'loading'].includes(playback.status) && <button className="button primary small" onClick={event => { event.stopPropagation(); setMediaError(false); playback.retry(); }}>重新准备播放</button>}</div>}
-            <span className="video-demo">{real ? mediaUrl ? playback.proxy ? '兼容播放版本' : '原始录像 · 只读' : '后台播放准备' : '示例录像'}</span>
+            {(!mediaUrl || mediaError) && <div className="static-preview"><Info size={22} /><strong>{real ? mediaError ? typeof mediaError === 'string' ? mediaError : '浏览器无法播放当前文件' : playback.status === 'preparing' ? playback.mode === 'stream' ? '正在准备首个播放分片' : '正在准备播放版本' : playback.status === 'loading' ? '读取播放状态…' : '播放暂不可用' : mediaError ? '示例视频加载失败' : '静态画面预览'}</strong><span>{real ? playback.status === 'preparing' ? playback.mode === 'stream' ? '首个分片就绪后立即播放，后续继续转换。' : `${playback.progress || 0}% · 后台处理，可以继续查看详情或切换录像。` : playback.message || '可重新生成兼容播放版本，原录像保持只读。' : '切换「工作室」体验示例视频。'}</span>{real && !['preparing', 'loading'].includes(playback.status) && <button className="button primary small" onClick={event => { event.stopPropagation(); setMediaError(false); playback.retry(offset); }}>重新连接播放</button>}</div>}
+            {playback.format === "hls" && mediaUrl && buffering && <div className="stream-buffer-status" role="status"><CircleNotch size={15} className="spin" />正在缓冲 · 已准备 {duration((playback.availableMs || 0) / 1000)}</div>}
+            <span className="video-demo">{real ? mediaUrl ? playbackLabel : '后台播放准备' : '示例录像'}</span>
           </div>
-          <div className="player-controls"><IconButton icon={playing ? Pause : Play} label={playing ? '暂停录像' : '播放录像'} disabled={!mediaUrl || mediaError} onClick={togglePlaying} /><span className="player-clock">{duration(Math.max(0, offset - minimumOffset))}<span> / {duration(maximumOffset - minimumOffset)}</span></span><input type="range" min={minimumOffset} max={maximumOffset} step="0.1" value={Math.max(minimumOffset, Math.min(offset, maximumOffset))} aria-label="片段播放进度" disabled={!mediaUrl || mediaError} onChange={e => { const value = Number(e.target.value); if (video.current) video.current.currentTime = value; setOffset(value); }} /><select className="speed-select" aria-label="播放速度" value={speed} onChange={e => setSpeed(e.target.value)}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select><IconButton icon={muted ? SpeakerSlash : SpeakerHigh} label={muted ? '取消静音' : '静音'} onClick={() => setMuted(!muted)} /><IconButton icon={ArrowsOut} label="全屏播放" onClick={() => stage.current?.requestFullscreen?.().catch(() => notify('当前浏览器暂时无法进入全屏。'))} /></div>
+          <div className="player-controls"><IconButton icon={playing ? Pause : Play} label={playing ? '暂停录像' : '播放录像'} disabled={!mediaUrl || mediaError} onClick={togglePlaying} /><span className="player-clock">{duration(Math.max(0, offset - minimumOffset))}<span> / {duration(maximumOffset - minimumOffset)}</span></span><input type="range" min={minimumOffset} max={maximumOffset} step="0.1" value={Math.max(minimumOffset, Math.min(offset, maximumOffset))} aria-label="片段播放进度" disabled={!mediaUrl || mediaError} onChange={e => { const value = Number(e.target.value); seekPlayer(value); }} /><select className="speed-select" aria-label="播放速度" value={speed} onChange={e => setSpeed(e.target.value)}><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select><IconButton icon={muted ? SpeakerSlash : SpeakerHigh} label={muted ? '取消静音' : '静音'} onClick={() => setMuted(!muted)} /><IconButton icon={ArrowsOut} label="全屏播放" onClick={() => stage.current?.requestFullscreen?.().catch(() => notify('当前浏览器暂时无法进入全屏。'))} /></div>
+          <div className="recording-date-caption"><CalendarBlank size={15} /><strong>{recordingDateLabel(clip.date || date)}</strong><span>{clip.startLabel || clock(clip.start)} — {clip.endDate && clip.endDate !== clip.date ? recordingDateLabel(clip.endDate) + " " : ""}{clip.endLabel || clock(clip.end)}</span></div>
           <div className="player-caption"><FilmStrip size={16} /><span title={clip.filename}>{clip.filename}</span><Badge>{clip.codec}</Badge><span>{real ? clip.resolution : '1080p'}</span></div>
         </section>}
 
         </div>
-      {clip && <section className="clip-section" aria-label={reviewRange ? '区间内录像' : '当天全部录像'}><div className="section-heading"><h2>{reviewRange ? '区间内录像' : '当天全部录像'} <span className="count-label">{timeline?.nextCursor ? `已加载 ${clips.length}` : clips.length}</span></h2><button className="text-button" onClick={onLibrary}>在片段库中查看<ArrowUpRightIcon /></button></div><p className="review-gallery-hint">上下滚动浏览录像，点击片段回看。</p><div ref={gallery} className="clip-strip" aria-label={reviewRange ? '区间内录像列表' : '当天录像列表'}>{clips.map(c => <button className={`strip-card ${c.id === clip.id ? 'selected' : ''}`} key={c.id} onClick={() => select(c, Math.max(0, bounds.start - c.start), true)} aria-pressed={c.id === clip.id}><div className="clip-image"><img src={c.image} alt={`${source.name} ${clock(c.start)} 录像画面`} loading="lazy" /><span>{duration(Math.min(bounds.end, c.end) - Math.max(bounds.start, c.start))}</span>{c.id === clip.id && <span className="now-playing"><Play weight="fill" size={12} />当前片段</span>}</div><strong>{clock(c.start)}</strong><span>{recordingTime(Math.max(bounds.start, c.start))} – {recordingTime(Math.min(bounds.end, c.end))}</span></button>)}</div>{real && timeline?.nextCursor && <button className="button secondary small review-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? '正在加载…' : '加载更多录像'}</button>}</section>}
-        {detailsOpen && clip && <PlaybackDetails exportDate={date} clip={clip} source={source} onClose={() => setDetailsOpen(false)} onManage={manageCurrentClip} onExport={onExport} exportEnabled={exportEnabled} />}
+      {clip && <section className="clip-section" aria-label={reviewRange ? '区间内录像' : '当天全部录像'}><div className="section-heading"><h2>{recordingDateLabel(date)} · {reviewRange ? '区间内录像' : '当天全部录像'} <span className="count-label">{timeline?.nextCursor ? `已加载 ${clips.length}` : clips.length}</span></h2><button className="text-button" onClick={onLibrary}>在片段库中查看<ArrowUpRightIcon /></button></div><p className="review-gallery-hint">上下滚动浏览录像，点击片段回看。</p><div ref={gallery} className="clip-strip" aria-label={reviewRange ? '区间内录像列表' : '当天录像列表'}>{clips.map(c => <button className={`strip-card ${c.id === clip.id ? 'selected' : ''}`} key={c.id} onClick={() => select(c, Math.max(0, bounds.start - c.start), true)} aria-pressed={c.id === clip.id}><div className="clip-image"><img src={c.image} alt={`${source.name} ${recordingDateLabel(date)} ${recordingTime(Math.max(bounds.start, c.start))} 录像画面`} loading="lazy" /><span>{duration(Math.min(bounds.end, c.end) - Math.max(bounds.start, c.start))}</span>{c.id === clip.id && <span className="now-playing"><Play weight="fill" size={12} />当前片段</span>}</div><span className="strip-card-date">{recordingDateLabel(date)}</span><strong>{recordingTime(Math.max(bounds.start, c.start))}</strong><span>{recordingTime(Math.max(bounds.start, c.start))} – {recordingTime(Math.min(bounds.end, c.end))}</span>{c.endDate && c.endDate !== c.date && <small className="strip-cross-day">原片跨日：{c.date} → {c.endDate}</small>}</button>)}</div>{real && timeline?.nextCursor && <button className="button secondary small review-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? '正在加载…' : '加载更多录像'}</button>}</section>}
+        {detailsOpen && clip && <PlaybackDetails exportDate={date} clip={clip} playbackLabel={playbackLabel} source={source} onClose={() => setDetailsOpen(false)} onManage={manageCurrentClip} onExport={onExport} exportEnabled={exportEnabled} />}
         {managing && clip && <>
         <aside className="range-panel panel"><div className="section-heading"><h2>管理片段</h2><button className="text-button" onClick={() => setManaging(false)}>关闭</button></div><p className="section-description">拖动边界或输入起止时间，只能选择有录像的位置。</p>
           <label className="field range-field">开始时间<div className="time-input"><Clock size={17} /><input type="time" step="1" min={recordingTime(Math.ceil(coverage[0]?.start || 0))} max={clock(coverage.at(-1)?.end || 0)} value={recordingTime(rangeStart)} aria-invalid={!recordedAt(coverage, rangeStart)} aria-label="导出开始时间" onInput={e => { if (e.currentTarget.value) { setRangeDirty(true); setRangeStart(seconds(e.currentTarget.value)); } }} onChange={e => { if (e.target.value) { setRangeDirty(true); setRangeStart(seconds(e.target.value)); } }} /><button className="text-button" onClick={() => { setRangeDirty(true); setRangeStart(Math.floor(current)); }}>设为当前</button></div></label>

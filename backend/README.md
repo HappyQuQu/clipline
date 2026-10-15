@@ -65,7 +65,7 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 | GET `/api/tasks`、`/{id}`；POST `/{id}/cancel`、`/{id}/retry` | 状态/类型/源筛选及分页、尝试记录、取消和新 ID 重试 |
 | GET `/api/segments`、`/{id}`、`/{id}/thumbnail` | 源/本地日/文件名或起止时刻搜索、稳定分页、真实元数据和 JPEG |
 | GET `/api/sources/{id}/dates`、`/api/timeline`、`/api/sources/{id}/resolve` | 有录像日期、本地日覆盖/断档、时间窗分页与稳定定位；重叠不重复计时 |
-| GET `/api/segments/{id}/playback`；POST `/{id}/prepare` | 返回状态/mediaUrl；mode=compatible/hevc/original，默认 compatible；force=true 为兼容转码 |
+| GET `/api/segments/{id}/playback`；POST `/{id}/prepare` | 返回状态/mediaUrl；mode=compatible/hevc/original/stream + startMs，默认 compatible；force=true 为兼容转码 |
 | GET/HEAD `/api/segments/{id}/media?fingerprint=…` | 安全 ID 路径、指纹检查、单段 Range、206/416、HEAD/ETag；GET 不转码 |
 | POST `/api/exports/plan`；POST `/api/exports` | 同源同日计划预览、planHash 复核和持久化提交；跨度默认 30 分钟 |
 | GET/HEAD `/api/exports/{id}/download`；POST `…/resubmit` | 已登记结果下载、206/416/ETag、安全文件名、未完成 409、过期 410 和新 ID 重新导出 |
@@ -91,3 +91,5 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 备份与离线恢复步骤见 [运维说明](../docs/OPERATIONS.md)。迁移前自动做 SQLite 一致性备份和 SHA256/schema manifest；恢复要求 API/Worker 全部停止。D5 的 schema 为 `0004_log_sequence`，原日志 UUID 和任务记录保持。
 
 D6 原生候选镜像验收由 `deploy/smoke_release.py` 驱动，涵盖软件媒体流程与真实进程故障；两种架构分别在原生 Ubuntu runner 上执行。NAS 配置、部署预检及发布门禁见 [部署说明](../docs/DEPLOYMENT.md)。应用候选版本 0.7.0，schema 沿用 0004。
+
+H.264 流式回看采用 4 秒 HLS 分片：先播放已完成分片，再继续后台转换。观看租约、按需定位、重启检查点、缓存容量和取消/重试规则见 [开发文档](../docs/DEVELOPMENT.md)。原录像保持只读，媒体处理继续共用部署的线程与并行限制。
