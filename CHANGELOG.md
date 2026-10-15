@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/HappyQuQu/clipline/compare/v0.8.0...v0.8.1) (2026-10-15)
+
+
+### 修复
+
+* support playback and actions over NAS HTTP ([fea9565](https://github.com/HappyQuQu/clipline/commit/fea9565ce0f7b0d2f3b74dc75263fb6f0682aff8))
+
 ## [0.8.0](https://github.com/HappyQuQu/clipline/compare/v0.7.0...v0.8.0) (2026-10-14)
 
 
