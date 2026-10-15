@@ -1,3 +1,4 @@
+import { createId } from './id';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlayCircle, SquaresFour, Stack, FolderSimple, GearSix, MagnifyingGlass, CaretRight, Plus, HardDrives, FileText, List, X, ArrowRight } from '@phosphor-icons/react';
 import { Badge, EmptyState, ExtensionSlot, IconButton, Modal, Notice, Toast } from './components/UI';
@@ -120,7 +121,7 @@ export default function App() {
     setActive({ context, clip: target }); setSelection(current => ({ ...current, clipId: target.id, offset, details }));
   }
   function openClip(target) { setReviewRange(null); setActive(null); setSelection(current => ({ sourceId: target.sourceId, date: target.date, clipId: target.id, offset: 0, details: true, dateAuto: false, generation: (current.generation || 0) + 1 })); setSearchOpen(false); navigate('review'); }
-  async function action(path, body = {}) { try { const result = await request(path, { method: 'POST', body, key: crypto.randomUUID() }); setRefresh(value => value + 1); return result; } catch (failure) { notify(failure.message); return null; } }
+  async function action(path, body = {}) { try { const result = await request(path, { method: 'POST', body, key: createId() }); setRefresh(value => value + 1); return result; } catch (failure) { notify(failure.message); return null; } }
   async function scan(id) { const result = await action(`/sources/${id}/scan`); if (result) notify(result.reused ? '这个源已有扫描任务，已定位现有任务。' : '扫描已加入后台队列，可继续回看。'); }
   async function patchSource(row, patch) { await request(`/sources/${row.id}`, { method: 'PATCH', body: { ...patch, revision: row.revision } }); setRefresh(value => value + 1); }
   async function loadMore() {
@@ -182,7 +183,7 @@ export default function App() {
     </div><Toast message={toast} onClose={closeToast} />
     {exportRange && <ExportDialog range={exportRange} defaultMode={settings.defaultMode} timezone={timezone} source={sources.find(row => row.id === exportRange.sourceId)} onClose={() => setExportRange(null)} onSubmitted={id => { setExportRange(null); setTaskFocus(id); navigate("tasks"); setRefresh(value => value + 1); notify("导出已加入后台队列，可离开页面继续处理。"); }} />}
     {dialog && <SourceDialog real sources={sources} defaultInterval={settings.interval} onClose={() => setDialog(false)} onSubmit={async (row, { scanAfterAdd, key }) => { const result = await request('/sources', { method: 'POST', key, body: { name: row.name, path: row.path, scanIntervalMinutes: row.interval === 'manual' ? null : Number(row.interval), scanOnCreate: scanAfterAdd, autoTranscribe: false, autoDetect: false } }); setDialog(false); changeSource(result.source.id); setRefresh(value => value + 1); notify(result.firstTaskId ? '录像源已添加，首次扫描已加入后台队列。' : '录像源已添加。'); }} />}
-    {taskDialog && <TaskDialog source={source} kind={taskKind} setKind={setTaskKind} onClose={() => setTaskDialog(false)} onSubmit={async body => { await request('/tasks', { method: 'POST', body, key: crypto.randomUUID() }); setRefresh(value => value + 1); setTaskDialog(false); notify('任务已加入后台队列。'); }} />}
+    {taskDialog && <TaskDialog source={source} kind={taskKind} setKind={setTaskKind} onClose={() => setTaskDialog(false)} onSubmit={async body => { await request('/tasks', { method: 'POST', body, key: createId() }); setRefresh(value => value + 1); setTaskDialog(false); notify('任务已加入后台队列。'); }} />}
     {searchOpen && <Modal title="查找录像" footer={<button type="button" className="button secondary" onClick={() => { setSearchOpen(false); setQuery(''); }}>关闭</button>} description="按文件名或起止时间搜索真实索引。" onClose={() => { setSearchOpen(false); setQuery(''); }}><div className="search-field large"><MagnifyingGlass size={21} /><input autoFocus aria-label="搜索录像" value={query} onChange={event => setQuery(event.target.value)} placeholder="输入文件名或 08:25…" /></div>{searchError && <Notice warning>{searchError}</Notice>}<div className="search-results">{searchLoading && <p role="status">正在查询真实录像…</p>}{results.map(row => <button key={row.id} onClick={() => openClip(row)}><img src={row.image} alt="" /><div><strong>{sources.find(item => item.id === row.sourceId)?.name} · {row.date} {clock(row.start)}</strong><span>{row.filename}</span></div><ArrowRight size={18} /></button>)}{query && !searchLoading && !results.length && !searchError && <EmptyState title="没有匹配的录像" description="调整文件名或时间后重试。" />}</div><ExtensionSlot name="search-provider" context={{ query }} /></Modal>}
   </div>;
 }

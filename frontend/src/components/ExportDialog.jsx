@@ -1,3 +1,4 @@
+import { createId } from '../id';
 import { useEffect, useRef, useState } from 'react';
 import { DownloadSimple } from '@phosphor-icons/react';
 import { Modal, Notice } from './UI';
@@ -28,7 +29,7 @@ export default function ExportDialog({ range, timezone, source, defaultMode = 'f
     setBusy(true); setError('');
     const body = { ...preview.body, planHash: preview.plan.planHash };
     const encoded = JSON.stringify(body);
-    if (submission.current?.encoded !== encoded) submission.current = { encoded, key: crypto.randomUUID() };
+    if (submission.current?.encoded !== encoded) submission.current = { encoded, key: createId() };
     try { const result = await request('/exports', { method: 'POST', body, key: submission.current.key }); if (mounted.current) onSubmitted(result.taskId); }
     catch (failure) { if (mounted.current) { setError(failure.message); setBusy(false); } }
   }

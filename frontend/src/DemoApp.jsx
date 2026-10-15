@@ -1,3 +1,4 @@
+import { createId } from './id';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PlayCircle, SquaresFour, Stack, FolderSimple, GearSix, MagnifyingGlass, ArrowUpRight, Check, Plus, HardDrives, CaretRight, List, X, ArrowRight, DownloadSimple, Scissors, CircleNotch, FileText } from '@phosphor-icons/react';
 import { DEMO_DATE, demoClips, initialSources, initialTasks, initialLogs, readSaved, nowLabel, clock, seconds, duration, summarizeRange, TASK_TYPES, taskStage } from './domain';
@@ -44,7 +45,7 @@ export default function App() {
   const notify = useCallback(message => setToast(message), []);
   const closeToast = useCallback(() => setToast(''), []);
   const appendLog = useCallback(event => {
-    setLogs(previous => [{ id: crypto.randomUUID(), createdAt: new Date().toISOString(), time: `今天 ${nowLabel()}`, level: 'info', ...event }, ...previous]);
+    setLogs(previous => [{ id: createId(), createdAt: new Date().toISOString(), time: `今天 ${nowLabel()}`, level: 'info', ...event }, ...previous]);
   }, []);
   const source = sources.find(s => s.id === sourceId) || sources[0];
   const reviewBounds = reviewDayBounds(reviewRange, date);
@@ -125,7 +126,7 @@ export default function App() {
     const target = sources.find(s => s.id === id);
     if (!target?.enabled) return notify('请先启用这个录像源。');
     if (tasks.some(t => t.sourceId === id && t.kind === 'scan' && ['queued', 'running'].includes(t.status))) return notify('这个录像源正在扫描。');
-    setTasks(previous => [{ id: crypto.randomUUID(), sourceId: id, title: `${target.name} · 目录扫描`, kind: 'scan', status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]);
+    setTasks(previous => [{ id: createId(), sourceId: id, title: `${target.name} · 目录扫描`, kind: 'scan', status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]);
     notify('扫描演示已开始，可在任务中心查看进度');
   };
   const createBackgroundTask = ({ kind, sourceId: id }) => {
@@ -134,12 +135,12 @@ export default function App() {
     if (tasks.some(task => task.kind === kind && task.sourceId === id && ['queued', 'running'].includes(task.status))) return notify('同一录像源已有此类任务在处理中。');
     setBackgroundDialog(false);
     if (kind === 'scan') return scan(id);
-    setTasks(previous => [{ id: crypto.randomUUID(), sourceId: id, kind, title: `${target.name} · ${TASK_TYPES[kind].label}`, status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]);
+    setTasks(previous => [{ id: createId(), sourceId: id, kind, title: `${target.name} · ${TASK_TYPES[kind].label}`, status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]);
     notify('后台演示任务已加入队列，可以继续回看');
   };
   const requestExport = range => setExportRange({ ...range, mode: settings.defaultMode });
   const createExport = range => {
-    setTasks(previous => [{ ...range, id: crypto.randomUUID(), kind: 'export', title: range.name, status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]);
+    setTasks(previous => [{ ...range, id: createId(), kind: 'export', title: range.name, status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]);
     setExportRange(null);
     notify('导出演示已加入队列，可继续回看录像');
   };
@@ -177,7 +178,7 @@ export default function App() {
     <Toast message={toast} onClose={closeToast} />
     {backgroundDialog && <BackgroundTaskDialog sources={sources} onClose={() => setBackgroundDialog(false)} onSubmit={createBackgroundTask} />}
     {exportRange && <ExportDialog range={exportRange} sources={sources} onClose={() => setExportRange(null)} onSubmit={createExport} maxDuration={Number(settings.maxDuration) * 60} />}
-    {sourceDialog && <SourceDialog sources={sources} defaultInterval={settings.interval} onClose={() => setSourceDialog(false)} onSubmit={(newSource, { scanAfterAdd }) => { setSources(previous => [...previous, newSource]); setSourceId(newSource.id); setSourceDialog(false); if (scanAfterAdd) setTasks(previous => [{ id: crypto.randomUUID(), sourceId: newSource.id, title: `${newSource.name} · 首次目录扫描`, kind: 'scan', status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]); notify(scanAfterAdd ? '录像源已添加，首次扫描已加入后台队列' : '录像源已添加，可在需要时手动扫描'); navigate('sources'); }} />}
+    {sourceDialog && <SourceDialog sources={sources} defaultInterval={settings.interval} onClose={() => setSourceDialog(false)} onSubmit={(newSource, { scanAfterAdd }) => { setSources(previous => [...previous, newSource]); setSourceId(newSource.id); setSourceDialog(false); if (scanAfterAdd) setTasks(previous => [{ id: createId(), sourceId: newSource.id, title: `${newSource.name} · 首次目录扫描`, kind: 'scan', status: 'queued', progress: 0, created: `今天 ${nowLabel()}`, demo: true }, ...previous]); notify(scanAfterAdd ? '录像源已添加，首次扫描已加入后台队列' : '录像源已添加，可在需要时手动扫描'); navigate('sources'); }} />}
     {searchOpen && <Modal title="查找录像" description="按文件名、录像源名称或录制时间搜索示例数据。" onClose={() => { setSearchOpen(false); setQuery(''); }}><div className="search-field large"><MagnifyingGlass size={21} /><input ref={searchRef} autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="试试「工作室」或「09:16」" aria-label="搜索录像" /></div><div className="search-results">{!query ? <div className="search-help">搜索只基于文件信息。选择结果即可定位到回看时间线。</div> : searchResults.length ? searchResults.map(c => <button key={c.id} onClick={() => openClip(c)}><img src={c.image} alt="" /><div><strong>{sources.find(s => s.id === c.sourceId)?.name} · {clock(c.start)}</strong><span>{c.filename}</span></div><ArrowUpRight size={18} /></button>) : <EmptyState title="没有匹配的文件" description="换个文件名或录像源名称试试。" />}</div><ExtensionSlot name="search-provider" context={{ query, onOpen: openClip }} /></Modal>}
   </div>;
 }
