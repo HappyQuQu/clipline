@@ -321,12 +321,45 @@ class Smoke:
         ) as response:
             assert response.status == 206 and len(response.read()) == 100
         self.check("source-index-timeline-detail-search-direct-range")
+        hevc = rows[2]
+        native = self.call(f"/segments/{hevc['id']}/playback?mode=original")
+        assert native["status"] == "direct" and not native["proxy"]
+        assert self.call(f"/segments/{hevc['id']}/prepare", {"mode": "original"})["taskId"] is None
+        with urllib.request.urlopen(
+            urllib.request.Request(self.base + native["mediaUrl"], headers={"Range": "bytes=0-99"})
+        ) as response:
+            assert response.status == 206 and len(response.read()) == 100
+        remux_id = self.call(f"/segments/{hevc['id']}/prepare", {"mode": "hevc"})["taskId"]
+        remux = self.wait(remux_id)
+        assert remux["status"] == "completed", remux
+        output = (
+            f"/app/data/playback-proxies/{hevc['id']}-{hevc['fingerprint']}-"
+            f"{remux['result']['profile'][:16]}.mp4"
+        )
+        streams = json.loads(
+            self.docker(
+                "exec",
+                self.name,
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_streams",
+                "-of",
+                "json",
+                output,
+            )
+        )["streams"]
+        assert streams[0]["codec_name"] == "hevc" and streams[0]["codec_tag_string"] == "hvc1"
+        assert streams[1]["codec_name"] == "aac"
+        assert self.call(f"/segments/{hevc['id']}/playback?mode=hevc")["status"] == "ready"
+        self.check("hevc-native-cold-range-and-audio-only-remux")
         proxy_id = self.call(f"/segments/{rows[2]['id']}/prepare", {})["taskId"]
         assert self.wait(proxy_id)["status"] == "completed"
         prepared = self.call(f"/segments/{rows[2]['id']}/playback")
         assert prepared["status"] == "ready" and prepared["proxy"]
         assert rows[2]["videoCodec"] == "hevc" and rows[2]["audioCodec"] == "opus"
         assert self.call(f"/segments/{rows[2]['id']}/prepare", {})["taskId"] is None
+        assert self.call(f"/segments/{hevc['id']}/playback?mode=hevc")["status"] == "ready"
         self.check("browser-compatible-proxy-and-cache")
         if self.args.real_sample:
             real = rows[4]

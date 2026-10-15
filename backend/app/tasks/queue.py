@@ -191,17 +191,22 @@ def task_resource(kind, source_id, payload):
     return f"prepare:{payload['segmentId']}" if kind == "prepare" else f"index:{source_id}"
 
 
-def submit_prepare(engine, config, segment_id, key=None, *, force=False, retry_of=None):
-    from app.services.playback import cached, get_segment, original_path, profile
+def submit_prepare(
+    engine, config, segment_id, key=None, *, force=False, retry_of=None, mode="compatible"
+):
+    from app.services.playback import cached, get_segment, original_path, playback_mode, profile
 
     scope = f"task:retry:{retry_of}" if retry_of else "prepare:create"
     request = {"segmentId": segment_id, "force": force}
+    if mode != "compatible":
+        request["mode"] = mode
     with write_session(engine) as session:
         previous = lookup(session, scope, key, request)
         if previous is not None:
             return previous
         segment = get_segment(session, segment_id)
         original_path(session, config, segment)
+        mode = playback_mode(segment, "compatible" if force and mode == "original" else mode)
         if retry_of:
             original = session.get(Task, retry_of)
             if (
@@ -212,11 +217,15 @@ def submit_prepare(engine, config, segment_id, key=None, *, force=False, retry_o
                 raise AppError("TASK_NOT_FOUND", "原播放准备任务不存在。", 404)
             if original.status not in ("failed", "cancelled"):
                 raise AppError("TASK_NOT_RETRYABLE", "只有失败或取消的任务可以重试。", 409)
-        if cached(session, config, segment) or (segment.playback_status == "direct" and not force):
+        if (
+            mode == "original"
+            or cached(session, config, segment, mode)
+            or (segment.playback_status == "direct" and not force)
+        ):
             response = {"taskId": None, "reused": True, "ready": True}
             remember(session, scope, key, request, response, None)
             return response
-        active_key = f"prepare:{segment.id}:{segment.fingerprint}:{profile(config)}"
+        active_key = f"prepare:{segment.id}:{segment.fingerprint}:{profile(config, mode)}"
         existing = session.scalar(select(Task).where(Task.active_key == active_key))
         if existing and retry_of:
             raise AppError("TASK_ALREADY_ACTIVE", "当前片段正在准备播放，请查看当前任务。", 409)
@@ -231,7 +240,8 @@ def submit_prepare(engine, config, segment_id, key=None, *, force=False, retry_o
                 payload_json={
                     "segmentId": segment.id,
                     "fingerprint": segment.fingerprint,
-                    "profile": profile(config),
+                    "profile": profile(config, mode),
+                    "mode": mode,
                     "force": force,
                 },
             )

@@ -149,6 +149,7 @@ def retry_task(
             key,
             force=payload.get("force", False),
             retry_of=task_id,
+            mode=payload.get("mode", "compatible"),
         )
     return submit(request.app.state.engine, source_id, kind, key, retry_of=task_id)
 
