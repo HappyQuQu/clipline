@@ -4,6 +4,7 @@ import { ArrowRight, Check, Clock, FolderSimple, HardDrives, MagnifyingGlass, Pl
 import { validateSourcePath } from '../domain';
 import { Badge, EmptyState, ExtensionSlot, Modal } from './UI';
 import DirectoryBrowser from './DirectoryBrowser';
+import SourceOverlapNotice from './SourceOverlapNotice';
 
 const exampleDirectories = [
   { path: '/recordings/studio', name: '工作室' },
@@ -29,10 +30,15 @@ export default function SourceDialog({ sources, defaultInterval, onClose, onSubm
   const [pathTouched, setPathTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const validation = validateSourcePath(path, sources);
+  const [serverOverlap, setServerOverlap] = useState(null), [acceptedOverlap, setAcceptedOverlap] = useState('');
+  const overlaps = serverOverlap && serverOverlap.path === validation.path ? serverOverlap.items : validation.overlaps || [];
+  const overlapKey = JSON.stringify([validation.path, overlaps.map(row => [row.id, row.path])]);
+  const overlapAccepted = acceptedOverlap === overlapKey;
   const nameError = nameTouched && !name.trim() ? '请为录像源填写一个名称。' : '';
   const directories = [...exampleDirectories, ...sources.filter(source => !exampleDirectories.some(directory => directory.path === source.path)).map(source => ({ name: source.name, path: source.path }))];
   const visibleDirectories = directories.filter(directory => `${directory.name} ${directory.path}`.toLowerCase().includes(directoryQuery.trim().toLowerCase())).sort((left, right) => Number(sources.some(source => source.path === left.path)) - Number(sources.some(source => source.path === right.path)));
   function updatePath(value, suggestion) {
+    setAcceptedOverlap(''); setServerOverlap(null); setError('');
     setPath(value);
     if (!nameEdited) {
       const normalized = validateSourcePath(value, []).path;
@@ -44,15 +50,18 @@ export default function SourceDialog({ sources, defaultInterval, onClose, onSubm
   async function submit(event) {
     event.preventDefault(); if (pending.current) return; setPathTouched(true); setNameTouched(true);
     if (validation.error || !name.trim()) { (validation.error ? pathInput : nameInput).current?.focus(); return; }
+    if (overlaps.length && !overlapAccepted) return;
     const source = { id: createId(), name: name.trim(), path: validation.path, enabled: true, status: 'configured', description: '自定义录像目录', image: '/assets/studio.jpg', count: 0, size: '0 GB', lastScan: '尚未扫描', interval, color: 'blue', ...recognition };
-    const signature = JSON.stringify([source.name, source.path, interval, scanAfterAdd]);
+    const allowOverlap = overlaps.length > 0 && overlapAccepted;
+    const signature = JSON.stringify([source.name, source.path, interval, scanAfterAdd, allowOverlap]);
     if (submitKey.current.signature !== signature) submitKey.current = { signature, key: createId() };
     pending.current = true; setBusy(true); setError('');
-    try { await onSubmit(source, { scanAfterAdd, key: submitKey.current.key }); } catch (failure) { setError(failure.message); } finally { pending.current = false; setBusy(false); }
+    try { await onSubmit(source, { scanAfterAdd, allowOverlap, key: submitKey.current.key }); } catch (failure) { if (failure.code === 'SOURCE_PATH_OVERLAP') { setServerOverlap({ path: validation.path, items: failure.details.overlaps }); setAcceptedOverlap(''); } setError(failure.message); } finally { pending.current = false; setBusy(false); }
   }
-  return <Modal title="添加录像源" description="选择录像目录，给它一个容易识别的名字。" className="source-dialog" onClose={onClose} busy={busy} form={{ onSubmit: submit, noValidate: true }} footer={<><button type="button" className="button secondary" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={busy || !path.trim()}><Plus size={17} />{busy ? '正在添加…' : scanAfterAdd ? '添加并扫描' : '添加录像源'}</button></>}>
+  return <Modal title="添加录像源" description="选择录像目录，给它一个容易识别的名字。" className="source-dialog" onClose={onClose} busy={busy} form={{ onSubmit: submit, noValidate: true }} footer={<><button type="button" className="button secondary" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={busy || !path.trim() || (!!overlaps.length && !overlapAccepted)}><Plus size={17} />{busy ? '正在添加…' : scanAfterAdd ? '添加并扫描' : '添加录像源'}</button></>}>
       <div className="source-setup-context"><span><HardDrives size={20} /></span><div><strong>本地与 NAS 录像目录</strong><p>从录像根目录中选择文件夹，也可以手动填写。</p></div><Badge>只读接入</Badge></div>
       <div className="field source-directory-field"><label htmlFor="new-source-path">录像目录 <span className="required-mark">必填</span></label><div className={`source-path-input ${pathTouched && validation.error ? 'invalid' : ''}`}><FolderSimple size={18} /><input id="new-source-path" ref={pathInput} value={path} onChange={event => updatePath(event.target.value)} onBlur={() => { if (path.trim()) setPathTouched(true); }} aria-invalid={pathTouched && !!validation.error} aria-describedby={`source-path-help${pathTouched && validation.error ? ' new-source-path-error' : ''}`} placeholder="/recordings/living-room" autoComplete="off" /><button type="button" className={browsing ? 'active' : ''} aria-expanded={browsing} aria-controls="source-directory-browser" onClick={() => setBrowsing(value => !value)}>浏览目录</button></div><small id="source-path-help">录像根目录：<code>/recordings</code> · 支持子文件夹</small>{pathTouched && validation.error && <p id="new-source-path-error" className="form-error" role="alert">{validation.error}</p>}</div>
+      <SourceOverlapNotice overlaps={overlaps} requireAcknowledgment acknowledged={overlapAccepted} onAcknowledge={value => setAcceptedOverlap(value ? overlapKey : '')} />
       {browsing && real && <DirectoryBrowser sources={sources} onSelect={selectDirectory} />}
       {browsing && !real && <section className="source-directory-browser" id="source-directory-browser" aria-label="选择示例录像目录"><header><strong><FolderSimple size={15} />/recordings</strong><Badge>示例目录</Badge><button className="icon-button" type="button" aria-label="收起目录浏览" onClick={() => setBrowsing(false)}><X size={15} /></button></header><div className="search-field"><MagnifyingGlass size={16} /><input aria-label="搜索示例目录" onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="查找目录名称…" value={directoryQuery} onChange={event => setDirectoryQuery(event.target.value)} /></div><div className="source-directory-list">{visibleDirectories.length ? visibleDirectories.map(directory => {
         const added = sources.find(source => source.path === directory.path);

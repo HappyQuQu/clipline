@@ -213,8 +213,8 @@ CLIPLINE_IMAGE_TAG=d1-local
 | --- | --- | --- |
 | GET `/recording-directories` | rootId, relativePath, cursor | 根目录白名单内的分页子目录；不允许任意 absolute root 参数 |
 | GET `/sources` | — | 源及最近扫描摘要 |
-| POST `/sources` | name, path, scanIntervalMinutes, scanOnCreate | 201 `{source, firstTaskId}`；源与首次扫描任务同一事务创建 |
-| PATCH `/sources/{id}` | name, enabled, scanIntervalMinutes；允许条件下 path | 返回更新源；校验路径锁与版本 |
+| POST `/sources` | name, path, scanIntervalMinutes, scanOnCreate, allowOverlap（默认 false） | 201 `{source, firstTaskId}`；源与首次扫描任务同一事务创建 |
+| PATCH `/sources/{id}` | name, enabled, scanIntervalMinutes；允许条件下 path、allowOverlap | 返回更新源；校验路径锁与版本 |
 | POST `/sources/{id}/scan` | 空对象；请求带幂等键 | 202 `{taskId, reused}`；同源活动扫描复用 |
 | GET `/segments` | sourceId, date, q, viewTimezone, cursor | 源/日期/文件名与起止时刻文本匹配；date 使用日区间重叠查询；回看时间窗由 timeline 接口提供 |
 | GET `/segments/{id}` | — | 完整元数据、文件与播放状态 |
@@ -227,6 +227,8 @@ CLIPLINE_IMAGE_TAG=d1-local
 | GET/HEAD `/segments/{id}/media` | fingerprint、HTTP Range/If-Range/ETag | 原文件或已完成代理的字节流；206、416 等范围行为正确 |
 
 定位路由使用 `/sources/{id}/resolve`，避免片段 ID 与静态定位路径冲突。所有源和片段路径由 ID 在服务端解析，客户端不能指定任意文件作为 stream 输入。
+
+创建源或修改源目录时，服务端在写事务内检查真实路径的父子目录重叠（包括符号链接解析结果、停用源，排除编辑自身）。未确认时返回 409 `SOURCE_PATH_OVERLAP`，`details.overlaps` 列出 `{id, name, path, relation}`；`inside` 表示所选目录位于已有源内，`contains` 表示包含已有源。前端先提示并要求勾选，再携带 `allowOverlap: true` 继续；换目录后清除勾选。完全相同的目录始终返回 `SOURCE_DUPLICATE`。已有重叠源仅改名称或扫描策略不要求重新确认，不自动删除、合并或重建既有索引。
 
 ### 5.2 任务、导出与日志
 
