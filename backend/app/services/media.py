@@ -1,5 +1,6 @@
 import json
 import math
+import shutil
 import subprocess
 import tempfile
 import time
@@ -225,7 +226,63 @@ def _make_playback(path, duration_ms, target, context, *, copy_hevc):
     )
 
 
+def indexed_seek_input(path, duration_ms, directory, context, progress):
+    # Some camera MP4 seek tables point hundreds of seconds before the target.
+    # Copy packets into a private, indexed container; never rewrite the recording.
+    indexed = directory / "seek-input.mkv"
+    limit = math.ceil(path.stat().st_size * 1.1) + 16 * 1024**2
+    if shutil.disk_usage(directory).free < limit + 64 * 1024**2:
+        raise AppError("INSUFFICIENT_STORAGE", "空间不足，无法建立临时播放索引。", 409)
+    run_process(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-protocol_whitelist",
+            "file",
+            "-format_whitelist",
+            "mov,matroska,mpegts",
+            "-threads",
+            str(context.config.media_threads),
+            "-i",
+            str(path),
+            "-map",
+            "0:V:0",
+            "-map",
+            "0:a:0?",
+            "-c",
+            "copy",
+            "-fs",
+            str(limit),
+            "-f",
+            "matroska",
+            "-y",
+            str(indexed),
+        ],
+        context,
+        context.config.playback_timeout_seconds,
+        progress,
+    )
+    metadata = probe(indexed, context)
+    if indexed.stat().st_size >= limit or abs(metadata["duration_ms"] - duration_ms) > max(
+        1000, duration_ms * 0.01
+    ):
+        raise AppError("INVALID_PLAYBACK_OUTPUT", "临时播放索引不完整，未开始跳转播放。")
+    return indexed
+
+
 def make_hls(path, start_ms, duration_ms, directory, context, progress):
+    indexed = directory / "seek-input.mkv"
+    try:
+        if start_ms:
+            path = indexed_seek_input(path, start_ms + duration_ms, directory, context, progress)
+        _make_hls(path, start_ms, duration_ms, directory, context, progress)
+    finally:
+        indexed.unlink(missing_ok=True)
+
+
+def _make_hls(path, start_ms, duration_ms, directory, context, progress):
     run_process(
         [
             "ffmpeg",

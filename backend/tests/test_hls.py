@@ -256,6 +256,45 @@ def test_seek_position_is_bounded_and_generates_only_remaining_interval(
         thread.join(10)
 
 
+@pytest.mark.parametrize("failure", ["space", "truncated_index"])
+def test_seek_index_failure_never_publishes_or_changes_recording(
+    client, config, database, indexed_stream, monkeypatch, failure
+):
+    segment, path = indexed_stream
+    before = path.read_bytes()
+    if failure == "space":
+        usage = media.shutil.disk_usage(config.data)
+        monkeypatch.setattr(media.shutil, "disk_usage", lambda _: usage._replace(free=0))
+    else:
+        original_probe = media.probe
+
+        def probe(path, context):
+            metadata = original_probe(path, context)
+            if path.name == "seek-input.mkv":
+                metadata["duration_ms"] = 1
+            return metadata
+
+        monkeypatch.setattr(media, "probe", probe)
+    task = submit(client, segment, 4000)
+    view(client, segment, task)
+    thread, stop = run_worker(config, database)
+    try:
+        thread.join(12)
+        assert not thread.is_alive()
+        done = client.get("/api/tasks/" + task).json()
+        assert done["status"] == "failed", done
+        assert done["errorCode"] == (
+            "INSUFFICIENT_STORAGE" if failure == "space" else "INVALID_PLAYBACK_OUTPUT"
+        )
+        with Session(database) as session:
+            assert not list(session.scalars(select(Artifact).where(Artifact.task_id == task)))
+        assert not list((config.data / "tmp").rglob("seek-input.mkv"))
+        assert path.read_bytes() == before
+    finally:
+        stop.set()
+        thread.join(10)
+
+
 @pytest.mark.parametrize("failure", ["capacity", "corrupt"])
 def test_invalid_or_over_budget_chunks_are_never_published(
     client, config, database, indexed_stream, monkeypatch, failure
