@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4](https://github.com/HappyQuQu/clipline/compare/v0.9.3...v0.9.4) (2026-10-15)
+
+
+### 修复
+
+* warn before indexing overlapping source directories and align clip cards ([#15](https://github.com/HappyQuQu/clipline/issues/15)) ([1b778c3](https://github.com/HappyQuQu/clipline/commit/1b778c3e27cc91b05726ca88979206e93c20fb9e))
+
 ## [0.9.3](https://github.com/HappyQuQu/clipline/compare/v0.9.2...v0.9.3) (2026-10-15)
 
 
