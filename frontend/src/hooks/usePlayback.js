@@ -1,3 +1,4 @@
+import { createId } from '../id';
 import { useEffect, useState } from 'react';
 import { request } from '../api/client';
 export default function usePlayback(clip, real) {
@@ -22,7 +23,7 @@ export default function usePlayback(clip, real) {
         failures = 0;
         if (controller.signal.aborted) return;
         if (status.status === 'needs_prepare' && (!status.taskId || retry)) {
-          const queued = await request(`/segments/${clip.id}/prepare`, { method: 'POST', body: {}, key: crypto.randomUUID(), signal: controller.signal });
+          const queued = await request(`/segments/${clip.id}/prepare`, { method: 'POST', body: {}, key: createId(), signal: controller.signal });
           taskId = queued.taskId; setState({ identity, status: 'preparing', taskId, progress: 0 }); timer = setTimeout(check, 500);
         } else if (status.status === 'preparing') {
           taskId = status.taskId; timer = setTimeout(check, 500); setState({ identity, ...status, progress: 0 });
@@ -30,13 +31,13 @@ export default function usePlayback(clip, real) {
       } catch (error) { if (error.name === 'AbortError') return; if ((error.code === 'CONNECTION_FAILED' || error.status >= 500) && ++failures <= 15) { setState({ identity, status: taskId ? 'preparing' : 'loading', taskId, message: '服务正在恢复连接…' }); timer = setTimeout(check, 2000); } else setState({ identity, status: 'error', message: error.message }); }
     }
     // A retry of a browser-incompatible direct file forces the same background proxy flow.
-    if (retry) request(retryTaskId ? `/tasks/${retryTaskId}/retry` : `/segments/${clip.id}/prepare`, { method: 'POST', body: retryTaskId ? {} : { force: true }, key: crypto.randomUUID(), signal: controller.signal }).then(queued => { if (!controller.signal.aborted) { taskId = queued.taskId; check(); } }).catch(error => { if (error.name !== 'AbortError') setState({ identity, status: 'error', message: error.message }); });
+    if (retry) request(retryTaskId ? `/tasks/${retryTaskId}/retry` : `/segments/${clip.id}/prepare`, { method: 'POST', body: retryTaskId ? {} : { force: true }, key: createId(), signal: controller.signal }).then(queued => { if (!controller.signal.aborted) { taskId = queued.taskId; check(); } }).catch(error => { if (error.name !== 'AbortError') setState({ identity, status: 'error', message: error.message }); });
     else check();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [identity, real, retry]);
   useEffect(() => {
     if (!real || state.identity !== identity || !state.mediaUrl || !state.proxy) return;
-    const clientId = crypto.randomUUID(), abort = new AbortController(); let timer;
+    const clientId = createId(), abort = new AbortController(); let timer;
     async function renew() {
       let delay = 5000;
       try { const result = await request(`/segments/${clip.id}/lease`, { method: 'POST', body: { clientId }, signal: abort.signal }); delay = Math.max(250, Math.min(20000, (result.expiresInSeconds || 60) * 1000 / 3)); }

@@ -1,3 +1,4 @@
+import { createId } from '../id';
 import { useRef, useState } from 'react';
 import { ArrowRight, Check, Clock, FolderSimple, HardDrives, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
 import { validateSourcePath } from '../domain';
@@ -43,9 +44,9 @@ export default function SourceDialog({ sources, defaultInterval, onClose, onSubm
   async function submit(event) {
     event.preventDefault(); if (pending.current) return; setPathTouched(true); setNameTouched(true);
     if (validation.error || !name.trim()) { (validation.error ? pathInput : nameInput).current?.focus(); return; }
-    const source = { id: crypto.randomUUID(), name: name.trim(), path: validation.path, enabled: true, status: 'configured', description: '自定义录像目录', image: '/assets/studio.jpg', count: 0, size: '0 GB', lastScan: '尚未扫描', interval, color: 'blue', ...recognition };
+    const source = { id: createId(), name: name.trim(), path: validation.path, enabled: true, status: 'configured', description: '自定义录像目录', image: '/assets/studio.jpg', count: 0, size: '0 GB', lastScan: '尚未扫描', interval, color: 'blue', ...recognition };
     const signature = JSON.stringify([source.name, source.path, interval, scanAfterAdd]);
-    if (submitKey.current.signature !== signature) submitKey.current = { signature, key: crypto.randomUUID() };
+    if (submitKey.current.signature !== signature) submitKey.current = { signature, key: createId() };
     pending.current = true; setBusy(true); setError('');
     try { await onSubmit(source, { scanAfterAdd, key: submitKey.current.key }); } catch (failure) { setError(failure.message); } finally { pending.current = false; setBusy(false); }
   }
