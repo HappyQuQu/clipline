@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/HappyQuQu/clipline/compare/v0.9.2...v0.9.3) (2026-10-15)
+
+
+### 修复
+
+* display full source names and identify active recording gallery ([#13](https://github.com/HappyQuQu/clipline/issues/13)) ([414c9cc](https://github.com/HappyQuQu/clipline/commit/414c9cc379e296ba621e78a075a2f0b2f033fe86))
+
 ## [0.9.2](https://github.com/HappyQuQu/clipline/compare/v0.9.1...v0.9.2) (2026-10-15)
 
 
