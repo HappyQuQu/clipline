@@ -3,7 +3,7 @@ import { CaretLeft, CaretRight, Minus, Plus, Scissors, CalendarBlank } from '@ph
 import { clock } from '../domain';
 import { ExtensionSlot, IconButton } from './UI';
 import RecordingRangePicker from './RecordingRangePicker';
-import { recordingTime, adjacentRecordingDate, recordedAt, recordingCoverage, nearestRecording, recordingRailStart } from '../recordingSelection';
+import { recordingTime, adjacentRecordingDate, recordedAt, recordingCoverage, nearestRecording, recordingRailStart, recordingRangeHandle, draggedRecordingTime } from '../recordingSelection';
 
 // Like the original UniFi rail: later times are at the top, earlier times at the bottom.
 export default function VerticalTimeline({ clips, clip, date, current, onDateChange, onSeek, managing, range, onRangeChange, onManage, coverage, dayRecordings, dates = [], source, timezone, reviewRange, onReviewRangeChange, real = false, bounds = { start: 0, end: 86400 } }) {
@@ -63,11 +63,20 @@ export default function VerticalTimeline({ clips, clip, date, current, onDateCha
         e.stopPropagation();
         onSeek(e.detail === 0 ? Math.max(start, item.start) : Math.max(item.start, Math.min(item.end - .1, timeAt(e.clientY))));
       }} />)}
-      {managing && range && range.start < end && range.end > start && <>
-        <div className="rail-range" style={{ top: `${position(range.end)}%`, height: `${Math.max(0, position(range.start) - position(range.end))}%` }} />
-        {['end', 'start'].map(key => range[key] >= start && range[key] <= end && <button key={key} className={`rail-range-handle ${key} ${focusedHandle === key ? 'focused' : ''}`} role="slider" aria-label={key === 'start' ? '截取起点' : '截取终点'} aria-valuemin={available[0]?.start || 0} aria-valuemax={available.at(-1)?.end || 86400} aria-valuenow={range[key]} aria-valuetext={recordingTime(range[key])} aria-orientation="vertical" style={{ top: `${position(range[key])}%` }} onClick={e => e.stopPropagation()} onFocus={() => setFocusedHandle(key)} onBlur={() => setFocusedHandle(null)} onPointerDown={e => { e.stopPropagation(); dragOrigin.current = { key, time: range[key], clientY: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={e => { if (e.currentTarget.hasPointerCapture(e.pointerId) && dragOrigin.current?.key === key) moveHandle(key, Math.max(0, Math.min(86400, dragOrigin.current.time + timeAt(e.clientY) - timeAt(dragOrigin.current.clientY)))); }} onPointerUp={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} onPointerCancel={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} onKeyDown={e => {
+      {managing && range && <>
+        {range.start < end && range.end > start && <div className="rail-range" style={{ top: `${position(range.end)}%`, height: `${Math.max(0, position(range.start) - position(range.end))}%` }} />}
+        {['end', 'start'].map(key => {
+          const handle = recordingRangeHandle(range[key], start, end);
+          const label = key === 'start' ? '开始' : '结束';
+          return <button key={key} className={`rail-range-handle ${key} ${handle.outside ? 'outside' : ''} ${focusedHandle === key ? 'focused' : ''}`} role="slider" aria-label={key === 'start' ? '截取起点' : '截取终点'} aria-valuemin={available[0]?.start || 0} aria-valuemax={available.at(-1)?.end || 86400} aria-valuenow={range[key]} aria-valuetext={recordingTime(range[key])} aria-orientation="vertical" title={`${label} ${recordingTime(range[key])}${handle.outside ? '（超出当前显示范围，拖动此处调整）' : '（拖动调整）'}`} style={{ top: `${handle.position}%` }} onClick={e => e.stopPropagation()} onFocus={() => setFocusedHandle(key)} onBlur={() => setFocusedHandle(null)} onPointerDown={e => {
+            if (e.button !== 0) return;
+            e.preventDefault(); e.stopPropagation(); e.currentTarget.focus();
+            dragOrigin.current = { key, time: handle.visibleTime, clientY: e.clientY, height: ruler.current.getBoundingClientRect().height, span };
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }} onPointerMove={e => { if (e.currentTarget.hasPointerCapture(e.pointerId) && dragOrigin.current?.key === key) moveHandle(key, draggedRecordingTime(dragOrigin.current, e.clientY)); }} onPointerUp={e => { dragOrigin.current = null; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} onPointerCancel={e => { dragOrigin.current = null; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} onLostPointerCapture={() => { dragOrigin.current = null; }} onKeyDown={e => {
           if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); moveHandle(key, range[key] + (['ArrowUp', 'ArrowRight'].includes(e.key) ? 1 : -1) * (e.shiftKey ? 10 : 1)); }
-        }}><span>{key === 'start' ? '开始' : '结束'}</span><time>{recordingTime(range[key])}</time></button>)}
+        }}><span>{label}{handle.outside && <small aria-hidden="true">{handle.outside === 'after' ? ' ↑' : ' ↓'}</small>}</span><time>{recordingTime(range[key])}</time></button>;
+        })}
       </>}
       {clip && current >= start && current <= end && <div className="rail-playhead" style={{ top: `${position(current)}%` }}><time>{clock(current)}</time></div>}
       {!available.some(item => item.start < end && item.end > start) && <div className="rail-no-recordings">此时段无录像{available[0] && <button className="text-button" onClick={e => { e.stopPropagation(); onSeek(available[0].start); }}>跳到可用录像</button>}</div>}
