@@ -19,7 +19,7 @@ from app.services.events import emit
 logger = logging.getLogger(__name__)
 ROOTS = {"export": "exports", "playback": "playback-proxies", "thumbnail": "thumbnails"}
 UUID = re.compile(r"^[a-f0-9-]{36}$")
-CACHE_FILE = re.compile(r"^[a-f0-9-]{36}-[a-f0-9]{64}-(?:[a-f0-9]{16}\.mp4|first-v1\.jpg)$")
+CACHE_FILE = re.compile(r"^[a-f0-9-]{36}-[a-f0-9]{64}-(?:[a-f0-9]{16}\.(?:mp4|ts)|first-v1\.jpg)$")
 
 
 def generated_path(config, relative, kind):
@@ -36,6 +36,19 @@ def generated_path(config, relative, kind):
 
 
 def in_use(session, artifact):
+    if (artifact.profile_hash or "").startswith("hls:") and artifact.task_id:
+        task = session.get(Task, artifact.task_id)
+        if task and task.status in ("queued", "running", "cancelling"):
+            return True
+        if session.scalar(
+            select(RuntimeLease.resource_key)
+            .where(
+                RuntimeLease.resource_key.startswith(f"hls:{artifact.task_id}:"),
+                RuntimeLease.expires_at > utc_now_ms(),
+            )
+            .limit(1)
+        ):
+            return True
     return (
         session.scalar(
             select(RuntimeLease.resource_key)
@@ -255,9 +268,15 @@ def maintain(engine, config):
                 or_(
                     RuntimeLease.resource_key.startswith("use:"),
                     RuntimeLease.resource_key.startswith("view:"),
+                    RuntimeLease.resource_key.startswith("hls:"),
                 ),
                 RuntimeLease.expires_at <= now,
             )
+        )
+        abandoned_streams = select(Task.id).where(
+            Task.kind == "prepare",
+            Task.status.in_(("cancelled", "failed")),
+            Task.payload_json["mode"].as_string() == "stream",
         )
         unavailable = select(Segment.id).where(Segment.availability != "available")
         candidates = list(
@@ -265,6 +284,10 @@ def maintain(engine, config):
                 select(Artifact)
                 .where(
                     or_(
+                        (Artifact.kind == "playback")
+                        & Artifact.profile_hash.startswith("hls:")
+                        & (Artifact.task_id.in_(abandoned_streams))
+                        & (Artifact.status == "ready"),
                         (Artifact.kind == "export")
                         & (Artifact.expires_at <= now)
                         & (Artifact.status != "expired"),

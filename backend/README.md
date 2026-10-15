@@ -65,7 +65,7 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 | GET `/api/tasks`、`/{id}`；POST `/{id}/cancel`、`/{id}/retry` | 状态/类型/源筛选及分页、尝试记录、取消和新 ID 重试 |
 | GET `/api/segments`、`/{id}`、`/{id}/thumbnail` | 源/本地日/文件名或起止时刻搜索、稳定分页、真实元数据和 JPEG |
 | GET `/api/sources/{id}/dates`、`/api/timeline`、`/api/sources/{id}/resolve` | 有录像日期、本地日覆盖/断档、时间窗分页与稳定定位；重叠不重复计时 |
-| GET `/api/segments/{id}/playback`；POST `/{id}/prepare` | 返回状态/mediaUrl；mode=compatible/hevc/original，默认 compatible；force=true 为兼容转码 |
+| GET `/api/segments/{id}/playback`；POST `/{id}/prepare` | 返回状态/mediaUrl；mode=compatible/hevc/original/stream + startMs，默认 compatible；force=true 为兼容转码 |
 | GET/HEAD `/api/segments/{id}/media?fingerprint=…` | 安全 ID 路径、指纹检查、单段 Range、206/416、HEAD/ETag；GET 不转码 |
 | POST `/api/exports/plan`；POST `/api/exports` | 同源同日计划预览、planHash 复核和持久化提交；跨度默认 30 分钟 |
 | GET/HEAD `/api/exports/{id}/download`；POST `…/resubmit` | 已登记结果下载、206/416/ETag、安全文件名、未完成 409、过期 410 和新 ID 重新导出 |
@@ -76,7 +76,7 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 
 扫描频率可选 5/10/30 分钟；创建时省略频率采用已保存默认值，显式 null 表示仅手动。索引存在或任务活动时不能改目录。停用取消未开始的维护任务，已运行任务可完成，历史索引保留。
 
-扫描参数保存源路径/时区和近期文件保护快照；prepare 保存片段 ID、指纹和版本化 profile。源级 scan/reindex 互斥，prepare 使用片段锁；总并行默认 2，媒体槽默认 1。正常停机重新排队；异常最多自动恢复 3 次。用户重试产生新 ID，原任务保留。缩略图取首帧；H.265 根据浏览器实际解码能力优先 original 原片 Range 直读；不能播放原音轨时选择 hevc，仅复制视频并转 AAC，写 hvc1/faststart MP4。解码失败自动按 original → hevc → compatible 回退，网络失败不触发转码。状态、媒体、视图租约携带同一 mode；HEVC 和 H.264 缓存按 profile 隔离并存。默认兼容播放代理为宽度最大 1920 的 H.264/YUV420P，音轨存在时转 AAC，无音轨不补音频。部署可设置 `CLIPLINE_PLAYBACK_MAX_WIDTH` 降低分辨率，`CLIPLINE_PLAYBACK_TIMEOUT_SECONDS` 限制处理时长。
+扫描参数保存源路径/时区和近期文件保护快照；prepare 保存片段 ID、指纹和版本化 profile。源级 scan/reindex 互斥，prepare 使用片段锁；总并行默认 2，媒体槽默认 1。正常停机重新排队；异常最多自动恢复 3 次。用户重试产生新 ID，原任务保留。缩略图取首帧；H.265 根据浏览器实际解码能力优先 original 原片 Range 直读；不能播放原音轨时选择 hevc，仅复制视频并转 AAC，写 hvc1/faststart MP4。解码失败自动按 original → hevc → stream 回退，网络失败不触发转码。状态、媒体、视图租约携带同一 mode；HEVC 和 H.264 缓存按 profile 隔离并存。默认兼容播放代理为宽度最大 1920 的 H.264/YUV420P，音轨存在时转 AAC，无音轨不补音频。部署可设置 `CLIPLINE_PLAYBACK_MAX_WIDTH` 降低分辨率，`CLIPLINE_PLAYBACK_TIMEOUT_SECONDS` 限制处理时长。
 
 代理指纹/profile 缓存去重，校验成功后在受租约保护的终态事务中发布；取消不暴露半成品。执行缓存容量限制、按最近使用顺序清理和活跃使用保护。原文件变化或源离线时明确报错，不能按旧索引播放其他文件。
 
@@ -91,3 +91,5 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 备份与离线恢复步骤见 [运维说明](../docs/OPERATIONS.md)。迁移前自动做 SQLite 一致性备份和 SHA256/schema manifest；恢复要求 API/Worker 全部停止。D5 的 schema 为 `0004_log_sequence`，原日志 UUID 和任务记录保持。
 
 D6 原生候选镜像验收由 `deploy/smoke_release.py` 驱动，涵盖软件媒体流程与真实进程故障；两种架构分别在原生 Ubuntu runner 上执行。NAS 配置、部署预检及发布门禁见 [部署说明](../docs/DEPLOYMENT.md)。应用候选版本 0.7.0，schema 沿用 0004。
+
+H.264 流式回看采用 4 秒 HLS 分片：先播放已完成分片，再继续后台转换。观看租约、按需定位、重启检查点、缓存容量和取消/重试规则见 [开发文档](../docs/DEVELOPMENT.md)。原录像保持只读，媒体处理继续共用部署的线程与并行限制。

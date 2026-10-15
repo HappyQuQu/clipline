@@ -73,12 +73,13 @@ class TaskCreate(APIModel):
         return value
 
 
-PlaybackMode = Literal["compatible", "hevc", "original"]
+PlaybackMode = Literal["compatible", "hevc", "original", "stream"]
 
 
 class PrepareRequest(APIModel):
     force: StrictBool = False
     mode: PlaybackMode = "compatible"
+    start_ms: StrictInt = Field(default=0, ge=0, le=31536000000)
 
 
 class ExportRequest(APIModel):

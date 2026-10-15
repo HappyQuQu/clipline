@@ -192,7 +192,15 @@ def task_resource(kind, source_id, payload):
 
 
 def submit_prepare(
-    engine, config, segment_id, key=None, *, force=False, retry_of=None, mode="compatible"
+    engine,
+    config,
+    segment_id,
+    key=None,
+    *,
+    force=False,
+    retry_of=None,
+    mode="compatible",
+    start_ms=0,
 ):
     from app.services.playback import cached, get_segment, original_path, playback_mode, profile
 
@@ -200,12 +208,20 @@ def submit_prepare(
     request = {"segmentId": segment_id, "force": force}
     if mode != "compatible":
         request["mode"] = mode
+    if mode == "stream":
+        request["startMs"] = start_ms
     with write_session(engine) as session:
         previous = lookup(session, scope, key, request)
         if previous is not None:
             return previous
         segment = get_segment(session, segment_id)
         original_path(session, config, segment)
+        if mode == "stream":
+            from app.services.hls import start_offset
+            from app.services.hls import state as hls_state
+
+            start_ms = start_offset(segment, start_ms)
+            state = hls_state(session, config, segment, start_ms)
         mode = playback_mode(segment, "compatible" if force and mode == "original" else mode)
         if retry_of:
             original = session.get(Task, retry_of)
@@ -219,13 +235,17 @@ def submit_prepare(
                 raise AppError("TASK_NOT_RETRYABLE", "只有失败或取消的任务可以重试。", 409)
         if (
             mode == "original"
-            or cached(session, config, segment, mode)
-            or (segment.playback_status == "direct" and not force)
+            or (
+                (state["status"] == "ready" or cached(session, config, segment))
+                if mode == "stream"
+                else cached(session, config, segment, mode)
+            )
+            or (segment.playback_status == "direct" and not force and mode != "stream")
         ):
             response = {"taskId": None, "reused": True, "ready": True}
             remember(session, scope, key, request, response, None)
             return response
-        active_key = f"prepare:{segment.id}:{segment.fingerprint}:{profile(config, mode)}"
+        active_key = f"prepare:{segment.id}:{segment.fingerprint}:{profile(config, mode, start_ms)}"
         existing = session.scalar(select(Task).where(Task.active_key == active_key))
         if existing and retry_of:
             raise AppError("TASK_ALREADY_ACTIVE", "当前片段正在准备播放，请查看当前任务。", 409)
@@ -240,8 +260,13 @@ def submit_prepare(
                 payload_json={
                     "segmentId": segment.id,
                     "fingerprint": segment.fingerprint,
-                    "profile": profile(config, mode),
+                    "profile": profile(config, mode, start_ms),
                     "mode": mode,
+                    **(
+                        {"startMs": start_ms, "background": bool(retry_of)}
+                        if mode == "stream"
+                        else {}
+                    ),
                     "force": force,
                 },
             )
@@ -536,6 +561,7 @@ class Queue:
                     RuntimeLease.resource_key != "coordinator",
                     ~RuntimeLease.resource_key.startswith("use:"),
                     ~RuntimeLease.resource_key.startswith("view:"),
+                    ~RuntimeLease.resource_key.startswith("hls:"),
                 )
             ):
                 if lease.token not in active_tokens:
