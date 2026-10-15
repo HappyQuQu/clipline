@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/HappyQuQu/clipline/compare/v0.9.0...v0.9.1) (2026-10-15)
+
+
+### 修复
+
+* finish playback drags and rebuild camera seek indexes ([#9](https://github.com/HappyQuQu/clipline/issues/9)) ([1698fce](https://github.com/HappyQuQu/clipline/commit/1698fce322faede2e4cd2d9a5b19b9fd5f5ebab5))
+
 ## [0.9.0](https://github.com/HappyQuQu/clipline/compare/v0.8.2...v0.9.0) (2026-10-15)
 
 
