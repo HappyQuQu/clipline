@@ -76,7 +76,7 @@ D5 运维验证：`python3 deploy/smoke_operations.py`。验证真实分类保�
 
 扫描频率可选 5/10/30 分钟；创建时省略频率采用已保存默认值，显式 null 表示仅手动。索引存在或任务活动时不能改目录。停用取消未开始的维护任务，已运行任务可完成，历史索引保留。
 
-扫描参数保存源路径/时区和近期文件保护快照；prepare 保存片段 ID、指纹和版本化 profile。源级 scan/reindex 互斥，prepare 使用片段锁；总并行默认 2，媒体槽默认 1。正常停机重新排队；异常最多自动恢复 3 次。用户重试产生新 ID，原任务保留。缩略图取首帧；H.265 根据浏览器实际解码能力优先 original 原片 Range 直读；不能播放原音轨时选择 hevc，仅复制视频并转 AAC，写 hvc1/faststart MP4。解码失败自动按 original → hevc → compatible 回退，网络失败不触发转码。状态、媒体、视图租约携带同一 mode；HEVC 和 H.264 缓存按 profile 隔离并存。默认兼容播放代理为宽度最大 1920 的 H.264/YUV420P，音轨存在时转 AAC，无音轨不补音频。部署可设置 `CLIPLINE_PLAYBACK_MAX_WIDTH` 降低分辨率，`CLIPLINE_PLAYBACK_TIMEOUT_SECONDS` 限制处理时长。
+扫描参数保存源路径/时区和近期文件保护快照；prepare 保存片段 ID、指纹和版本化 profile。源级 scan/reindex 互斥，prepare 使用片段锁；总并行默认 2，媒体槽默认 1。正常停机重新排队；异常最多自动恢复 3 次。用户重试产生新 ID，原任务保留。缩略图取首帧；H.265 根据浏览器实际解码能力优先 original 原片 Range 直读；不能播放原音轨时选择 hevc，仅复制视频并转 AAC，写 hvc1/faststart MP4。解码失败自动按 original → hevc → stream 回退，网络失败不触发转码。状态、媒体、视图租约携带同一 mode；HEVC 和 H.264 缓存按 profile 隔离并存。默认兼容播放代理为宽度最大 1920 的 H.264/YUV420P，音轨存在时转 AAC，无音轨不补音频。部署可设置 `CLIPLINE_PLAYBACK_MAX_WIDTH` 降低分辨率，`CLIPLINE_PLAYBACK_TIMEOUT_SECONDS` 限制处理时长。
 
 代理指纹/profile 缓存去重，校验成功后在受租约保护的终态事务中发布；取消不暴露半成品。执行缓存容量限制、按最近使用顺序清理和活跃使用保护。原文件变化或源离线时明确报错，不能按旧索引播放其他文件。
 
