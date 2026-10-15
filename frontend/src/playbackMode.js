@@ -11,3 +11,8 @@ export function preferredPlaybackMode(clip, canPlayType) {
 export function fallbackPlaybackMode(mode) {
   return mode === 'original' ? 'hevc' : mode === 'hevc' ? 'compatible' : null;
 }
+
+export function isDecoderFailure(error) {
+  // A network interruption must not turn a direct stream into a costly transcode.
+  return error?.code === 3 || error?.code === 4;
+}

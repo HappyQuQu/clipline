@@ -1,7 +1,7 @@
 import { createId } from '../id';
 import { useEffect, useMemo, useState } from 'react';
 import { request } from '../api/client';
-import { fallbackPlaybackMode, preferredPlaybackMode } from '../playbackMode';
+import { fallbackPlaybackMode, isDecoderFailure, preferredPlaybackMode } from '../playbackMode';
 export default function usePlayback(clip, real) {
   const [state, setState] = useState({}), [retryRequest, setRetry] = useState({});
   const clipIdentity = `${clip?.id}:${clip?.fingerprint}`;
@@ -58,7 +58,8 @@ export default function usePlayback(clip, real) {
   return {
     ...(state.identity === identity ? state : { status: 'loading' }),
     retry: () => setRetry(value => ({ identity: clipIdentity, mode: 'compatible', count: value.identity === clipIdentity ? value.count + 1 : 1 })),
-    fallback: () => {
+    fallback: error => {
+      if (!isDecoderFailure(error)) return false;
       const next = fallbackPlaybackMode(state.mode || mode);
       if (!next) return false;
       setRetry({ identity: clipIdentity, mode: next, count: 0 });

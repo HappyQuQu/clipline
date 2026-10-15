@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { preferredPlaybackMode, fallbackPlaybackMode } from '../src/playbackMode.js';
+import { preferredPlaybackMode, fallbackPlaybackMode, isDecoderFailure } from '../src/playbackMode.js';
 
 const clip = { videoCodec: 'hevc', audioCodec: 'opus' };
 test('支持 H.265 和原音轨时跳过整段转码', () => {
@@ -20,4 +20,9 @@ test('解码器误报时自动逐级回退，每一级只尝试一次', () => {
   assert.equal(fallbackPlaybackMode('original'), 'hevc');
   assert.equal(fallbackPlaybackMode('hevc'), 'compatible');
   assert.equal(fallbackPlaybackMode('compatible'), null);
+});
+
+test('只有解码与格式失败才回退，网络错误和用户中止不会启动转码', () => {
+  for (const code of [3, 4]) assert.equal(isDecoderFailure({ code }), true);
+  for (const error of [null, undefined, { code: 1 }, { code: 2 }]) assert.equal(isDecoderFailure(error), false);
 });
