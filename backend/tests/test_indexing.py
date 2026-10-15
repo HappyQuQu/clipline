@@ -623,3 +623,85 @@ def test_log_pagination_is_complete_and_filter_scoped(client, config):
         rows += page["items"]
         cursor = page["nextCursor"]
     assert len(rows) == 3 and len({row["id"] for row in rows}) == 3
+
+
+@pytest.mark.parametrize("parent_first,alias", [(True, False), (False, False), (True, True)])
+def test_nested_source_requires_acknowledgment_before_writing(
+    client, config, database, put_video, parent_first, alias
+):
+    parent = config.recordings_root / "camera"
+    child = parent / "day"
+    child.mkdir(parents=True)
+    video = put_video(child)
+    original = video.read_bytes()
+    existing, candidate = (parent, child) if parent_first else (child, parent)
+    first = client.post(
+        "/api/sources",
+        json={"name": "Existing", "path": str(existing), "scanOnCreate": False},
+    ).json()["source"]
+    if alias:
+        linked = config.recordings_root / "alias-day"
+        linked.symlink_to(candidate, target_is_directory=True)
+        candidate = linked
+    body = {"name": "Nested", "path": str(candidate), "scanOnCreate": True}
+    response = client.post("/api/sources", json=body, headers={"Idempotency-Key": "nested"})
+    assert response.status_code == 409
+    warning = response.json()["error"]
+    assert warning["code"] == "SOURCE_PATH_OVERLAP"
+    assert warning["details"]["overlaps"] == [
+        {
+            "id": first["id"],
+            "name": "Existing",
+            "path": str(existing),
+            "relation": "inside" if parent_first else "contains",
+        }
+    ]
+    with Session(database) as session:
+        assert session.scalar(select(func.count()).select_from(Source)) == 1
+        assert session.scalar(select(func.count()).select_from(Task)) == 0
+    accepted = client.post(
+        "/api/sources", json=body | {"allowOverlap": True}, headers={"Idempotency-Key": "nested"}
+    )
+    assert accepted.status_code == 201
+    replay = client.post(
+        "/api/sources", json=body | {"allowOverlap": True}, headers={"Idempotency-Key": "nested"}
+    )
+    assert replay.json() == accepted.json()
+    assert video.read_bytes() == original
+    duplicate = client.post("/api/sources", json=body | {"allowOverlap": True})
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "SOURCE_DUPLICATE"
+
+
+def test_edit_nested_path_warning_is_atomic_and_unchanged_path_can_be_renamed(client, config):
+    parent = add_source(client, config, "beta")["source"]
+    source = add_source(client, config, "alpha")["source"]
+    nested = config.recordings_root / "beta" / "day"
+    nested.mkdir()
+    body = {"path": str(nested), "name": "Changed", "revision": source["revision"]}
+    url = f"/api/sources/{source['id']}"
+    refused = client.patch(url, json=body)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["details"]["overlaps"][0]["id"] == parent["id"]
+    original = next(
+        x for x in client.get("/api/sources").json()["items"] if x["id"] == source["id"]
+    )
+    assert (original["name"], original["path"], original["revision"]) == (
+        source["name"],
+        source["path"],
+        source["revision"],
+    )
+    accepted = client.patch(url, json=body | {"allowOverlap": True})
+    assert accepted.status_code == 200
+    assert accepted.json()["path"] == str(nested)
+    renamed = client.patch(url, json={"path": str(nested), "name": "Renamed"})
+    assert renamed.status_code == 200
+    assert renamed.json()["name"] == "Renamed"
+    sibling = config.recordings_root / "beta2"
+    sibling.mkdir()
+    assert (
+        client.post(
+            "/api/sources", json={"name": "Sibling", "path": str(sibling), "scanOnCreate": False}
+        ).status_code
+        == 201
+    )

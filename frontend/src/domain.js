@@ -16,7 +16,12 @@ export function validateSourcePath(value, sources, excludedId) {
   if (!path.startsWith('/recordings/') || path.split('/').some(part => part === '..' || part === '.') || /[\\\u0000-\u001f]/.test(path)) return { path, error: '请使用 /recordings/ 下的文件夹，例如 /recordings/living-room。' };
   const duplicate = sources.find(source => source.id !== excludedId && source.path.replace(/\/{2,}/g, '/').replace(/\/+$/, '') === path);
   if (duplicate) return { path, error: `此目录已添加为「${duplicate.name}」，请使用其他目录。` };
-  return { path, error: '' };
+  const overlaps = sources.filter(source => source.id !== excludedId).flatMap(source => {
+    const existing = source.path.trim().replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+    const relation = path.startsWith(`${existing}/`) ? 'inside' : existing.startsWith(`${path}/`) ? 'contains' : null;
+    return relation ? [{ id: source.id, name: source.name, path: existing, relation }] : [];
+  });
+  return { path, error: '', overlaps };
 }
 export const TASK_TYPES = Object.freeze({
   scan: { label: '目录扫描', description: '发现新录像，读取文件信息、建立索引并生成缩略图。', stages: ['遍历录像目录', '读取文件信息', '更新索引与缩略图'], complete: '扫描演示完成；示例片段未增加' },

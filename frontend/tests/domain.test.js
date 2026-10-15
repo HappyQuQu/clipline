@@ -70,3 +70,12 @@ test('一期不加载识别模块，二期打开能力开关后可以注册模�
   assert.equal(enabled.forSlot('clip-detail').length, 1);
   assert.throws(() => enabled.register({ id: 'invalid', slot: 'invalid', capability: 'transcription' }));
 });
+
+test('父子目录双向提示重叠，覆盖停用源，忽略自身和相邻目录', () => {
+  const sources = [{ id: 'parent', name: '总目录', path: '/recordings//camera/', enabled: false }, { id: 'child', name: '子目录', path: '/recordings/camera/day' }];
+  assert.deepEqual(validateSourcePath(' /recordings/camera/day/new/ ', sources).overlaps.map(row => [row.id, row.relation]), [['parent', 'inside'], ['child', 'inside']]);
+  assert.deepEqual(validateSourcePath('/recordings/camera', sources, 'parent').overlaps.map(row => [row.id, row.relation]), [['child', 'contains']]);
+  assert.deepEqual(validateSourcePath('/recordings/camera2', sources).overlaps, []);
+  assert.deepEqual(validateSourcePath('/recordings/camera/day2', [sources[1]]).overlaps, []);
+  assert.deepEqual(validateSourcePath('/recordings/camera/day', [sources[1]], 'child').overlaps, []);
+});

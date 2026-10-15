@@ -82,8 +82,38 @@ def check_duplicate(session, path, exclude_id=None):
             )
 
 
+def check_overlap(session, path, exclude_id=None):
+    overlaps = []
+    for source in session.scalars(select(Source).order_by(Source.name, Source.id)):
+        if source.id == exclude_id:
+            continue
+        existing = Path(source.canonical_path)
+        try:
+            existing = existing.resolve()
+        except (OSError, RuntimeError):
+            pass
+        if path.is_relative_to(existing):
+            relation = "inside"
+        elif existing.is_relative_to(path):
+            relation = "contains"
+        else:
+            continue
+        overlaps.append(
+            {"id": source.id, "name": source.name, "path": str(existing), "relation": relation}
+        )
+    if overlaps:
+        raise AppError(
+            "SOURCE_PATH_OVERLAP",
+            "此目录与已有录像源存在父子目录重叠，同一批录像可能重复显示。请改选目录，或确认后继续。",
+            409,
+            {"field": "path", "overlaps": overlaps},
+        )
+
+
 def create_source(engine, config, directories, body, key=None):
     payload = body.model_dump(mode="json", by_alias=True) | {"path": str(Path(body.path))}
+    if not body.allow_overlap:
+        payload.pop("allowOverlap")
     if "scan_interval_minutes" not in body.model_fields_set:
         payload.pop("scanIntervalMinutes")
     with Session(engine) as read:
@@ -96,6 +126,8 @@ def create_source(engine, config, directories, body, key=None):
         if previous is not None:
             return previous
         check_duplicate(session, path)
+        if not body.allow_overlap:
+            check_overlap(session, path)
         if "scan_interval_minutes" in body.model_fields_set:
             interval = body.scan_interval_minutes
         else:
@@ -147,6 +179,8 @@ def update_source(engine, directories, source_id, body):
             ):
                 raise AppError("SOURCE_BUSY", "此源正在处理任务，请先停止任务再改目录。", 409)
             check_duplicate(session, path, source.id)
+            if not body.allow_overlap:
+                check_overlap(session, path, source.id)
             source.canonical_path = str(path)
             actual.add("path")
         if "name" in changes and body.name != source.name:

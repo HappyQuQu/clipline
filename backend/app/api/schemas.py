@@ -30,6 +30,7 @@ class SourceCreate(APIModel):
     path: PathValue
     scan_interval_minutes: Literal[5, 10, 30] | None = None
     scan_on_create: StrictBool = True
+    allow_overlap: StrictBool = False
     auto_transcribe: Literal[False] = False
     auto_detect: Literal[False] = False
 
@@ -47,6 +48,7 @@ class SourcePatch(APIModel):
     enabled: StrictBool | None = None
     scan_interval_minutes: Literal[5, 10, 30] | None = None
     revision: Annotated[StrictInt, Field(ge=1)] | None = None
+    allow_overlap: StrictBool = False
     auto_transcribe: Literal[False] = False
     auto_detect: Literal[False] = False
 
