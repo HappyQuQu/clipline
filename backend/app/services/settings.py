@@ -12,7 +12,7 @@ from app.services.events import emit
 DEFAULTS = {
     "scan": {"interval": 5, "skipRecent": 30},
     "playback": {"autoNext": True, "skipGaps": True},
-    "export": {"defaultMode": "fast", "maxDuration": 30},
+    "export": {"defaultMode": "fast", "maxDuration": 10080},
     "tasks": {"concurrency": 2},
 }
 
@@ -82,7 +82,7 @@ def save_settings(engine, group, body):
         values = VALIDATORS[group].model_validate(body.values).model_dump()
         if group == "scan" and values["interval"] not in (5, 10, 30, None):
             raise ValueError()
-        if group == "export" and values["maxDuration"] not in (10, 30, 60):
+        if group == "export" and values["maxDuration"] not in (10, 30, 60, 360, 1440, 4320, 10080):
             raise ValueError()
     except (ValidationError, ValueError) as error:
         raise AppError("INVALID_SETTINGS", "设置字段或数值不符合该分类的允许范围。") from error

@@ -96,7 +96,7 @@ class ExportRequest(APIModel):
         "Clipline录像"
     )
     segment_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=80)]] | None = (
-        Field(None, max_length=500)
+        Field(None, max_length=20160)
     )
 
     @field_validator("name")

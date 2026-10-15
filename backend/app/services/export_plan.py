@@ -45,13 +45,16 @@ def build_plan(session, config, body):
     except (ValueError, ZoneInfoNotFoundError) as error:
         raise AppError("INVALID_TIMEZONE", "导出时区无效。") from error
     day_start, day_end = local_day(date, timezone)
-    if end <= start or start < day_start or end > day_end:
-        raise AppError("INVALID_EXPORT_RANGE", "请选择同一天内、结束晚于开始的录像区间。")
+    if end <= start or not day_start <= start < day_end:
+        raise AppError(
+            "INVALID_EXPORT_RANGE", "开始时间需属于所选开始日期，结束时间必须晚于开始时间。"
+        )
     setting = session.get(SavedSettings, "export")
-    maximum = setting.value_json.get("maxDuration", 30) if setting else 30
-    maximum = maximum if type(maximum) is int and 1 <= maximum <= 1440 else 30
+    maximum = setting.value_json.get("maxDuration", 10080) if setting else 10080
+    maximum = maximum if type(maximum) is int and 1 <= maximum <= 10080 else 10080
     if end - start > maximum * 60_000:
-        raise AppError("EXPORT_RANGE_TOO_LARGE", f"单次导出跨度不能超过 {maximum} 分钟。")
+        limit = f"{maximum // 1440} 天" if maximum % 1440 == 0 else f"{maximum} 分钟"
+        raise AppError("EXPORT_RANGE_TOO_LARGE", f"单次导出跨度不能超过 {limit}。")
     rows = list(
         session.scalars(
             select(Segment)
@@ -69,7 +72,7 @@ def build_plan(session, config, body):
         known = {row.id for row in rows}
         if not selected_ids or not set(selected_ids).issubset(known):
             raise AppError(
-                "INVALID_EXPORT_SELECTION", "所选片段需可用且属于同一源、所选日期和区间。"
+                "INVALID_EXPORT_SELECTION", "所选片段需可用且属于同一录像源和所选时间区间。"
             )
     selected = [row for row in rows if selected_ids is None or row.id in selected_ids]
     if len(selected) > config.export_max_pieces:

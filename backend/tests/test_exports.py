@@ -117,7 +117,7 @@ def test_plan_gap_selection_overlap_and_invalid_ranges(client, config, database,
     assert selected["expectedDurationMs"] == 3000 and selected["omittedMs"] == 2000
     for override in (
         {"endAt": data["startAt"]},
-        {"endAt": "2026-10-14T00:00:01+08:00"},
+        {"endAt": "2026-10-20T09:15:01+08:00"},
         {"segmentIds": []},
         {"segmentIds": ["missing"]},
         {"startAt": "2026-10-13T10:00:00", "endAt": "2026-10-13T10:01:00"},
@@ -132,6 +132,73 @@ def test_plan_gap_selection_overlap_and_invalid_ranges(client, config, database,
         row.end_at -= 1500
     overlap = client.post("/api/exports/plan", json=data).json()
     assert overlap["expectedDurationMs"] == 4500  # First overlap is not duplicated.
+
+
+def test_seven_day_export_limits_cross_day_gaps_and_real_download(
+    client, config, database, archive
+):
+    from app.db.models import Segment
+
+    start = datetime.fromisoformat(archive[1][0]["startAt"])
+    before = [path.read_bytes() for path in archive[2]]
+    # Short real fixtures on three separate dates exercise a full seven-day plan cheaply.
+    with write_session(database) as session:
+        for offset, item in zip((0, 1, 6), archive[1], strict=True):
+            row = session.get(Segment, item["id"])
+            row.start_at = int((start + timedelta(days=offset)).timestamp() * 1000)
+            row.end_at = row.start_at + row.duration_ms
+    data = body(archive) | {
+        "startAt": start.isoformat(),
+        "endAt": (start + timedelta(days=7)).isoformat(),
+    }
+    preview = client.post("/api/exports/plan", json=data)
+    assert preview.status_code == 200, preview.text
+    plan = preview.json()
+    assert plan["pieceCount"] == 3 and plan["selectedCoverageMs"] == 6000
+    assert plan["unrecordedMs"] == 7 * 86400_000 - 6000
+    for endpoint in ("/api/exports/plan", "/api/exports"):
+        response = client.post(
+            endpoint, json=data | {"endAt": (start + timedelta(days=7, milliseconds=1)).isoformat()}
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "EXPORT_RANGE_TOO_LARGE"
+        assert "7 天" in response.json()["error"]["message"]
+    wrong_date = client.post("/api/exports/plan", json=data | {"date": "2026-10-12"})
+    assert wrong_date.json()["error"]["code"] == "INVALID_EXPORT_RANGE"
+    identifier = enqueue(client, data)
+    perform(config, database)
+    done = task(client, identifier)
+    assert done["status"] == "completed", done
+    assert (
+        done["result"]["pieceCount"] == 3 and abs(done["result"]["actualDurationMs"] - 6000) <= 40
+    )
+    download = client.get(done["result"]["downloadUrl"])
+    assert download.status_code == 200 and len(download.content) == done["result"]["sizeBytes"]
+    assert [path.read_bytes() for path in archive[2]] == before
+
+
+def test_export_settings_allow_seven_days_but_reject_bypassing_cap(client):
+    export = client.get("/api/settings").json()["groups"]["export"]
+    assert export["values"]["maxDuration"] == 10080
+    for limit in (10081, 20160, True, "10080"):
+        response = client.patch(
+            "/api/settings/export",
+            json={
+                "revision": export["revision"],
+                "values": {"defaultMode": "fast", "maxDuration": limit},
+            },
+        )
+        assert response.status_code == 422
+    assert (
+        client.patch(
+            "/api/settings/export",
+            json={
+                "revision": export["revision"],
+                "values": {"defaultMode": "fast", "maxDuration": 10080},
+            },
+        ).status_code
+        == 200
+    )
 
 
 def test_precise_mixed_audio_frames_download_range_expiry_and_resubmit(

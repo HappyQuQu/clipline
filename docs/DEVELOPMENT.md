@@ -274,7 +274,7 @@ export payload 示例：
 | GET `/system/status` | 版本、arch、Worker、队列、磁盘、FFmpeg 和缓存统计 |
 | GET `/health/live`、`/health/ready` | 进程与依赖就绪状态 |
 
-`scan`、`playback`、`export`、`tasks` 为可编辑分类，PATCH body 为 `{revision, values}`，values 包含本分类的完整字段。默认间隔可为 null（仅手动）；maxDuration 仅允许 10/30/60，concurrency 仅允许 1/2/3。路径、硬件信息和一期识别能力只读。服务端拒绝一期识别任务及策略启用请求，不能依靠前端隐藏按钮保证范围。
+`scan`、`playback`、`export`、`tasks` 为可编辑分类，PATCH body 为 `{revision, values}`，values 包含本分类的完整字段。默认间隔可为 null（仅手动）；maxDuration 以分钟存储，允许 10/30/60/360/1440/4320/10080，默认和硬上限为 7 天（10080 分钟），跨度包含断档。旧配置保留，升级后可通过设置改为 7 天。导出 startAt 必须属于 date，endAt 可跨日期；回看日历选择跨日区间后通过“导出此区间”提交，单日截取仍裁剪到当天。文件数上限默认 20160，支持一周的短录像分片，可由部署配置降低。concurrency 仅允许 1/2/3。路径、硬件信息和一期识别能力只读。服务端拒绝一期识别任务及策略启用请求，不能依靠前端隐藏按钮保证范围。
 
 ## 6. 扫描、时间与回看实现
 
