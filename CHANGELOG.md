@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/HappyQuQu/clipline/compare/v0.8.1...v0.8.2) (2026-10-15)
+
+
+### 修复
+
+* start HEVC playback without waiting for full transcoding ([#5](https://github.com/HappyQuQu/clipline/issues/5)) ([39a9fda](https://github.com/HappyQuQu/clipline/commit/39a9fda61433bb561d6df8588293d8856900f4c8))
+
 ## [0.8.1](https://github.com/HappyQuQu/clipline/compare/v0.8.0...v0.8.1) (2026-10-15)
 
 
