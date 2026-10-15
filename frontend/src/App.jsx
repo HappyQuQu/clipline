@@ -87,7 +87,7 @@ export default function App() {
     if (visibleTimeline?.windowKey === windowKey && visibleTimeline.indexedAt === indexStamp && visibleTimeline.timezone === timezone) return;
     const controller = new AbortController(); setTimelineError('');
     const range = { startSeconds, endSeconds };
-    request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, ...range, limit: 100 })}`, { signal: controller.signal }).then(data => {
+    request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, ...range, order: 'desc', limit: 100 })}`, { signal: controller.signal }).then(data => {
       if (controller.signal.aborted) return;
       setTimeline({ ...data, context, windowKey, indexedAt: indexStamp });
       setActive(current => { const row = data.items.find(item => item.id === (selection.clipId || current?.clip?.id)) || (!selection.clipId && current?.context !== context ? data.items[0] : null); return row ? { context, clip: clipView(row, data.dayStartAt, timezone) } : current?.context === context ? current : null; });
@@ -130,7 +130,7 @@ export default function App() {
     const operation = { context, cursor }; setClipPaging(operation);
     const captured = `${context}:${startSeconds}:${endSeconds}`;
     try {
-      const data = await request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, startSeconds, endSeconds, cursor, limit: 100 })}`);
+      const data = await request(`/timeline?${queryString({ sourceId: selection.sourceId, date: selection.date, viewTimezone: timezone, startSeconds, endSeconds, cursor, order: 'desc', limit: 100 })}`);
       setTimeline(current => appendReviewPage(current, data, captured, cursor));
     } catch (failure) { notify(failure.message); }
     finally { setClipPaging(current => current === operation ? null : current); }

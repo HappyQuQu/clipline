@@ -53,14 +53,16 @@ def recording_dates(session, source_id, timezone):
     return {"items": sorted(days, reverse=True), "timezone": timezone}
 
 
-def timeline(session, source_id, date, timezone, start_seconds, end_seconds, cursor, limit):
+def timeline(
+    session, source_id, date, timezone, start_seconds, end_seconds, cursor, limit, order="asc"
+):
     require_source(session, source_id)
     day_start, day_end = local_day(date, timezone)
     start = day_start + int(start_seconds * 1000)
     end = min(day_end, day_start + int(end_seconds * 1000))
     if end <= start:
         raise AppError("INVALID_TIME_RANGE", "时间范围需要位于当前日期内，结束晚于开始。")
-    context = json.dumps([source_id, str(date), timezone, start_seconds, end_seconds])
+    context = json.dumps([source_id, str(date), timezone, start_seconds, end_seconds, order])
     position = decode_cursor(cursor, context)
     all_rows = list(
         session.execute(
@@ -93,9 +95,16 @@ def timeline(session, source_id, date, timezone, start_seconds, end_seconds, cur
         except (ValueError, TypeError) as error:
             raise AppError("INVALID_CURSOR", "时间轴分页已失效，请重新加载。") from error
         statement = statement.where(
-            (Segment.start_at > stamp) | ((Segment.start_at == stamp) & (Segment.id > row_id))
+            (Segment.start_at < stamp) | ((Segment.start_at == stamp) & (Segment.id < row_id))
+            if order == "desc"
+            else (Segment.start_at > stamp) | ((Segment.start_at == stamp) & (Segment.id > row_id))
         )
-    rows = list(session.scalars(statement.order_by(Segment.start_at, Segment.id).limit(limit + 1)))
+    ordering = (
+        (Segment.start_at.desc(), Segment.id.desc())
+        if order == "desc"
+        else (Segment.start_at, Segment.id)
+    )
+    rows = list(session.scalars(statement.order_by(*ordering).limit(limit + 1)))
     more, rows = len(rows) > limit, rows[:limit]
     return {
         "sourceId": source_id,
