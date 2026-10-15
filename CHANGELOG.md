@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/HappyQuQu/clipline/compare/v0.9.5...v0.10.0) (2026-10-15)
+
+
+### 新功能
+
+* export up to seven days and keep timeline handles reachable ([be49d26](https://github.com/HappyQuQu/clipline/commit/be49d266866c0cfbde02cec51c400fe38472dd66))
+
 ## [0.9.5](https://github.com/HappyQuQu/clipline/compare/v0.9.4...v0.9.5) (2026-10-15)
 
 
