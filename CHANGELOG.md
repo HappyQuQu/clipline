@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/HappyQuQu/clipline/compare/v0.11.0...v0.12.0) (2026-10-16)
+
+
+### 新功能
+
+* configure runtime parameters in system settings ([#23](https://github.com/HappyQuQu/clipline/issues/23)) ([602368e](https://github.com/HappyQuQu/clipline/commit/602368e16c9de0f14ee8fe12325fa3915137d610))
+
 ## [0.11.0](https://github.com/HappyQuQu/clipline/compare/v0.10.0...v0.11.0) (2026-10-16)
 
 
