@@ -1,5 +1,5 @@
 import { SETTINGS_FIELDS } from '../domain.js';
-export const initialSettings = { interval: '5', skipRecent: '30', autoNext: true, skipGaps: true, defaultMode: 'fast', maxDuration: '10080', concurrency: '2', timezone: 'Asia/Shanghai', logRetentionDays: '30', playbackCacheMaxBytes: String(2 * 1024 ** 3), playbackMaxWidth: '1920', exportMaxWidth: '3840', exportTtlHours: '24', mediaThreads: '2', maxConcurrentTranscodes: '1' };
+export const initialSettings = { theme: 'system', interval: '5', skipRecent: '30', autoNext: true, skipGaps: true, defaultMode: 'fast', maxDuration: '10080', concurrency: '2', timezone: 'Asia/Shanghai', logRetentionDays: '30', playbackCacheMaxBytes: String(2 * 1024 ** 3), playbackMaxWidth: '1920', exportMaxWidth: '3840', exportTtlHours: '24', mediaThreads: '2', maxConcurrentTranscodes: '1' };
 const stringFields = new Set(['interval', 'skipRecent', 'maxDuration', 'concurrency', 'logRetentionDays', 'playbackCacheMaxBytes', 'playbackMaxWidth', 'exportMaxWidth', 'exportTtlHours', 'mediaThreads', 'maxConcurrentTranscodes']);
 export function groupValues(group, values) {
   return Object.fromEntries(SETTINGS_FIELDS[group].map(field => [field, field === 'interval' && values[field] === 'manual' ? null : stringFields.has(field) ? values[field] === '' ? null : Number(values[field]) : values[field]]));

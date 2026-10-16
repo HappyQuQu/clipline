@@ -3,7 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f4f6f5" />
+    <meta name="theme-color" content="#f6f7f8" />
+    <script>
+      (() => {
+        let mode = 'system';
+        try {
+          const key = new URLSearchParams(location.search).get('mode') === 'demo' ? 'clipline:demo-theme' : 'clipline:theme';
+          const saved = localStorage.getItem(key);
+          if (['light', 'dark', 'system'].includes(saved)) mode = saved;
+        } catch {}
+        const theme = mode === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' : mode;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.themePreference = mode;
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#10151d' : '#f6f7f8';
+      })();
+    </script>
+    <style>html{background:#f6f7f8;color:#343b45}html[data-theme="dark"]{background:#10151d;color:#e5edf8}</style>
     <meta name="description" content="Clipline 录像回看与区间导出 · 一期交互原型" />
     <title>Clipline · 录像工作台</title>
     <link rel="icon" href="/assets/clipline-logo.svg" type="image/svg+xml" />

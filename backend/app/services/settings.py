@@ -20,6 +20,7 @@ from app.services.events import emit
 
 DEFAULTS = {
     "general": {
+        "theme": "system",
         "timezone": "Asia/Shanghai",
         "logRetentionDays": 30,
         "playbackCacheMaxBytes": 2 * 1024**3,
@@ -51,6 +52,7 @@ class Values(BaseModel):
 
 
 class General(Values):
+    theme: Literal["light", "dark", "system"]
     timezone: str = Field(strict=True, min_length=1, max_length=100)
     logRetentionDays: StrictInt = Field(ge=1, le=3650)
     playbackCacheMaxBytes: StrictInt = Field(ge=0, le=1024**4)

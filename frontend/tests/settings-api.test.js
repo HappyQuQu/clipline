@@ -46,10 +46,21 @@ test('八项运行参数按分类序列化，时区草稿不会被轮询覆盖',
   const updated = { ...reply, deployment: { timezone: 'UTC' } };
   const next = reconcileSettings(loaded, updated);
   assert.equal(next.draft.timezone, 'Asia/Tokyo');
-  assert.deepEqual(groupValues('general', next.draft), { timezone: 'Asia/Tokyo', logRetentionDays: 7, playbackCacheMaxBytes: 1073741824 });
+  assert.deepEqual(groupValues('general', next.draft), { theme: 'system', timezone: 'Asia/Tokyo', logRetentionDays: 7, playbackCacheMaxBytes: 1073741824 });
   assert.deepEqual(groupValues('tasks', next.draft), { concurrency: 1, mediaThreads: 1, maxConcurrentTranscodes: 2 });
   assert.equal(groupValues('export', next.draft).exportTtlHours, 48);
   assert.equal(groupValues('export', next.draft).exportMaxWidth, 1920);
   assert.equal(groupValues('playback', next.draft).playbackMaxWidth, 1280);
   assert.equal(groupValues('tasks', { ...next.draft, mediaThreads: '' }).mediaThreads, null);
+});
+
+test('外观草稿在服务器轮询中保留，保存回复同时更新已存主题和草稿', () => {
+  const reply = response(1);
+  reply.groups.general = { values: { theme: 'system', timezone: 'Asia/Shanghai', logRetentionDays: 30, playbackCacheMaxBytes: 2147483648 }, revision: 1 };
+  const loaded = reconcileSettings(state(), reply);
+  loaded.draft = { ...loaded.draft, theme: 'dark' };
+  assert.equal(reconcileSettings(loaded, reply).draft.theme, 'dark');
+  const saved = acceptSettings(loaded, 'general', { values: { ...reply.groups.general.values, theme: 'dark' }, revision: 2 });
+  assert.equal(saved.saved.theme, 'dark'); assert.equal(saved.draft.theme, 'dark');
+  assert.equal(groupValues('general', saved.draft).theme, 'dark');
 });

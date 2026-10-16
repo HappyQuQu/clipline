@@ -8,6 +8,7 @@ import Sources from './pages/Sources';
 import Tasks from './pages/Tasks';
 import LogsRemote from './pages/LogsRemote';
 import Settings from './pages/Settings';
+import useTheme from './hooks/useTheme';
 import useChangeFeed from './hooks/useChangeFeed';
 import { initialSettings, reconcileSettings, acceptSettings, groupValues, dirtyGroup } from './api/settings';
 import { SETTINGS_FIELDS } from './domain';
@@ -29,6 +30,7 @@ export default function App() {
   const [sources, setSources] = useState([]), [tasks, setTasks] = useState([]);
   const [configState, setConfigState] = useState({ saved: defaults, draft: defaults, revisions: {}, draftRevisions: {} });
   const settings = configState.saved;
+  useTheme(settings.theme, configState.draft.theme, Boolean(configState.loaded));
   const [system, setSystem] = useState({}), [savingSettings, setSavingSettings] = useState(false), [settingsError, setSettingsError] = useState(''), [settingsConflict, setSettingsConflict] = useState(null);
   const [caps, setCaps] = useState(null);
   const [selection, setSelection] = useState({ sourceId: '', date: '', clipId: '', offset: 0, details: false, dateAuto: true, generation: 0 });
