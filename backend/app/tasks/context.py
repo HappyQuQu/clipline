@@ -2,13 +2,19 @@ from contextlib import contextmanager
 
 from sqlalchemy.orm import Session
 
+from app.services.settings import effective_config
 from app.tasks.queue import Interrupted
 
 
 class TaskContext:
     def __init__(self, queue, claim, stopped):
         self.queue, self.claim, self.stopped = queue, claim, stopped
-        self.config = queue.config
+        with Session(queue.engine) as session:
+            self.config = effective_config(session, queue.config)
+        if claim.kind == "prepare" and "playbackMaxWidth" in claim.payload:
+            self.config = self.config.model_copy(
+                update={"playback_max_width": claim.payload["playbackMaxWidth"]}
+            )
 
     def check(self):
         if self.stopped.is_set():

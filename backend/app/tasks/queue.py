@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.core.errors import AppError
 from app.core.time import iso_utc, utc_now_ms
@@ -9,6 +9,7 @@ from app.db.models import Artifact, RuntimeLease, SavedSettings, Source, Task, T
 from app.db.transactions import write_session
 from app.services.events import emit
 from app.services.idempotency import lookup, remember
+from app.services.settings import effective_config
 
 ACTIVE = ("queued", "running", "cancelling")
 TERMINAL = ("completed", "failed", "cancelled")
@@ -214,6 +215,7 @@ def submit_prepare(
         previous = lookup(session, scope, key, request)
         if previous is not None:
             return previous
+        config = effective_config(session, config)
         segment = get_segment(session, segment_id)
         original_path(session, config, segment)
         if mode == "stream":
@@ -261,6 +263,7 @@ def submit_prepare(
                     "segmentId": segment.id,
                     "fingerprint": segment.fingerprint,
                     "profile": profile(config, mode, start_ms),
+                    "playbackMaxWidth": config.playback_max_width,
                     "mode": mode,
                     **(
                         {"startMs": start_ms, "background": bool(retry_of)}
@@ -507,7 +510,15 @@ class Queue:
     def acquire_media(self, claim):
         with write_session(self.engine) as session:
             task = self.owned(session, claim)
-            for slot in range(self.config.max_concurrent_transcodes):
+            limit = effective_config(session, self.config).max_concurrent_transcodes
+            active = session.scalar(
+                select(func.count())
+                .select_from(RuntimeLease)
+                .where(RuntimeLease.resource_key.startswith("media:"))
+            )
+            if active >= limit:
+                return None
+            for slot in range(limit):
                 key = f"media:{slot}"
                 if session.get(RuntimeLease, key) is None:
                     session.add(

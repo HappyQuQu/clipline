@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api")
 
 
 def readiness(request: Request) -> dict:
-    config, engine = request.app.state.config, request.app.state.engine
+    config, engine = request.state.config, request.app.state.engine
     try:
         revision = current_revision(engine)
         with Session(engine) as session:
@@ -85,17 +85,17 @@ def directories(
 @router.get("/settings")
 def settings(request: Request):
     with Session(request.app.state.engine) as session:
-        return read_settings(session, request.app.state.config)
+        return read_settings(session, request.state.config)
 
 
 @router.patch("/settings/{group}")
 def patch_settings(request: Request, group: str, body: SettingsPatch):
-    return save_settings(request.app.state.engine, group, body)
+    return save_settings(request.app.state.engine, group, body, request.state.config)
 
 
 @router.get("/system/status")
 def system_status(request: Request):
-    config = request.app.state.config
+    config = request.state.config
     disk = shutil.disk_usage(config.data)
     with Session(request.app.state.engine) as session:
         counts = dict(

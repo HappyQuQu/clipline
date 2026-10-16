@@ -15,6 +15,7 @@ from app.core.time import iso_utc, utc_now_ms
 from app.db.models import Artifact, BusinessLog, Event, RuntimeLease, SavedSettings, Segment, Task
 from app.db.transactions import write_session
 from app.services.events import emit
+from app.services.settings import effective_config
 
 logger = logging.getLogger(__name__)
 ROOTS = {"export": "exports", "playback": "playback-proxies", "thumbnail": "thumbnails"}
@@ -104,6 +105,7 @@ def remove_artifact(session, config, artifact):
 
 
 def evict_playback(session, config, required=0, exclude=None):
+    config = effective_config(session, config)
     rows = list(
         session.scalars(
             select(Artifact)
@@ -251,6 +253,8 @@ def cleanup_generated(config, engine, now):
 
 
 def maintain(engine, config):
+    with Session(engine) as session:
+        config = effective_config(session, config)
     now = utc_now_ms()
     summary = {
         "removedFiles": 0,

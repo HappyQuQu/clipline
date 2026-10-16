@@ -98,29 +98,9 @@ services:
     init: true
     ports:
       - "8080:8080"
-    environment:
-      TZ: Asia/Shanghai
-      CLIPLINE_TIMEZONE: Asia/Shanghai
-      CLIPLINE_DATA: /app/data
-      CLIPLINE_DB: /app/data/clipline.db
-      CLIPLINE_RECORDINGS_ROOT: /recordings
-      CLIPLINE_MEDIA_THREADS: "2"
-      CLIPLINE_MAX_CONCURRENT_TRANSCODES: "1"
-      CLIPLINE_EXPORT_TTL_HOURS: "24"
-      CLIPLINE_LOG_RETENTION_DAYS: "30"
-      CLIPLINE_PLAYBACK_CACHE_MAX_BYTES: "2147483648"
     volumes:
-      - type: bind
-        source: ${CLIPLINE_DATA_DIR:?set-a-local-NAS-directory}
-        target: /app/data
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${CLIPLINE_RECORDINGS_DIR:?set-the-recordings-directory}
-        target: /recordings
-        read_only: true
-        bind:
-          create_host_path: false
+      - ./data:/app/data
+      - /path/to/recordings:/recordings:ro
     healthcheck:
       test: ["CMD", "python", "-m", "app.healthcheck"]
       interval: 30s
@@ -131,21 +111,13 @@ services:
 
 不固定 `platform`，由镜像 manifest 选择主机架构。更多录像根目录可通过明确的只读挂载与服务端根目录白名单扩展，不默认允许容器 `/`。
 
-#### 本地测试指定映射
+#### 本地测试映射
 
-用户指定宿主机目录为 `/Volumes/extended/clipline`。本机已确认它存在且可读，包含 `media` 及旧数据库、设置和缓存。正式版本地测试沿用此目录作为只读输入，不在其中新建数据库、写缓存或导出结果，也不导入覆盖旧库。
+复制 `deploy/local-test.env.example` 到忽略的 `data/local-test.env`，将 `/path/to/recordings` 替换为测试机实际的录像目录；应用数据使用独立的 `data/local-test`。公开示例不记录开发机的绝对路径。容器内映射为 `/recordings:ro` 与 `/app/data:rw`，运行时确认挂载权限，原录像不作为数据库、缓存或导出目的地。
 
-本地映射配置固定如下；D1 运行配置已保存于 `deploy/local-test.env.example`，采用 `clipline:d1-local` 和独立的 8088 端口：
+合成测试样本写入独立临时目录，覆盖损坏、跨日、重叠等边界，不改动真实录像目录。
 
-```dotenv
-CLIPLINE_RECORDINGS_DIR=/Volumes/extended/clipline
-CLIPLINE_DATA_DIR=/Users/qu/Documents/GitHub/clipline/data/local-test
-CLIPLINE_IMAGE_TAG=d1-local
-```
-
-容器内映射为 `/recordings:ro` 与 `/app/data:rw`；在录像源表单选择 `/recordings/media` 下的实际录像目录，避免把根目录中的旧导出和代理当成原录像扫描。启动前创建独立的 `data/local-test` 并验证容器访问权限；该目录已被 `.gitignore` 的 `data/` 规则排除。
-
-合成测试样本写入另外的临时目录/卷，以覆盖损坏、跨日、重叠等边界，不改变此真实录像目录。D1 已验证 Docker 挂载与真实样本探测/首帧解码；完整媒体流程及原生 x86 NAS 验收仍待完成。
+运行参数通过系统设置保存：基础分类管理时区、日志保留和播放缓存，回看分类管理播放宽度，导出分类管理输出宽度与保留期限，后台任务分类管理媒体线程及并行上限。默认值与校验范围见后端 `services/settings.py`。保存无需重启，按请求或任务读取配置快照；已开始任务保持原规格，媒体槽位上限和维护清理读取最新设置。旧部署环境变量兼容为尚未保存字段的初始值。
 
 ### 3.2 启动、健康与停止
 

@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
 from app import __version__
@@ -21,6 +22,7 @@ from app.core.locks import ProcessLock
 from app.db.migrations import require_current_schema
 from app.db.session import make_engine
 from app.services.directories import RecordingDirectories
+from app.services.settings import effective_config
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             provided if re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", provided) else str(uuid4())
         )
         try:
+            request.state.config = config
+            if request.url.path.startswith("/api/") and not request.url.path.startswith(
+                "/api/health/"
+            ):
+                with Session(app.state.engine) as session:
+                    request.state.config = effective_config(session, config)
             response = await call_next(request)
         except Exception:
             logger.exception("Unhandled API error; requestId=%s", request.state.request_id)

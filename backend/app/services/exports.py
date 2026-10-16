@@ -15,6 +15,7 @@ from app.services import export_media
 from app.services.events import emit
 from app.services.export_plan import build_plan, digest, validate_inputs
 from app.services.idempotency import lookup, remember
+from app.services.settings import effective_config
 
 
 def submit_export(engine, config, body=None, key=None, *, retry_of=None, mode=None, resubmit=False):
@@ -30,6 +31,7 @@ def submit_export(engine, config, body=None, key=None, *, retry_of=None, mode=No
         previous = lookup(session, scope, key, request)
         if previous is not None:
             return previous
+        config = effective_config(session, config)
         if retry_of:
             original = session.get(Task, retry_of)
             allowed = ("completed",) if resubmit else ("failed", "cancelled")

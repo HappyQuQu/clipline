@@ -7,7 +7,7 @@ test('加载真实设置并转换仅手动扫描，保存仅序列化当前分�
   const next = reconcileSettings(state(), response(1));
   assert.equal(next.saved.interval, 'manual'); assert.equal(next.draft.defaultMode, 'precise');
   assert.deepEqual(groupValues('scan', next.draft), { interval: null, skipRecent: 60 });
-  assert.deepEqual(groupValues('playback', next.draft), { autoNext: false, skipGaps: true });
+  assert.deepEqual(groupValues('playback', next.draft), { autoNext: false, skipGaps: true, playbackMaxWidth: 1920 });
 });
 test('刷新服务端设置保留脏分类和原版本，干净分类随最新值更新', () => {
   const loaded = reconcileSettings(state(), response(1));
@@ -35,4 +35,21 @@ test('过时的保存回复不会覆盖更新版本的服务端值', () => {
   const saved = acceptSettings(loaded, 'scan', { values: { interval: 10, skipRecent: 60 }, revision: 2 });
   assert.equal(saved.saved.interval, 'manual'); assert.equal(saved.revisions.scan, 3);
   assert.equal(saved.draft.interval, '10'); assert.equal(saved.draftRevisions.scan, 2);
+});
+
+test('八项运行参数按分类序列化，时区草稿不会被轮询覆盖', () => {
+  const reply = response(1);
+  reply.groups.general = { values: { timezone: 'UTC', logRetentionDays: 7, playbackCacheMaxBytes: 1073741824 }, revision: 1 };
+  const loaded = reconcileSettings(state(), reply);
+  assert.equal(loaded.saved.timezone, 'UTC');
+  loaded.draft = { ...loaded.draft, timezone: 'Asia/Tokyo', playbackMaxWidth: '1280', mediaThreads: '1', maxConcurrentTranscodes: '2', exportMaxWidth: '1920', exportTtlHours: '48' };
+  const updated = { ...reply, deployment: { timezone: 'UTC' } };
+  const next = reconcileSettings(loaded, updated);
+  assert.equal(next.draft.timezone, 'Asia/Tokyo');
+  assert.deepEqual(groupValues('general', next.draft), { timezone: 'Asia/Tokyo', logRetentionDays: 7, playbackCacheMaxBytes: 1073741824 });
+  assert.deepEqual(groupValues('tasks', next.draft), { concurrency: 1, mediaThreads: 1, maxConcurrentTranscodes: 2 });
+  assert.equal(groupValues('export', next.draft).exportTtlHours, 48);
+  assert.equal(groupValues('export', next.draft).exportMaxWidth, 1920);
+  assert.equal(groupValues('playback', next.draft).playbackMaxWidth, 1280);
+  assert.equal(groupValues('tasks', { ...next.draft, mediaThreads: '' }).mediaThreads, null);
 });
