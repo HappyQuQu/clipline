@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/HappyQuQu/clipline/compare/v0.10.0...v0.11.0) (2026-10-16)
+
+
+### 新功能
+
+* add continuous review timeline and optimize fast export preroll ([#21](https://github.com/HappyQuQu/clipline/issues/21)) ([1b8d4f7](https://github.com/HappyQuQu/clipline/commit/1b8d4f7def879ab1bbe687c90b8bad14ed4de78b))
+
 ## [0.10.0](https://github.com/HappyQuQu/clipline/compare/v0.9.5...v0.10.0) (2026-10-15)
 
 
