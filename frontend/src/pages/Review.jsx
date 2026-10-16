@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Clock, DownloadSimple, ArrowsOut, Play, Pause, SpeakerHigh, SpeakerSlash, ArrowClockwise, CircleNotch, FilmStrip, Info, SidebarSimple, CalendarBlank } from '@phosphor-icons/react';
-import { clock, duration, seconds, summarizeRange } from '../domain';
+import { clock, duration, summarizeRange } from '../domain';
 import { Badge, IconButton, Notice } from '../components/UI';
 import VerticalTimeline from '../components/VerticalTimeline';
+import RecordingTimeInput from '../components/RecordingTimeInput';
 import PlaybackDetails from '../components/PlaybackDetails';
 import PlaybackProgress from '../components/PlaybackProgress';
 import usePlayback from '../hooks/usePlayback';
 import useHlsSource from '../hooks/useHlsSource';
 import { recordingDateLabel, recordingMoment } from '../recordingDates';
 import useRangePlan from '../hooks/useRangePlan';
+import { defaultRecordingRange } from '../timelineNavigation';
 import { request, queryString } from '../api/client';
 import { clipView } from '../api/adapters';
 import { recordedAt, recordingCoverage, reviewDayBounds, recordingTime, selectedExportClip } from '../recordingSelection';
@@ -28,6 +30,7 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
   const [detailsOpen, setDetailsOpen] = useState(initialDetails);
   const [mediaError, setMediaError] = useState(false);
   const [rangeDirty, setRangeDirty] = useState(false);
+  const [timeInputInvalid, setTimeInputInvalid] = useState({ start: false, end: false });
   const playback = usePlayback(clip, real, initialOffset);
   const streamBase = playback.format === "hls" ? (playback.startMs || 0) / 1000 : 0;
   const [buffering, setBuffering] = useState(false);
@@ -41,7 +44,7 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
   const rangeBoundariesValid = recordedAt(coverage, rangeStart) && recordedAt(coverage, rangeEnd, true);
   const exportClipId = real ? selectedExportClip(clip, rangeStart, rangeEnd) : undefined;
   const rangePlan = useRangePlan({ enabled: real && managing && summary.valid && rangeBoundariesValid, sourceId: source.id, date, start: rangeStart, end: rangeEnd, timezone: settings.timezone, mode: settings.defaultMode, timeline, clipId: exportClipId });
-  const canExportRange = summary.valid && rangeBoundariesValid && exportEnabled && (!real || !!rangePlan.plan);
+  const canExportRange = !timeInputInvalid.start && !timeInputInvalid.end && summary.valid && rangeBoundariesValid && exportEnabled && (!real || !!rangePlan.plan);
   const newestClips = [...clips].sort((a, b) => b.start - a.start);
   const current = (clip?.start || 0) + offset;
   const moment = recordingMoment(clip, offset, date, settings.timezone);
@@ -90,16 +93,17 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
     else if (real) onSelect(target, seekOffset, showDetails); else setClipId(target.id);
   }
   async function seekAbsolute(value) {
-    if (!recordedAt(coverage, value)) return;
-    if (!real) { const found = clips.find(c => value >= c.start && value < c.end); if (found) select(found, value - found.start, true); else notify('这个时间点没有录像，点击蓝色区间查看已有录像。'); return; }
-    if (!timeline) return;
+    if (!recordedAt(coverage, value)) return false;
+    if (!real) { const found = clips.find(c => value >= c.start && value < c.end); if (found) select(found, value - found.start); return !!found; }
+    if (!timeline) return false;
     const generation = ++seekGeneration.current;
     try {
       const result = await request(`/sources/${source.id}/resolve?${queryString({ at: new Date(Date.parse(timeline.dayStartAt) + value * 1000).toISOString() })}`);
-      if (generation !== seekGeneration.current) return;
-      if (result.status === 'gap') return notify('这个时间点没有录像，点击蓝色区间查看已有录像。');
-      select(clipView(result.segment, timeline.dayStartAt, settings.timezone), result.offsetMs / 1000, true);
-    } catch (failure) { if (generation === seekGeneration.current) notify(failure.message); }
+      if (generation !== seekGeneration.current) return false;
+      if (result.status === 'gap') { notify('这个时间点没有录像，点击蓝色区间查看已有录像。'); return false; }
+      select(clipView(result.segment, timeline.dayStartAt, settings.timezone), result.offsetMs / 1000);
+      return true;
+    } catch (failure) { if (generation === seekGeneration.current) notify(failure.message); return false; }
   }
   useEffect(() => () => { seekGeneration.current++; }, []);
   async function onEnded() {
@@ -138,10 +142,14 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
     setPlaying(value => !value);
   }
   function openDetails() { setManaging(false); setDetailsOpen(true); }
-  function toggleManaging() { setDetailsOpen(false); setManaging(value => !value); }
+  function pauseForTimeline() { seekGeneration.current++; video.current?.pause(); setPlaying(false); }
+  function toggleManaging() { if (managing) setManaging(false); else manageCurrentClip(); }
   function manageCurrentClip() {
     setDetailsOpen(false);
-    setRangeStart(real ? Math.max(bounds.start, clip.start) : clip.start); setRangeEnd(real ? Math.min(bounds.end, clip.end) : clip.end); setRangeDirty(true);
+    const selection = defaultRecordingRange(coverage, current);
+    if (!selection) return;
+    pauseForTimeline();
+    setRangeStart(selection.start); setRangeEnd(selection.end); setRangeDirty(true);
     setManaging(true);
   }
   function requestExport() { if (!canExportRange) return; onExport({ sourceId: source.id, date, start: rangeStart, end: rangeEnd, ...(exportClipId ? { clipIds: [exportClipId] } : {}) }); }
@@ -150,7 +158,7 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
     {!source.enabled && <Notice warning>这个录像源已停用。仍可查看已索引片段，启用后可继续扫描。</Notice>}
     <h1 className="review-screen-reader">录像回看</h1>
       <div className={`unifi-review-layout ${managing ? 'managing' : ''} ${detailsOpen && clip ? 'with-details' : ''}`}>
-        <VerticalTimeline clips={clips} clip={clip} date={date} current={current} onDateChange={setDate} onSeek={seekAbsolute} managing={managing} range={{ start: rangeStart, end: rangeEnd }} onRangeChange={range => { setRangeDirty(true); setRangeStart(range.start); setRangeEnd(range.end); }} onManage={toggleManaging} coverage={coverage} dayRecordings={!real ? Object.fromEntries(dates.map(day => [day, allClips.filter(row => row.date === day)])) : undefined} dates={dates} source={source} timezone={settings.timezone} reviewRange={reviewRange} onReviewRangeChange={onReviewRangeChange} real={real} bounds={bounds} />
+        <VerticalTimeline clips={clips} clip={clip} date={date} current={current} onDateChange={setDate} onSeek={seekAbsolute} onScrubStart={pauseForTimeline} managing={managing} range={{ start: rangeStart, end: rangeEnd }} onRangeChange={range => { setRangeDirty(true); setRangeStart(range.start); setRangeEnd(range.end); }} onManage={toggleManaging} coverage={coverage} dayRecordings={!real ? Object.fromEntries(dates.map(day => [day, allClips.filter(row => row.date === day)])) : undefined} dates={dates} source={source} timezone={settings.timezone} reviewRange={reviewRange} onReviewRangeChange={onReviewRangeChange} real={real} bounds={bounds} />
         <div className="unifi-viewing-column">
           {reviewRange && <div className="review-range-banner"><CalendarBlank size={16} /><span>回看区间 <strong>{reviewRange.startDate} {recordingTime(reviewRange.start)} — {reviewRange.endDate} {recordingTime(reviewRange.end)}</strong></span>{real && <button className="text-button" disabled={!exportEnabled} onClick={() => onExport({ sourceId: source.id, date: reviewRange.startDate, endDate: reviewRange.endDate, start: reviewRange.start, end: reviewRange.end })}><DownloadSimple size={15} />导出此区间</button>}<button className="text-button" onClick={() => onReviewRangeChange(null)}>查看全部录像</button></div>}
           <header className="unifi-camera-heading"><div className="source-select"><span className={`source-dot ${source.enabled ? 'blue' : 'neutral'}`} /><FilmStrip size={17} /><strong className="camera-source-name" title={source.name}>{source.name}</strong><span className="camera-resolution">{real ? clip?.resolution || '—' : '1920 × 1080'}</span></div><div><IconButton icon={SidebarSimple} label={detailsOpen ? '收起片段详情' : '打开片段详情'} aria-expanded={detailsOpen} disabled={!clip} onClick={() => detailsOpen ? setDetailsOpen(false) : openDetails()} />{clip && <button className="button quiet small" disabled={scanning || !source.enabled} onClick={onScan}>{scanning ? <CircleNotch className="spin" size={16} /> : <ArrowClockwise size={16} />}{scanning ? '扫描中' : '扫描新录像'}</button>}</div></header>
@@ -172,10 +180,10 @@ export default function Review({ source, clips, clip, setClipId, date, setDate, 
       {clip && <section className="clip-section" aria-label={reviewRange ? '区间内录像' : '当天全部录像'}><div className="section-heading"><h2>{recordingDateLabel(date)} · {reviewRange ? '区间内录像' : '当天全部录像'} <span className="count-label">{timeline?.nextCursor ? `已加载 ${clips.length}` : clips.length}</span></h2><button className="text-button" onClick={onLibrary}>在片段库中查看<ArrowUpRightIcon /></button></div><p className="review-gallery-hint"><strong className="review-gallery-source" title={source.path}>{source.name}</strong><span>最新录像在前，上下滚动浏览，点击片段回看。</span></p><div ref={gallery} className="clip-strip" aria-label={reviewRange ? '区间内录像列表' : '当天录像列表'}>{newestClips.map(c => <button className={`strip-card ${c.id === clip.id ? 'selected' : ''}`} key={c.id} onClick={() => select(c, Math.max(0, bounds.start - c.start), true)} aria-pressed={c.id === clip.id}><div className="clip-image"><img src={c.image} alt={`${source.name} ${recordingDateLabel(date)} ${recordingTime(Math.max(bounds.start, c.start))} 录像画面`} loading="lazy" /><span>{duration(Math.min(bounds.end, c.end) - Math.max(bounds.start, c.start))}</span>{c.id === clip.id && <span className="now-playing"><Play weight="fill" size={12} />当前片段</span>}</div><span className="strip-card-date">{recordingDateLabel(date)}</span><strong>{recordingTime(Math.max(bounds.start, c.start))}</strong><span>{recordingTime(Math.max(bounds.start, c.start))} – {recordingTime(Math.min(bounds.end, c.end))}</span>{c.endDate && c.endDate !== c.date && <small className="strip-cross-day">原片跨日：{c.date} → {c.endDate}</small>}</button>)}</div>{real && timeline?.nextCursor && <button className="button secondary small review-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? '正在加载…' : '加载更多录像'}</button>}</section>}
         {detailsOpen && clip && <PlaybackDetails exportDate={date} clip={clip} playbackLabel={playbackLabel} source={source} onClose={() => setDetailsOpen(false)} onManage={manageCurrentClip} onExport={onExport} exportEnabled={exportEnabled} />}
         {managing && clip && <>
-        <aside className="range-panel panel"><div className="section-heading"><h2>管理片段</h2><button className="text-button" onClick={() => setManaging(false)}>关闭</button></div><p className="section-description">拖动边界或输入起止时间，只能选择有录像的位置。</p>
-          <label className="field range-field">开始时间<div className="time-input"><Clock size={17} /><input type="time" step="1" min={recordingTime(Math.ceil(coverage[0]?.start || 0))} max={clock(coverage.at(-1)?.end || 0)} value={recordingTime(rangeStart)} aria-invalid={!recordedAt(coverage, rangeStart)} aria-label="导出开始时间" onInput={e => { if (e.currentTarget.value) { setRangeDirty(true); setRangeStart(seconds(e.currentTarget.value)); } }} onChange={e => { if (e.target.value) { setRangeDirty(true); setRangeStart(seconds(e.target.value)); } }} /><button className="text-button" onClick={() => { setRangeDirty(true); setRangeStart(Math.floor(current)); }}>设为当前</button></div></label>
-          <label className="field range-field">结束时间<div className="time-input"><Clock size={17} /><input type="time" step="1" min={recordingTime(Math.ceil(coverage[0]?.start || 0))} max={clock(coverage.at(-1)?.end || 0)} aria-invalid={!recordedAt(coverage, rangeEnd, true)} value={rangeEnd === 86400 ? "" : recordingTime(rangeEnd)} aria-label="导出结束时间" onInput={e => { if (e.currentTarget.value) { setRangeDirty(true); setRangeEnd(seconds(e.currentTarget.value)); } }} onChange={e => { if (e.target.value) { setRangeDirty(true); setRangeEnd(seconds(e.target.value)); } }} /><button className="text-button" onClick={() => { setRangeDirty(true); setRangeEnd(Math.floor(current)); }}>设为当前</button></div></label>
-          {real && <p className="range-hint">{rangeEnd === 86400 ? "结束：24:00:00（当天结束） · " : ""}<button className="text-button" onClick={() => { setRangeDirty(true); setRangeEnd(coverage.at(-1)?.end || rangeEnd); }}>设为录像末尾</button></p>}<div className="range-facts" aria-live="polite" aria-busy={rangePlan.loading}><div><span>实际录像</span><strong>{duration(rangePlan.plan ? rangePlan.plan.selectedCoverageMs / 1000 : summary.coverage)}</strong></div><div><span>包含片段</span><strong>{real ? rangePlan.plan?.pieceCount ?? '—' : summary.clips.length}<small> 个</small></strong></div></div>
+        <aside className="range-panel panel"><div className="section-heading"><h2>管理片段</h2><button className="text-button" onClick={() => setManaging(false)}>关闭</button></div><p className="section-description">默认选取一分钟。拖动蓝色边界调整，靠近边缘会自动滚动；也可输入起止时间。</p>
+          <label className="field range-field">开始时间<div className="time-input"><Clock size={17} /><RecordingTimeInput value={rangeStart} label="导出开始时间" valid={recordedAt(coverage, rangeStart)} onCommit={value => { setRangeDirty(true); setRangeStart(value); }} onValidityChange={valid => setTimeInputInvalid(previous => previous.start === !valid ? previous : { ...previous, start: !valid })} /><button className="text-button" onClick={() => { setRangeDirty(true); setRangeStart(Math.floor(current)); }}>设为当前</button></div></label>
+          <label className="field range-field">结束时间<div className="time-input"><Clock size={17} /><RecordingTimeInput value={rangeEnd} label="导出结束时间" valid={recordedAt(coverage, rangeEnd, true)} onCommit={value => { setRangeDirty(true); setRangeEnd(value); }} onValidityChange={valid => setTimeInputInvalid(previous => previous.end === !valid ? previous : { ...previous, end: !valid })} /><button className="text-button" onClick={() => { setRangeDirty(true); setRangeEnd(Math.floor(current)); }}>设为当前</button></div></label>
+          {real && <p className="range-hint">{rangeEnd === 86400 ? "结束：24:00:00（当天结束） · " : ""}<button className="text-button" onClick={() => { setRangeDirty(true); setRangeEnd(coverage.at(-1)?.end || rangeEnd); }}>设为录像末尾</button></p>}{(timeInputInvalid.start || timeInputInvalid.end) && <p className="range-input-hint" role="status">请输入 HH:MM:SS 并按回车确认，结束时间支持 24:00:00。</p>}<div className="range-facts" aria-live="polite" aria-busy={rangePlan.loading}><div><span>实际录像</span><strong>{duration(rangePlan.plan ? rangePlan.plan.selectedCoverageMs / 1000 : summary.coverage)}</strong></div><div><span>包含片段</span><strong>{real ? rangePlan.plan?.pieceCount ?? '—' : summary.clips.length}<small> 个</small></strong></div></div>
           {rangePlan.loading && <p className="range-plan-status" role="status"><CircleNotch size={13} className="spin" />正在核对录像…</p>}
           {rangePlan.error && <p className="form-error range-plan-error" role="status">{rangePlan.error}<button className="text-button" onClick={rangePlan.retry}>重新核对</button></p>}
           {!rangeBoundariesValid && <p className="form-error" role="status">起止时间必须落在蓝色录像区间内。</p>}{!summary.valid && <p className="form-error" role="status">{summary.message}</p>}{summary.gap > 0 && <div className="gap-note"><Info size={15} />{duration(summary.gap)} 无录像，导出时自动跳过</div>}

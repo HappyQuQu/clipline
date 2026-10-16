@@ -368,7 +368,7 @@ def test_publish_crash_manifest_reconciles_one_artifact(
     assert client.get(done["result"]["downloadUrl"]).status_code == 200
 
 
-def test_long_keyframe_boundary_fails_without_publishing(client, config, database):
+def test_long_keyframe_start_uses_edit_list_without_video_encoding(client, config, database):
     file = config.recordings_root / "beta" / "20261013_091500.mp4"
     subprocess.run(
         [
@@ -378,7 +378,7 @@ def test_long_keyframe_boundary_fails_without_publishing(client, config, databas
             "-f",
             "lavfi",
             "-i",
-            "color=c=red:s=160x90:r=25",
+            "testsrc2=s=160x90:r=25",
             "-t",
             "20",
             "-c:v",
@@ -414,14 +414,49 @@ def test_long_keyframe_boundary_fails_without_publishing(client, config, databas
     }
     id = enqueue(client, data)
     perform(config, database)
-    assert task(client, id)["errorCode"] == "FAST_BOUNDARY_UNSAFE"
-    assert client.get(f"/api/exports/{id}/download").status_code == 409
-    assert not (config.data / "exports" / f"{id}.mp4").exists()
-    retry = client.post(f"/api/tasks/{id}/retry", json={"mode": "precise"}).json()["taskId"]
-    perform(config, database)
-    done = task(client, retry)
+    done = task(client, id)
     assert done["status"] == "completed", done
-    assert done["result"]["frameCount"] == 25 and done["result"]["audioCodec"] is None
+    assert done["result"]["videoCopied"] and done["result"]["audioCodec"] is None
+    assert done["result"]["videoCodec"] == "h264"
+    assert abs(done["result"]["actualDurationMs"] - 1000) <= 40
+    output = config.data / "long-gop-download.mp4"
+    output.write_bytes(client.get(done["result"]["downloadUrl"]).content)
+
+    # Compare a moving picture, not a static color: visible output must begin
+    # at 15 seconds, never at the preserved keyframe fifteen seconds earlier.
+    def frame_hash(path, offset):
+        raw = subprocess.check_output(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-threads",
+                "1",
+                "-ss",
+                str(offset),
+                "-i",
+                str(path),
+                "-map",
+                "0:v:0",
+                "-frames:v",
+                "1",
+                "-f",
+                "framemd5",
+                "-",
+            ]
+        )
+        return [
+            line.rsplit(b",", 1)[-1].strip()
+            for line in raw.splitlines()
+            if not line.startswith(b"#")
+        ][0]
+
+    assert frame_hash(output, 0) == frame_hash(file, 15)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-xerror", "-threads", "1", "-i", str(output), "-f", "null", "-"],
+        check=True,
+        capture_output=True,
+    )
 
 
 def test_cancel_at_publish_manifest_and_lease_fence(client, config, database, archive, monkeypatch):
@@ -547,3 +582,234 @@ def test_fast_merge_accepts_different_frame_intervals_with_matching_codec_header
         capture_output=True,
     )
     assert paths[0].read_bytes() == original
+
+
+def test_fast_opus_b_frames_audio_clock_and_monotonic_progress(
+    client, config, database, monkeypatch
+):
+    paths = []
+    for index in range(2):
+        path = config.recordings_root / "beta" / f"20261013_09150{index * 8}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=s=160x90:r=25",
+                "-f",
+                "lavfi",
+                "-i",
+                f"sine=frequency={440 + index * 440}:sample_rate=48000",
+                "-t",
+                "8",
+                "-c:v",
+                "libx264",
+                "-threads",
+                "1",
+                "-g",
+                "250",
+                "-keyint_min",
+                "250",
+                "-sc_threshold",
+                "0",
+                "-bf",
+                "2",
+                "-c:a",
+                "libopus",
+                "-strict",
+                "-2",
+                "-y",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        os.utime(path, (time.time() - 120, time.time() - 120))
+        paths.append(path)
+    before = [path.read_bytes() for path in paths]
+    source = client.post(
+        "/api/sources",
+        json={
+            "name": "Opus B frames",
+            "path": str(paths[0].parent),
+            "scanOnCreate": True,
+            "scanIntervalMinutes": None,
+        },
+    ).json()["source"]
+    perform(config, database)
+    progress, commands = [], []
+    original_update = TaskContext.update
+    original_process = exports.export_media.run_process
+
+    def update(context, stage, percentage, checkpoint):
+        progress.append(percentage)
+        return original_update(context, stage, percentage, checkpoint)
+
+    def process(args, *positional, **keywords):
+        commands.append(args)
+        return original_process(args, *positional, **keywords)
+
+    monkeypatch.setattr(TaskContext, "update", update)
+    monkeypatch.setattr(exports.export_media, "run_process", process)
+    identifier = enqueue(
+        client,
+        {
+            "sourceId": source["id"],
+            "startAt": "2026-10-13T09:15:05.200+08:00",
+            "endAt": "2026-10-13T09:15:11+08:00",
+            "mode": "fast",
+        },
+    )
+    perform(config, database)
+    done = task(client, identifier)
+    assert done["status"] == "completed", done
+    assert progress == sorted(progress)
+    assert any("pcm_s16le" in args for args in commands)
+    assert not any("libx264" in args or "libx265" in args for args in commands)
+    assert done["result"]["videoCopied"] and done["result"]["audioNormalized"]
+    assert done["result"]["videoCodec"] == "h264" and done["result"]["audioCodec"] == "aac"
+    assert abs(done["result"]["actualDurationMs"] - 5800) < 500
+    output = config.data / "opus-b-frame-download.mp4"
+    output.write_bytes(client.get(done["result"]["downloadUrl"]).content)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-xerror", "-threads", "1", "-i", str(output), "-f", "null", "-"],
+        check=True,
+        capture_output=True,
+    )
+    streams = json.loads(
+        subprocess.check_output(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=start_time,duration",
+                "-of",
+                "json",
+                str(output),
+            ]
+        )
+    )["streams"]
+    assert abs(float(streams[0]["duration"]) - float(streams[1]["duration"])) < 0.05
+    assert all(abs(float(stream["start_time"])) < 0.05 for stream in streams)
+    assert [path.read_bytes() for path in paths] == before
+
+
+def test_fast_internal_long_gop_refuses_unsafe_seam(client, config, database):
+    first = config.recordings_root / "beta" / "20261013_091500.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=s=160x90:r=25",
+            "-t",
+            "20",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "1",
+            "-g",
+            "500",
+            "-keyint_min",
+            "500",
+            "-sc_threshold",
+            "0",
+            "-bf",
+            "0",
+            "-y",
+            str(first),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    second = first.with_name("20261013_091505.mp4")
+    second.write_bytes(first.read_bytes())
+    for path in (first, second):
+        os.utime(path, (time.time() - 120, time.time() - 120))
+    source = client.post(
+        "/api/sources",
+        json={
+            "name": "Unsafe internal GOP",
+            "path": str(first.parent),
+            "scanOnCreate": True,
+            "scanIntervalMinutes": None,
+        },
+    ).json()["source"]
+    perform(config, database)
+    identifier = enqueue(
+        client,
+        {
+            "sourceId": source["id"],
+            "startAt": "2026-10-13T09:15:19+08:00",
+            "endAt": "2026-10-13T09:15:21+08:00",
+            "mode": "fast",
+        },
+    )
+    perform(config, database)
+    done = task(client, identifier)
+    assert done["errorCode"] == "FAST_BOUNDARY_UNSAFE", done
+    assert "中间拼接" in done["errorMessage"]
+    assert client.get(f"/api/exports/{identifier}/download").status_code == 409
+    assert not (config.data / "exports" / f"{identifier}.mp4").exists()
+
+
+def test_fast_audio_cancel_releases_slot_retry_and_publish_recovery(
+    client, config, database, archive, monkeypatch
+):
+    data = body(archive, "fast", end=4.5)
+    identifier = enqueue(client, data)
+    original_update = TaskContext.update
+    cancelled = False
+
+    def cancel_audio(context, stage, progress, checkpoint):
+        nonlocal cancelled
+        from app.db.models import RuntimeLease
+
+        with Session(database) as session:
+            held = session.scalar(
+                select(RuntimeLease).where(RuntimeLease.token == context.claim.token)
+            )
+        if stage == "audio" and held and not cancelled:
+            cancelled = True
+            client.post(f"/api/tasks/{identifier}/cancel")
+        return original_update(context, stage, progress, checkpoint)
+
+    monkeypatch.setattr(TaskContext, "update", cancel_audio)
+    perform(config, database)
+    assert cancelled and task(client, identifier)["status"] == "cancelled"
+    assert not list((config.data / "tmp" / identifier).rglob("*.wav"))
+    assert client.get(f"/api/exports/{identifier}/download").status_code == 409
+    monkeypatch.setattr(TaskContext, "update", original_update)
+    retry = client.post(f"/api/tasks/{identifier}/retry", json={}).json()["taskId"]
+    replace = exports.os.replace
+
+    def crash(source, target):
+        replace(source, target)
+        if target == config.data / "exports" / f"{retry}.mp4":
+            raise SystemExit("crash after rename")
+
+    monkeypatch.setattr(exports.os, "replace", crash)
+    queue = Queue(database, config, "old-fast-worker")
+    with pytest.raises(SystemExit):
+        execute(queue, queue.claim(), threading.Event())
+    monkeypatch.setattr(exports.os, "replace", replace)
+    queue = Queue(database, config, "new-fast-worker")
+    queue.recover()
+
+    def must_reconcile(*args):
+        raise AssertionError("Verified fast export must not run twice")
+
+    monkeypatch.setattr(exports.export_media, "render", must_reconcile)
+    execute(queue, queue.claim(), threading.Event())
+    done = task(client, retry)
+    assert done["status"] == "completed" and done["attemptNo"] == 2, done
+    assert client.head(done["result"]["downloadUrl"]).status_code == 200
+    with Session(database) as session:
+        assert len(list(session.scalars(select(Artifact).where(Artifact.task_id == retry)))) == 1

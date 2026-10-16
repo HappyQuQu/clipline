@@ -4,6 +4,7 @@ import json
 import math
 import shutil
 import time
+from contextlib import nullcontext
 from fractions import Fraction
 
 from app.core.errors import AppError
@@ -26,7 +27,7 @@ def inspect(path, context, *, frames=False):
         args += ["-count_frames"]
     args += [
         "-show_entries",
-        "format=duration:stream=codec_type,codec_name,profile,level,pix_fmt,width,height,sample_aspect_ratio,time_base,r_frame_rate,sample_rate,channels,channel_layout,extradata_hash,start_time,duration,nb_read_frames",
+        "format=duration,start_time:stream=codec_type,codec_name,profile,level,pix_fmt,width,height,sample_aspect_ratio,time_base,r_frame_rate,sample_rate,channels,channel_layout,extradata_hash,start_time,duration,nb_read_frames",
         "-of",
         "json",
         str(path),
@@ -146,6 +147,54 @@ def compatible(metadata):
         )
 
 
+def preceding_keyframe(path, offset, metadata, context):
+    """Find a random-access packet without decoding a long GOP or loading all packets."""
+    origin = float(metadata["format"].get("start_time", 0))
+    raw = run_process(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-protocol_whitelist",
+            "file",
+            "-threads",
+            str(context.config.media_threads),
+            "-select_streams",
+            "v:0",
+            "-read_intervals",
+            f"{origin + offset:.6f}%+#1",
+            "-show_packets",
+            "-show_entries",
+            "packet=pts_time,flags",
+            "-of",
+            "json",
+            str(path),
+        ],
+        context,
+        context.config.probe_timeout_seconds,
+    )
+    try:
+        packet = json.loads(raw)["packets"][0]
+        time = float(packet["pts_time"]) - origin
+        if "K" not in packet["flags"] or not math.isfinite(time) or time > offset + 0.001:
+            raise ValueError()
+        return max(0, time)
+    except (ValueError, KeyError, IndexError) as error:
+        raise AppError(
+            "FAST_BOUNDARY_UNSAFE", "无法安全定位拼接关键帧，请选择精准模式重试。"
+        ) from error
+
+
+def concat_listing(path, parts, durations):
+    path.write_text(
+        "ffconcat version 1.0\n"
+        + "".join(
+            f"file '{part.name}'\nduration {duration:.9f}\n"
+            for part, duration in zip(parts, durations, strict=True)
+        )
+    )
+
+
 def render(paths, plan, target, context):
     metadata = [inspect(path, context) for path in paths]
     precise = plan["mode"] == "precise"
@@ -157,18 +206,21 @@ def render(paths, plan, target, context):
     height = max(2, round(int(video["height"]) * width / int(video["width"]) / 2) * 2)
     audio = any(piece["audio"] for piece in plan["pieces"])
     cumulative = prior_frames = 0
-    parts, durations = [], []
+    parts, durations, audio_parts = [], [], []
+    boundary_padding_ms = 0
     deadline = time.monotonic() + context.config.export_timeout_seconds
     progress_path = target.parent / "progress.txt"
     last_update = 0
+    reported_progress = 3
+    reported_time = 0
 
-    def command(args, base, length, stage):
-        nonlocal last_update
+    def command(args, base, length, stage, *, media=False):
+        nonlocal last_update, reported_progress, reported_time
         progress_path.unlink(missing_ok=True)
 
-        def poll():
-            nonlocal last_update
-            if time.monotonic() - last_update < 0.5:
+        def poll(completed=False):
+            nonlocal last_update, reported_progress, reported_time
+            if not completed and time.monotonic() - last_update < 0.5:
                 return
             last_update = time.monotonic()
             if shutil.disk_usage(context.config.data).free < 64 * 1024**2:
@@ -183,51 +235,78 @@ def render(paths, plan, target, context):
                         if "=" in line
                     )
             try:
-                processed = min(length, max(0, int(values.get("out_time_us", 0)) // 1000))
+                processed = (
+                    length
+                    if completed
+                    else min(length, max(0, int(values.get("out_time_us", 0)) // 1000))
+                )
             except ValueError:
                 return
+            weighted = processed
+            if not precise and audio:
+                if stage == "cut":
+                    weighted *= 0.2
+                elif stage == "audio":
+                    weighted = length * 0.2 + processed * 0.8
             percentage = (
                 81 + round(processed / length * 12)
                 if stage == "concat"
-                else 3 + round((base + processed) / plan["expectedDurationMs"] * 76)
+                else 3 + round((base + weighted) / plan["expectedDurationMs"] * 76)
             )
-            context.update(
-                stage,
-                min(93, percentage),
-                {"outTimeMs": base + processed},
-            )
+            reported_progress = max(reported_progress, min(93, percentage))
+            reported_time = max(reported_time, round(base + weighted))
+            context.update(stage, reported_progress, {"outTimeMs": reported_time})
 
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise AppError("MEDIA_TIMEOUT", "导出超时，请缩短区间后重试。")
-        run_process(
-            [
-                "ffmpeg",
-                "-nostdin",
-                "-v",
-                "error",
-                "-filter_threads",
-                str(context.config.media_threads),
-                "-filter_complex_threads",
-                str(context.config.media_threads),
-            ]
-            + args
-            + ["-progress", str(progress_path), "-y"],
-            context,
-            remaining,
-            poll,
-        )
+        context.update(stage, reported_progress, {"outTimeMs": reported_time})
+        # Fast video remains stream copy. Only its audio work acquires the same
+        # bounded media slot as playback/precise export, including cancellation.
+        with context.media_slot() if media else nullcontext():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AppError("MEDIA_TIMEOUT", "导出超时，请缩短区间后重试。")
+            run_process(
+                [
+                    "ffmpeg",
+                    "-nostdin",
+                    "-v",
+                    "error",
+                    "-filter_threads",
+                    str(context.config.media_threads),
+                    "-filter_complex_threads",
+                    str(context.config.media_threads),
+                ]
+                + args
+                + ["-progress", str(progress_path), "-y"],
+                context,
+                remaining,
+                poll,
+            )
+            poll(completed=True)
 
     for index, (path, piece) in enumerate(zip(paths, plan["pieces"], strict=True)):
         context.check()
         part = target.parent / f"part-{index:04d}.{'nut' if precise else 'mp4'}"
+        offset = piece["offsetStartMs"] / 1000
+        padding = 0
+        if not precise and index and offset > 0:
+            # A single MP4 edit list can hide the first GOP's preroll, but not
+            # an arbitrary internal GOP. Internal seams must start independently.
+            snapped = preceding_keyframe(path, offset, metadata[index][0], context)
+            padding = max(0, offset - snapped)
+            if padding > 5:
+                raise AppError(
+                    "FAST_BOUNDARY_UNSAFE",
+                    "中间拼接边界距关键帧超过 5 秒，无法安全快速拼接，请选择精准模式重试。",
+                )
+            offset = snapped
+            boundary_padding_ms += round(padding * 1000)
         args = [
             "-protocol_whitelist",
             "file",
             "-threads",
             str(context.config.media_threads),
             "-ss",
-            f"{piece['offsetStartMs'] / 1000:.6f}",
+            f"{offset:.6f}",
             "-i",
             str(path),
         ]
@@ -277,19 +356,22 @@ def render(paths, plan, target, context):
                 ]
             args += ["-t", f"{duration:.9f}", "-f", "nut", str(part)]
         else:
+            # Preserve negative video decode timestamps. MP4 edits hide preroll
+            # while retaining the keyframe needed to decode the selected start.
+            # make_zero used to shift early Opus packets and expose minutes of
+            # preroll as black video / extra duration.
             args += [
                 "-t",
-                f"{piece['durationMs'] / 1000:.6f}",
+                f"{piece['durationMs'] / 1000 + padding:.6f}",
                 "-map",
                 "0:V:0",
-                "-map",
-                "0:a:0?",
-                "-c",
+                "-an",
+                "-c:v",
                 "copy",
                 "-avoid_negative_ts",
-                "make_zero",
-                "-strict",
-                "-2",
+                "disabled",
+                "-use_editlist",
+                "1",
                 str(part),
             ]
             duration = None
@@ -300,23 +382,56 @@ def render(paths, plan, target, context):
             "transcode" if precise else "cut",
         )
         part_meta, _ = inspect(part, context)
+        actual_part_duration = float(part_meta["format"]["duration"])
         if (
             not precise
-            and abs(float(part_meta["format"]["duration"]) * 1000 - piece["durationMs"]) > 5000
+            and abs(actual_part_duration * 1000 - piece["durationMs"] - padding * 1000) > 5000
         ):
-            raise AppError(
-                "FAST_BOUNDARY_UNSAFE", "关键帧间隔过长，快速裁剪偏差超过 5 秒，请用精准模式重试。"
-            )
-        durations.append(duration or float(part_meta["format"]["duration"]))
+            raise AppError("FAST_BOUNDARY_UNSAFE", "快速裁剪边界偏差超过 5 秒，请用精准模式重试。")
+        durations.append(duration or actual_part_duration)
         parts.append(part)
+        if not precise and audio:
+            # Decode only audio, once per part to a lossless clock. This removes
+            # Opus preroll and avoids AAC priming accumulating at every seam.
+            audio_part = target.parent / f"audio-{index:04d}.wav"
+            command(
+                [
+                    "-protocol_whitelist",
+                    "file",
+                    "-threads",
+                    str(context.config.media_threads),
+                    "-ss",
+                    f"{offset:.6f}",
+                    "-i",
+                    str(path),
+                    "-map",
+                    "0:a:0",
+                    "-vn",
+                    "-af",
+                    "aresample=48000:async=1:first_pts=0,apad,"
+                    f"atrim=end_sample={round(actual_part_duration * 48000)},asetpts=N/SR/TB",
+                    "-c:a",
+                    "pcm_s16le",
+                    "-ar",
+                    "48000",
+                    "-ac",
+                    "2",
+                    "-threads",
+                    str(context.config.media_threads),
+                    "-t",
+                    f"{actual_part_duration:.9f}",
+                    "-rf64",
+                    "auto",
+                    str(audio_part),
+                ],
+                sum(p["durationMs"] for p in plan["pieces"][:index]),
+                piece["durationMs"],
+                "audio",
+                media=True,
+            )
+            audio_parts.append(audio_part)
     listing = target.parent / "concat.txt"
-    listing.write_text(
-        "ffconcat version 1.0\n"
-        + "".join(
-            f"file '{part.name}'\nduration {duration:.9f}\n"
-            for part, duration in zip(parts, durations, strict=True)
-        )
-    )
+    concat_listing(listing, parts, durations)
     args = [
         "-protocol_whitelist",
         "file",
@@ -326,21 +441,38 @@ def render(paths, plan, target, context):
         "1",
         "-i",
         str(listing),
-        "-map",
-        "0:V:0",
-        "-map",
-        "0:a:0?",
-        "-c:v",
-        "copy",
-        "-c:a",
-        "aac" if precise else "copy",
+    ]
+    if not precise and audio:
+        audio_listing = target.parent / "audio-concat.txt"
+        concat_listing(audio_listing, audio_parts, durations)
+        args += ["-f", "concat", "-safe", "1", "-i", str(audio_listing)]
+    args += ["-map", "0:V:0", "-c:v", "copy"]
+    if precise:
+        args += ["-map", "0:a:0?", "-c:a", "aac"]
+    elif audio:
+        args += [
+            "-map",
+            "1:a:0",
+            "-c:a",
+            "aac",
+            "-af",
+            "aresample=48000:async=1:first_pts=0,apad,"
+            f"atrim=end_sample={round(sum(durations) * 48000)},asetpts=N/SR/TB",
+        ]
+    args += [
+        "-threads",
+        str(context.config.media_threads),
         "-strict",
         "-2",
+        "-avoid_negative_ts",
+        "disabled",
+        "-use_editlist",
+        "1",
         "-movflags",
         "+faststart",
         str(target),
     ]
-    command(args, 0, plan["expectedDurationMs"], "concat")
+    command(args, 0, plan["expectedDurationMs"], "concat", media=not precise and audio)
     context.update("verify", 95, {})
     output, stream = inspect(target, context, frames=precise)
     actual = round(float(output["format"]["duration"]) * 1000)
@@ -394,9 +526,28 @@ def render(paths, plan, target, context):
             actual - sum(durations) * 1000
         ) > max(500, len(parts) * 100):
             raise AppError("INVALID_EXPORT_OUTPUT", "快速拼接校验失败，请用精准模式重试。")
-        warnings.append(
-            "快速模式按关键帧裁剪，实际边界和时长可能偏移；需要精确边界请选择精准模式。"
+        audio_stream = next(
+            (row for row in output["streams"] if row["codec_type"] == "audio"), None
         )
+        if (
+            abs(float(stream.get("start_time", 0))) > 0.25
+            or audio
+            and (
+                not audio_stream
+                or abs(float(audio_stream.get("start_time", 0))) > 0.05
+                or abs(float(audio_stream.get("duration", 0)) - sum(durations)) > 0.1
+            )
+        ):
+            raise AppError("INVALID_EXPORT_OUTPUT", "快速导出音视频时间校验失败，结果未发布。")
+        warnings.append(
+            "视频保留原编码直接复制；首尾边界可能有帧级偏移，需要逐帧精度请选择精准模式。"
+        )
+        if audio:
+            warnings.append("音频已整理为 AAC，避免原音频预滚和拼接处时间戳错位。")
+        if boundary_padding_ms:
+            warnings.append(
+                f"拼接起点已吸附关键帧，合计多保留 {boundary_padding_ms / 1000:.3f} 秒。"
+            )
     if plan["unrecordedMs"]:
         warnings.append("已跳过没有录像的断档。")
     if plan["omittedMs"]:
@@ -414,4 +565,13 @@ def render(paths, plan, target, context):
         "fps": fps if precise else str(Fraction(stream["r_frame_rate"])),
         "frameCount": int(stream["nb_read_frames"]) if precise else None,
         "warnings": warnings,
+        **(
+            {
+                "videoCopied": True,
+                "audioNormalized": audio,
+                "boundaryPaddingMs": boundary_padding_ms,
+            }
+            if not precise
+            else {}
+        ),
     }

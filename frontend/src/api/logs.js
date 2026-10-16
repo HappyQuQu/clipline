@@ -2,7 +2,7 @@ import { bytes } from './adapters.js';
 export function logSummary(row) {
   const detail = row.detail || {};
   if (detail.message) return detail.message;
-  if (detail.result?.actualDurationMs != null) return `目标 ${detail.result.expectedDurationMs / 1000} 秒 · 实际 ${detail.result.actualDurationMs / 1000} 秒 · ${bytes(detail.result.sizeBytes)} · ${detail.result.mode === 'precise' ? '精准导出' : '保留原编码'}`;
+  if (detail.result?.actualDurationMs != null) return `目标 ${detail.result.expectedDurationMs / 1000} 秒 · 实际 ${detail.result.actualDurationMs / 1000} 秒 · ${bytes(detail.result.sizeBytes)} · ${detail.result.mode === 'precise' ? '精准导出' : '保留视频编码'}`;
   if (detail.result?.processed != null) return `已检查 ${detail.result.processed} 个文件 · 新增 ${detail.result.added || 0} · 更新 ${detail.result.updated || 0} · 复用 ${detail.result.unchanged || 0} · 异常 ${detail.result.failed || 0}`;
   if (detail.group) { const names = { scan: '扫描与索引', playback: '录像回看', export: '录像导出', tasks: '后台任务' }; return `${names[detail.group] || '设置'}已更新，保存后在相关操作中生效。`; }
   if (detail.removedFiles != null) return `清理 ${detail.removedFiles} 个应用文件 · 释放 ${bytes(detail.removedBytes || 0)} · 到期导出 ${detail.expiredExports || 0} 个 · 播放缓存 ${detail.evictedPlayback || 0} 个`;
