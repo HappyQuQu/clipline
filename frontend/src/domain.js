@@ -1,6 +1,6 @@
 export const DEMO_DATE = '2026-10-13';
 export const SETTINGS_FIELDS = Object.freeze({
-  general: ['timezone', 'logRetentionDays', 'playbackCacheMaxBytes'],
+  general: ['theme', 'timezone', 'logRetentionDays', 'playbackCacheMaxBytes'],
   scan: ['interval', 'skipRecent'],
   playback: ['autoNext', 'skipGaps', 'playbackMaxWidth'],
   export: ['defaultMode', 'maxDuration', 'exportMaxWidth', 'exportTtlHours'],

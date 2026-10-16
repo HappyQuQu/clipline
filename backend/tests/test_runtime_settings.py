@@ -79,6 +79,9 @@ def test_legacy_defaults_and_partial_saves_preserve_other_fields(config, databas
 @pytest.mark.parametrize(
     ("group", "values"),
     [
+        ("general", {"theme": "automatic"}),
+        ("general", {"theme": None}),
+        ("general", {"theme": 1}),
         ("general", {"timezone": "invalid/timezone"}),
         ("general", {"timezone": "../etc/passwd"}),
         ("general", {"logRetentionDays": 0}),
@@ -206,3 +209,19 @@ def test_cleanup_uses_saved_capacity_and_retention_and_preserves_recordings(
     result = maintain(database, config)
     assert result["evictedPlayback"] == 1 and result["logsPruned"] == 1
     assert not proxy.exists() and original.read_bytes() == b"original"
+
+
+def test_appearance_modes_persist_and_do_not_change_runtime_settings(config, database):
+    with TestClient(create_app(config)) as client:
+        original = client.get("/api/settings").json()
+        assert original["groups"]["general"]["values"]["theme"] == "system"
+    for mode in ("dark", "light", "system"):
+        with TestClient(create_app(config)) as client:
+            patch(client, "general", {"theme": mode})
+            assert client.get("/api/settings").json()["deployment"] == original["deployment"]
+        bootstrap(config, check_media=False)
+        with TestClient(create_app(config)) as restarted:
+            settings = restarted.get("/api/settings").json()
+            assert settings["groups"]["general"]["values"]["theme"] == mode
+            assert settings["groups"]["general"]["values"]["timezone"] == config.timezone
+            assert settings["groups"]["tasks"] == original["groups"]["tasks"]

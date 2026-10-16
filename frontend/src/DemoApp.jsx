@@ -10,6 +10,7 @@ import Sources from './pages/Sources';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import SourceDialog from './components/SourceDialog';
+import useTheme from './hooks/useTheme';
 import { initialSettings as savedDefaults } from './api/settings';
 import { reviewDayBounds } from './recordingSelection';
 
@@ -26,6 +27,7 @@ export default function App() {
   const [logs, setLogs] = useState(() => readSaved('logs', initialLogs));
   const [settings, setSettings] = useState(() => readSaved('settings', initialSettings));
   const [settingsDraft, setSettingsDraft] = useState(() => ({ ...settings }));
+  useTheme(settings.theme, settingsDraft.theme);
   const [sourceId, setSourceId] = useState('studio');
   const [reviewRange, setReviewRange] = useState(null);
   const [date, setDate] = useState(DEMO_DATE);

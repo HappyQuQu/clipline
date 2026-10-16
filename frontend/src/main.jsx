@@ -2,6 +2,9 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 
 import './styles.css';
+import './themes.css';
+import { initializeTheme } from './theme';
+initializeTheme();
 
 const demo = import.meta.env.VITE_ENABLE_DEMO !== 'false' && new URLSearchParams(window.location.search).get('mode') === 'demo';
 import(demo ? './DemoApp.jsx' : './App.jsx').then(({ default: App }) => {
