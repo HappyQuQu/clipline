@@ -1,9 +1,10 @@
 export const DEMO_DATE = '2026-10-13';
 export const SETTINGS_FIELDS = Object.freeze({
+  general: ['timezone', 'logRetentionDays', 'playbackCacheMaxBytes'],
   scan: ['interval', 'skipRecent'],
-  playback: ['autoNext', 'skipGaps'],
-  export: ['defaultMode', 'maxDuration'],
-  tasks: ['concurrency'],
+  playback: ['autoNext', 'skipGaps', 'playbackMaxWidth'],
+  export: ['defaultMode', 'maxDuration', 'exportMaxWidth', 'exportTtlHours'],
+  tasks: ['concurrency', 'mediaThreads', 'maxConcurrentTranscodes'],
 });
 export function mergeSettingsGroup(base, values, group) {
   const fields = SETTINGS_FIELDS[group];

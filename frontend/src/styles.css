@@ -4527,3 +4527,8 @@ td {
 .range-panel .recording-time-input{min-width:0;width:0;flex:1;font-variant-numeric:tabular-nums}
 .range-panel .recording-time-input[aria-invalid=true]{color:#b45309}
 .range-input-hint{font-size:10px;line-height:1.7;color:#9a5b16;margin:8px 0 12px}
+
+/* Runtime settings controls keep labels and save actions usable on narrow screens. */
+.setting-row .setting-number{width:112px;min-width:0;flex-shrink:0;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;font-variant-numeric:tabular-nums}
+.setting-row .setting-timezone{width:200px;max-width:100%;min-width:0;flex-shrink:0;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:#fff}
+@media(max-width:600px){.setting-row:has(.setting-number),.setting-row:has(.setting-timezone){flex-wrap:wrap;gap:12px}.setting-row:has(.setting-number)>div,.setting-row:has(.setting-timezone)>div{flex-basis:100%}.setting-row .setting-timezone{width:100%}}

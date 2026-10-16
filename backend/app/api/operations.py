@@ -53,7 +53,7 @@ def list_logs(
 
 
 def download_json(request, selected, snapshot, diagnostic):
-    engine, config = request.app.state.engine, request.app.state.config
+    engine, config = request.app.state.engine, request.state.config
     filename = "clipline-diagnostics.json" if diagnostic else "clipline-logs.json"
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',

@@ -17,7 +17,7 @@ from app.core.locks import ProcessLock
 from app.db.migrations import alembic_config, current_revision, expected_revision
 from app.db.models import SavedSettings
 from app.db.session import make_engine
-from app.services.settings import DEFAULTS
+from app.services.settings import DEFAULTS, initial_values
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +87,11 @@ def bootstrap(config: AppConfig, *, check_media: bool = True) -> None:
                     migration.attributes["connection"] = connection
                     command.upgrade(migration, "head")
             with Session(engine) as session, session.begin():
-                for group, values in DEFAULTS.items():
+                for group in DEFAULTS:
                     if session.get(SavedSettings, group) is None:
-                        session.add(SavedSettings(group_name=group, value_json=values))
+                        session.add(
+                            SavedSettings(group_name=group, value_json=initial_values(group))
+                        )
             for name in ("exports", "tmp", "thumbnails", "playback-proxies", "logs"):
                 (config.data / name).mkdir(exist_ok=True)
             logger.info("Database is ready at revision %s", expected_revision())

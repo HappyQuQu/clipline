@@ -118,7 +118,7 @@ def test_failed_upgrade_preserves_database_and_creates_backup(
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
             base_revision
         )
-        assert connection.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 4
+        assert connection.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 5
 
 
 def test_event_ids_are_not_reused_after_retention_cleanup(database):

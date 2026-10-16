@@ -175,7 +175,7 @@ def test_server_filters_stable_snapshot_full_export_and_diagnostics(client, data
     diagnostic = client.get("/api/system/diagnostics", params={"sourceId": source}).json()
     assert diagnostic["system"]["arch"] and "schema" in diagnostic["system"]
     assert len(diagnostic["items"]) == 125 and diagnostic["tasks"] == []
-    assert set(diagnostic["settings"]) == {"scan", "playback", "export", "tasks"}
+    assert set(diagnostic["settings"]) == {"general", "scan", "playback", "export", "tasks"}
 
 
 def test_event_replay_expired_cursor_reset_and_log_retention(client, config, database):
@@ -198,6 +198,7 @@ def test_event_replay_expired_cursor_reset_and_log_retention(client, config, dat
     assert event_batch(database, latest)[0] == "reset"
     assert client.get("/api/system/status").json()["maintenance"]["lastRunAt"]
     assert set(client.get("/api/settings").json()["groups"]) == {
+        "general",
         "scan",
         "playback",
         "export",

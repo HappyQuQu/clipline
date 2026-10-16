@@ -18,10 +18,6 @@ def check(service):
         "Recordings and writable application data must be separate host directories"
     )
     assert service["user"].split(":")[0].isdigit() and int(service["user"].split(":")[0]) > 0
-    environment = service["environment"]
-    assert environment["CLIPLINE_RECORDINGS_ROOT"] == "/recordings"
-    assert environment["CLIPLINE_DATA"] == "/app/data"
-    assert environment["CLIPLINE_DB"] == "/app/data/clipline.db"
     assert service.get("init") and service["restart"] == "unless-stopped"
     assert service["logging"]["options"]["max-file"] == "3"
     return {

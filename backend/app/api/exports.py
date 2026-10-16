@@ -21,24 +21,24 @@ router = APIRouter(prefix="/api/exports")
 @router.post("/plan")
 def preview(request: Request, body: ExportRequest):
     with Session(request.app.state.engine) as session:
-        return public_plan(build_plan(session, request.app.state.config, body))
+        return public_plan(build_plan(session, request.state.config, body))
 
 
 @router.post("", status_code=202)
 def submit(request: Request, body: ExportRequest, key: KeyHeader = None):
-    return submit_export(request.app.state.engine, request.app.state.config, body, key)
+    return submit_export(request.app.state.engine, request.state.config, body, key)
 
 
 @router.post("/{task_id}/resubmit", status_code=202)
 def resubmit(request: Request, task_id: str, key: KeyHeader = None):
     return submit_export(
-        request.app.state.engine, request.app.state.config, key=key, retry_of=task_id, resubmit=True
+        request.app.state.engine, request.state.config, key=key, retry_of=task_id, resubmit=True
     )
 
 
 @router.api_route("/{task_id}/download", methods=["GET", "HEAD"])
 def download(request: Request, task_id: str):
-    config = request.app.state.config
+    config = request.state.config
     with write_session(request.app.state.engine) as session:
         task = session.get(Task, task_id)
         if task is None or task.kind != "export":

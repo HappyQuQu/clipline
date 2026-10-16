@@ -10,13 +10,14 @@ import Sources from './pages/Sources';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import SourceDialog from './components/SourceDialog';
+import { initialSettings as savedDefaults } from './api/settings';
 import { reviewDayBounds } from './recordingSelection';
 
 const nav = [
   ['review', '录像回看', PlayCircle], ['library', '片段库', SquaresFour], ['tasks', '任务中心', Stack],
   ['logs', '日志中心', FileText], ['sources', '录像源', FolderSimple], ['settings', '设置', GearSix],
 ];
-const initialSettings = { interval: '5', timezone: 'Asia/Shanghai', skipRecent: '30', defaultMode: 'fast', maxDuration: '30', concurrency: '2', autoNext: true, skipGaps: true };
+const initialSettings = { ...savedDefaults, interval: '5', timezone: 'Asia/Shanghai', skipRecent: '30', defaultMode: 'fast', maxDuration: '10080', concurrency: '2', autoNext: true, skipGaps: true };
 
 export default function App() {
   const [page, setPage] = useState('review');

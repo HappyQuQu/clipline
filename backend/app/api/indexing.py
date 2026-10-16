@@ -35,7 +35,7 @@ def sources(request: Request):
 @router.post("/sources", status_code=201)
 def add_source(request: Request, body: SourceCreate, key: KeyHeader = None):
     return create_source(
-        request.app.state.engine, request.app.state.config, request.app.state.directories, body, key
+        request.app.state.engine, request.state.config, request.app.state.directories, body, key
     )
 
 
@@ -134,7 +134,7 @@ def retry_task(
     if kind == "export":
         return submit_export(
             request.app.state.engine,
-            request.app.state.config,
+            request.state.config,
             key=key,
             retry_of=task_id,
             mode=body.mode if body else None,
@@ -144,7 +144,7 @@ def retry_task(
     if kind == "prepare":
         return submit_prepare(
             request.app.state.engine,
-            request.app.state.config,
+            request.state.config,
             payload["segmentId"],
             key,
             force=payload.get("force", False),
@@ -171,7 +171,7 @@ def segments(
             source_id=sourceId,
             date=date,
             q=q,
-            timezone=viewTimezone or request.app.state.config.timezone,
+            timezone=viewTimezone or request.state.config.timezone,
             cursor=cursor,
             limit=limit,
         )
@@ -202,7 +202,7 @@ def thumbnail(request: Request, segment_id: str):
         )
         if artifact is None:
             raise AppError("THUMBNAIL_NOT_READY", "录像预览图尚未准备好。", 404)
-        path = (request.app.state.config.data / artifact.relative_path).resolve()
-        if not path.is_relative_to(request.app.state.config.data) or not path.is_file():
+        path = (request.state.config.data / artifact.relative_path).resolve()
+        if not path.is_relative_to(request.state.config.data) or not path.is_file():
             raise AppError("THUMBNAIL_NOT_READY", "录像预览图已失效。", 404)
     return FileResponse(path, media_type="image/jpeg")

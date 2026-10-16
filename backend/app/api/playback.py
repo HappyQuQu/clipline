@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api")
 def dates(request: Request, source_id: str, viewTimezone: str | None = None):
     with Session(request.app.state.engine) as session:
         return timeline.recording_dates(
-            session, source_id, viewTimezone or request.app.state.config.timezone
+            session, source_id, viewTimezone or request.state.config.timezone
         )
 
 
@@ -47,7 +47,7 @@ def get_timeline(
             session,
             sourceId,
             date,
-            viewTimezone or request.app.state.config.timezone,
+            viewTimezone or request.state.config.timezone,
             startSeconds,
             endSeconds,
             cursor,
@@ -70,16 +70,14 @@ def status(
     startMs: int = Query(0, ge=0, le=31536000000),
 ):
     with Session(request.app.state.engine) as session:
-        return playback.playback_status(
-            session, request.app.state.config, segment_id, mode, startMs
-        )
+        return playback.playback_status(session, request.state.config, segment_id, mode, startMs)
 
 
 @router.post("/segments/{segment_id}/prepare", status_code=202)
 def prepare(request: Request, segment_id: str, body: PrepareRequest, key: KeyHeader = None):
     return submit_prepare(
         request.app.state.engine,
-        request.app.state.config,
+        request.state.config,
         segment_id,
         key,
         force=body.force,
@@ -109,7 +107,7 @@ def stream(
     fingerprint: str = Query(..., max_length=128),
     mode: PlaybackMode = "compatible",
 ):
-    config = request.app.state.config
+    config = request.state.config
     with write_session(request.app.state.engine) as session:
         segment = playback.get_segment(session, segment_id)
         if segment.fingerprint != fingerprint:
@@ -213,10 +211,10 @@ def lease_view(
     with write_session(request.app.state.engine) as session:
         segment = playback.get_segment(session, segment_id)
         mode = playback.playback_mode(segment, mode)
-        cache = playback.cached(session, request.app.state.config, segment, mode)
+        cache = playback.cached(session, request.state.config, segment, mode)
         if cache is None:
             return {"leased": False}
-        return view_lease(session, request.app.state.config, cache[0], body.client_id, body.active)
+        return view_lease(session, request.state.config, cache[0], body.client_id, body.active)
 
 
 @router.get("/segments/{segment_id}/hls/{task_id}/index.m3u8")
@@ -227,7 +225,7 @@ def hls_playlist(request: Request, segment_id: str, task_id: str, fingerprint: s
         segment = playback.get_segment(session, segment_id)
         if segment.fingerprint != fingerprint:
             raise AppError("RECORDING_CHANGED", "录像已变化，请重新加载。", 409)
-        text = hls.playlist(session, request.app.state.config, segment, task_id)
+        text = hls.playlist(session, request.state.config, segment, task_id)
     return Response(
         text, media_type="application/vnd.apple.mpegurl", headers={"Cache-Control": "no-store"}
     )
@@ -243,14 +241,14 @@ def hls_fragment(
         segment = playback.get_segment(session, segment_id)
         if segment.fingerprint != fingerprint:
             raise AppError("RECORDING_CHANGED", "录像已变化，请重新加载。", 409)
-        task = hls.get_task(session, request.app.state.config, segment, task_id)
+        task = hls.get_task(session, request.state.config, segment, task_id)
         items = hls.checkpoint(session, task).get("hlsChunks", [])
         item = next((item for item in items if item["id"] == artifact_id), None)
         if item is None:
             raise AppError("ARTIFACT_NOT_FOUND", "播放分片不存在。", 404)
-        artifact, path = hls.chunk_path(session, request.app.state.config, segment, task, item)
+        artifact, path = hls.chunk_path(session, request.state.config, segment, task, item)
         artifact.last_access_at = utc_now_ms()
-        usage = FileUse(session, request.app.state.engine, request.app.state.config, artifact, path)
+        usage = FileUse(session, request.app.state.engine, request.state.config, artifact, path)
         return serve_file(
             request,
             path,
@@ -269,5 +267,5 @@ def hls_lease(request: Request, segment_id: str, task_id: str, body: PlaybackLea
     with write_session(request.app.state.engine) as session:
         segment = playback.get_segment(session, segment_id)
         return hls.lease(
-            session, request.app.state.config, segment, task_id, body.client_id, body.active
+            session, request.state.config, segment, task_id, body.client_id, body.active
         )

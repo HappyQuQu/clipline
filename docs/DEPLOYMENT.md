@@ -19,21 +19,23 @@ curl -fsS http://127.0.0.1:8088/api/health/ready
 
 打开 `http://NAS地址:8088/`，在 Logo 下添加录像源，选择 `/recordings` 下实际录像文件夹。首次扫描立即进入后台队列；目录中旧数据库、模型、缓存与导出文件夹不作为源导入。应用面向可信局域网，外部访问通过已有认证反向代理提供。
 
-镜像按主机架构自动选择，无需修改代码。默认一个媒体任务同时执行、每任务 2 线程；可在环境文件降低播放宽度或调整资源上限。界面任务并行只控制普通队列领取，媒体槽仍受部署上限约束。权限错误、离线、不可播放、快速模式不兼容和导出到期均给出明确状态。
+镜像按主机架构自动选择，无需修改代码。默认一个媒体任务同时执行、每任务 2 线程；在系统设置中调整播放宽度、线程数与媒体并行上限；Docker 可选设置 CPU/内存硬上限。队列并行数与媒体槽上限共同约束任务，不中断已运行任务。权限错误、离线、不可播放、快速模式不兼容和导出到期均给出明确状态。
 
 容器内 `/recordings` 只读，`/app/data` 可写。后者保存新 SQLite、生成媒体、临时文件和备份，停止/重启容器不会丢失持久化任务。不要使用 `down -v` 清理应用数据；备份与升级步骤见 [运维说明](OPERATIONS.md)。
 
 ## 指定本地目录
 
-真实录像固定使用 `/Volumes/extended/clipline` → `/recordings:ro`，只选择 `media` 下的录像目录；新应用数据在项目 `data/local-test`。不覆盖原目录的旧库与模型。
+复制本地配置示例，将自己的录像目录只读映射到 `/recordings`；新应用数据在项目 `data/local-test`。实际设备路径仅保存在忽略的本地环境文件中。不覆盖原目录的旧库与模型。
 
 ```bash
 mkdir -p data/local-test
+cp deploy/local-test.env.example data/local-test.env
+# 编辑 data/local-test.env，替换录像目录
 CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) \
-  python3 deploy/check_deployment.py --env-file deploy/local-test.env.example
+  python3 deploy/check_deployment.py --env-file data/local-test.env
 docker buildx build --platform linux/amd64,linux/arm64 --load -t clipline:d6-local .
 CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) \
-  docker compose --env-file deploy/local-test.env.example up -d --no-build
+  docker compose --env-file data/local-test.env up -d --no-build
 ```
 
 本地正式界面 `http://127.0.0.1:8088/`；Vite 开发界面 5173 转发同一 API。正式镜像关闭 `?mode=demo`，不包含演示录像或旧图片；开发服务器仍可显式打开演示原型。镜像不含 old、识别模型、测试数据库、私有媒体或测试依赖。
@@ -90,12 +92,9 @@ Actions 中两份 native-evidence 记录证明原生 Linux 软件流程；本机
 ```dotenv
 CLIPLINE_CPU_LIMIT=1
 CLIPLINE_MEMORY_LIMIT=768m
-CLIPLINE_MEDIA_THREADS=1
-CLIPLINE_PLAYBACK_MAX_WIDTH=1280
-CLIPLINE_EXPORT_MAX_WIDTH=1280
 ```
 
-在应用后台任务设置中保存并行 1。`0` 表示不额外设置 Docker CPU/内存限制；镜像内部媒体槽与线程限制仍然生效。该档位支持 4K 原始输入后缩放输出，短真实 HEVC/Opus 与 60 秒控制样本通过，完整长 4K 输出的性能另行记录。
+在系统后台任务设置中保存队列并行 1、媒体并行 1、媒体线程 1；在回看和导出设置中分别保存最大宽度 1280。`0` 表示不额外设置 Docker CPU/内存限制；镜像内部媒体槽与线程限制仍然生效。该档位支持 4K 原始输入后缩放输出，短真实 HEVC/Opus 与 60 秒控制样本通过，完整长 4K 输出的性能另行记录。
 
 设备验收可从已测试镜像运行以下脚本，root 驱动仅对新建测试目录设置 UID/GID，不修改系统用户。`--real-sample` 应指向用户授权的短 HEVC/Opus 4K 样本；输入复制到独立目录并只读挂载。资源限制同时覆盖样本生成与应用容器。
 
