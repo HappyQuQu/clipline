@@ -180,7 +180,9 @@ docker compose ps
 
 前端使用 React + Vite，后端使用 Python + FastAPI，SQLite 保存索引和持久化任务，FFmpeg/FFprobe 负责媒体处理。生产镜像同时运行 API 与 Worker。
 
-本地测试将自己的录像目录只读映射到 `/recordings`，应用数据独立放在 `data/local-test`。复制示例配置并替换录像路径；不要将应用数据写入原录像目录。以下命令在仓库根目录执行，需要 Docker、Node.js/npm；后端测试另需 uv 和 FFmpeg/FFprobe。
+本地测试将自己的录像目录只读映射到 `/recordings`，应用数据独立放在 `data/local-test`。复制示例配置并替换录像路径；不要将应用数据写入原录像目录。以下命令在仓库根目录执行，需要 Docker、Node.js 24 LTS（当前固定 24.22.1，见 `.nvmrc`）及 npm；后端测试另需 uv 和 FFmpeg/FFprobe。
+
+使用 nvm 时先运行 `nvm install && nvm use`。CI 与 Docker 前端构建使用相同 Node 版本；最终运行镜像只包含 Python 服务和构建好的静态文件，NAS 无需另装 Node.js。
 
 ```bash
 # 启动完整本地服务，访问 http://127.0.0.1:8088/

@@ -2,6 +2,8 @@
 
 应用版本见仓库 `version.txt`；已发布版本见 GitHub Releases 与 Docker Hub。支持 Linux amd64 / arm64，使用 FFmpeg 软件处理；二期识别保持占位。指定目录的开发验证与 NAS 设备性能验证分别记录。
 
+前端开发、CI 与 Docker 构建统一使用 Node.js 24 LTS，当前固定版本为 24.22.1。`.nvmrc` 提供本地与 CI 版本，Docker 构建阶段使用 `node:24.22.1-bookworm-slim`；更新 Node 24 补丁时同步修改两处，并同步 `package.json` 的最低版本。最终运行阶段使用 Python，NAS 无需安装 Node.js。
+
 ## NAS Docker Compose
 
 1. 安装支持 Compose V2 的 Docker。下载仓库的 `compose.yaml` 与 `deploy/nas.env.example`；复制配置为 `.env.nas`，替换宿主机路径、UID/GID、端口和已通过发布检查的固定镜像版本。
