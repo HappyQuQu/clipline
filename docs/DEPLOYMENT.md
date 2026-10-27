@@ -83,7 +83,7 @@ python3 deploy/smoke_release.py --image clipline:d6-local --platform linux/amd64
 
 若检查失败，`latest` 不更新；保留 Actions 日志修复后重跑。若 GitHub 版本已经生成而镜像发布失败，在 **Publish Docker image → Run workflow** 选择对应 `vX.Y.Z` 标签，输入 `release` 重试；不要重新生成版本。已有固定标签若与重建内容不同，会拒绝覆盖，应使用新版本。手动预览禁止输入 `latest`、版本号、`sha-*` 或 `candidate-*`。
 
-验收证据 `native-evidence-amd64/arm64` 保留 7 天；元数据与已验证 digest 小文件保留 3 天，主要用于同次工作流的发布组合。首次自动发布需要合并该配置到 main；开发分支 CI 成功不表示稳定镜像已经发布。
+验收证据 `native-evidence-amd64/arm64` 保留 7 天；元数据与已验证 digest 小文件保留 3 天，主要用于同次工作流的发布组合。开发分支 CI 成功不表示稳定镜像已经发布，已发布版本以 GitHub Releases 与 Docker Hub 为准。
 
 Actions 中两份 native-evidence 记录证明原生 Linux 软件流程；本机 ARM64 Docker 实测/amd64 仿真与 NAS 实机性能不是同一证据。实际 NAS CPU/内存、挂载权限、长任务耗时和设备故障应在部署后按同一场景记录，不用仿真结果替代设备指标。
 

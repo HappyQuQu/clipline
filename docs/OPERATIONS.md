@@ -44,12 +44,12 @@ docker exec clipline-phase-one-clipline-1 python -m app.backup verify "backup-na
 2. 使用当前镜像、相同数据映射执行 restore。恢复前自动备份当前 DB；完整性、manifest、schema、API/Worker 锁检查失败时不会覆盖 DB。
 3. 启动服务，检查 ready 和版本，重新打开工作台。
 
-本地环境示例，仓库根目录执行；替换备份文件名：
+本地环境示例，仓库根目录执行；使用部署时实际配置的 `data/local-test.env` 并替换备份文件名。NAS 部署应改用自己的 `.env.nas`：
 
 ```bash
-CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) docker compose --env-file deploy/local-test.env.example stop
-CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) docker compose --env-file deploy/local-test.env.example run --rm --no-deps --entrypoint python clipline -m app.backup restore "backup-name.sqlite3"
-CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) docker compose --env-file deploy/local-test.env.example up -d --no-build
+CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) docker compose --env-file data/local-test.env stop
+CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) docker compose --env-file data/local-test.env run --rm --no-deps --entrypoint python clipline -m app.backup restore "backup-name.sqlite3"
+CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) docker compose --env-file data/local-test.env up -d --no-build
 curl -fsS http://127.0.0.1:8088/api/health/ready
 ```
 
@@ -63,7 +63,7 @@ API 或 Worker 仍在运行时，restore 会拒绝获取锁。业务任务继续
 
 ```bash
 # 服务已停止，用 D5 镜像恢复旧库
-docker compose --env-file deploy/local-test.env.example run --rm --no-deps --entrypoint python clipline -m app.backup restore "pre-d5-backup.sqlite3" --target-schema 0003_indexing_queue
+docker compose --env-file data/local-test.env run --rm --no-deps --entrypoint python clipline -m app.backup restore "pre-d5-backup.sqlite3" --target-schema 0003_indexing_queue
 ```
 
 随后将部署镜像选择改为已保存的 D4 镜像（本地示例为 d4-local）再启动。不要恢复旧库后直接启动 D5 镜像，否则会再次升级。恢复演练使用临时数据目录；正式数据恢复由操作者明确选择备份执行。

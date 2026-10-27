@@ -1,5 +1,5 @@
 {
-  "name": "clipline-prototype-workspace",
+  "name": "clipline-workspace",
   "private": true,
   "engines": {
     "node": ">=24.22.1 <25"

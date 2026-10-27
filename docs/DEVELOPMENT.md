@@ -1,10 +1,10 @@
 # Clipline 开发文档
 
-版本：v1.0 · 日期：2026-10-13 · 状态：0.7.0 候选实现与验收记录
+更新：2026-10-27 · 状态：一期功能已交付；仓库版本见根目录 `version.txt`
 
-需求与验收依据：[方案与需求文档](REQUIREMENTS.md)；实施跟踪：[开发任务清单](TASKS.md)。当前前端边界见 [原型结构与二期接入](PROTOTYPE_ARCHITECTURE.md)。
+需求与验收依据：[方案与需求文档](REQUIREMENTS.md)；实施跟踪：[开发任务清单](TASKS.md)。演示模式与扩展边界见 [演示模式说明](PROTOTYPE_ARCHITECTURE.md)。
 
-本文中的目录、数据库、API、Docker 配置和测试为拟实现的正式版契约，除明确标注“已有”外均不代表已完成。
+本文记录正式模式的架构与接口约束；D1–D6 的测试数量、候选版本和设备结果作为历史验收记录保留，具体部署命令以 [部署说明](DEPLOYMENT.md)为准。
 
 当前已完成 D1–D6，实际接口与部署方式见 [后端说明](../backend/README.md)，验证见 [D1](qa/D1_FOUNDATION.md)、[D2](qa/D2_INDEXING.md)、[D3](qa/D3_PLAYBACK.md)、[D4](qa/D4_EXPORTS.md)、[D5](qa/D5_OPERATIONS.md)及 [D6](qa/D6_ACCEPTANCE.md)。scan/reindex/prepare/export 已执行真实媒体工作，默认页面接通真实源、时间轴、回看、详情和片段库；真实裁剪、跨片段拼接和下载已接通，设置、日志、SSE、清理和备份已接入；原生 Linux 双架构与 x86 NAS 实测通过，发布采用候选门禁。本阶段以 `app.runtime` 作为进程管理器，API 和 Worker 分进程运行。
 
@@ -34,7 +34,7 @@ flowchart LR
 | 迁移 | Alembic | 版本化 schema，替代启动时零散 ALTER TABLE |
 | 后台 | 独立 Python Worker + 数据库队列 | 一期不引入 Redis/Celery；未来可替换队列适配层 |
 | 媒体 | FFprobe、FFmpeg | 解析参数、缩略图、播放代理、裁剪与拼接 |
-| 运行 | Linux Docker，Supervisor 等进程管理器 | API/Worker 异常退出、子进程回收和健康状态受控 |
+| 运行 | Linux Docker，`app.runtime` 进程管理器 | API/Worker 异常退出、子进程回收和健康状态受控 |
 | 发布 | Buildx，多平台 manifest | `linux/amd64`、`linux/arm64`，同版本标签 |
 
 依赖在实现时锁定并验证两种架构，本文不使用“最新版本”作为可重复构建的约束。一期包不得默认安装 Torch、FunASR、Whisper 或视觉模型运行库。
@@ -45,14 +45,13 @@ flowchart LR
 
 ```text
 clipline/
-├── frontend/                     # 已有一期原型，逐步替换模拟数据
+├── frontend/                     # 默认真实 API，DemoApp 提供独立演示模式
 │   └── src/
 │       ├── api/                  # 已有：HTTP、DTO、错误映射
-│       ├── services/             # 拟新增：源、回看、任务等领域适配
 │       ├── hooks/                # 播放状态、使用续租与 SSE
 │       ├── pages/                # 已有：Review/Library/Tasks/Logs/Sources/Settings
 │       └── capabilities.js       # 已有：二期能力及插槽
-├── backend/                      # 已建立 D1–D5；old/backend 不直接作为运行目录
+├── backend/                      # 已完成 D1–D6；old/backend 不作为运行目录
 │   ├── app/
 │   │   ├── main.py               # API 入口，不启动扫描循环或识别服务
 │   │   ├── core/                 # 配置、路径约束、错误、时间规则
@@ -65,7 +64,7 @@ clipline/
 │   └── tests/
 ├── deploy/                       # 已有本地测试配置与 smoke 脚本；运行管理在 app.runtime
 ├── Dockerfile                    # 已实现 D1 双架构构建
-├── compose.yaml                  # 已支持后台索引和真实回看
+├── compose.yaml                  # API/Worker 单容器部署与独立数据映射
 ├── docs/
 └── old/                          # 只读参考，不进入正式镜像
 ```
@@ -301,7 +300,7 @@ export payload 示例：
 
 ### 7.1 计划生成
 
-对请求 `[a,b)` 先验证同源同日、`b>a`、跨度上限和可读文件。选中集合 S 为显式 segmentIds；未指定时取全部有效片段。
+对请求 `[a,b)` 先验证同源、`b>a`、开始时间属于所选日期、跨度上限和可读文件。结束时间可以跨日，最大跨度默认 7 天且包含断档。选中集合 S 为显式 segmentIds；未指定时取全部有效片段。
 
 ```text
 recordedCoverage = union(全部可用片段与 [a,b) 的交集)
@@ -527,4 +526,4 @@ docker buildx build \
 
 ## D6 验收与发布实施
 
-0.7.0 候选版本完成主流程桌面/手机回归、107 项后端与 22 项前端测试；两种镜像分别在 Ubuntu amd64/ARM64 原生 runner 验收。候选镜像内容、版本、Compose 目录映射和双架构 index 均提供检查脚本。发布工作流复用完整检查，发布准确已测试镜像并核验 manifest，固定版本不可覆盖不同内容，最后更新稳定指针；主分支只更新 edge。Docker 关闭演示模式，不含演示媒体或识别模型。详情见 [D6 验收](qa/D6_ACCEPTANCE.md)和 [部署说明](DEPLOYMENT.md)。x86 NAS 的 2 GiB 资源档位已在实际设备验证，共存 HA；长时间 4K 输出仍需按部署资源单独测量。
+历史 D6 验收在 0.7.0 候选版本完成主流程桌面/手机回归、107 项后端与 22 项前端测试；两种镜像分别在 Ubuntu amd64/ARM64 原生 runner 验收。候选镜像内容、版本、Compose 目录映射和双架构 index 均提供检查脚本。发布工作流复用完整检查，发布准确已测试镜像并核验 manifest，固定版本不可覆盖不同内容，最后更新稳定指针。当前 main 检查通过后更新 edge 并生成版本 PR，版本发布验收通过后更新 latest 与次版本指针；流程以 [部署说明](DEPLOYMENT.md)为准。Docker 关闭演示模式，不含演示媒体或识别模型。详情见 [D6 验收](qa/D6_ACCEPTANCE.md)和 [部署说明](DEPLOYMENT.md)。x86 NAS 的 2 GiB 资源档位已在实际设备验证，共存 HA；长时间 4K 输出仍需按部署资源单独测量。
