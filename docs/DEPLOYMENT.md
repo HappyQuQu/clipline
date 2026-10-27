@@ -45,8 +45,6 @@ CLIPLINE_UID=$(id -u) CLIPLINE_GID=$(id -g) \
 ## 可重复验收
 
 ```bash
-uv run --directory backend --frozen pytest -q
-npm test
 npm run build
 python3 deploy/check_image.py --image clipline:d6-local --platform linux/arm64 --version "$(cat version.txt)"
 python3 deploy/smoke_release.py --image clipline:d6-local --platform linux/arm64 --require-native

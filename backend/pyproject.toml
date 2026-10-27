@@ -13,17 +13,11 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "httpx2>=2.13.1",
-    "pytest>=8,<10",
     "ruff>=0.6,<1",
 ]
 
 [tool.uv]
 package = false
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py311"

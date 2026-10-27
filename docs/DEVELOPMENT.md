@@ -60,8 +60,7 @@ clipline/
 │   │   ├── services/             # 扫描、时间轴、导出计划、播放缓存
 │   │   ├── tasks/                # 类型注册、持久化、租约、状态迁移
 │   │   └── worker.py             # 单一调度协调器与执行池
-│   ├── migrations/
-│   └── tests/
+│   └── migrations/
 ├── deploy/                       # 已有本地测试配置与 smoke 脚本；运行管理在 app.runtime
 ├── Dockerfile                    # 已实现 D1 双架构构建
 ├── compose.yaml                  # API/Worker 单容器部署与独立数据映射
@@ -499,7 +498,7 @@ docker buildx build \
 - UI：源/日期切换、详情到截取、空态、时间搜索、真实导出状态、分类草稿与窄屏操作。
 - 故障：强制停止 Worker/容器、文件离线、无空间、取消 FFmpeg、租约过期后的旧执行器不得发布。
 
-现有 `frontend/tests/domain.test.js` 与构建检查只覆盖部分原型逻辑，不能替代后端及双架构媒体测试。UI 实测步骤参照需求文档 AC 表，发布时记录样本、设备和结果。
+测试代码仅保存在本地，不纳入仓库；构建检查不能替代后端及双架构媒体验收。UI 实测步骤参照需求文档 AC 表，发布时记录样本、设备和结果。
 
 ### 14.2 运维与升级
 

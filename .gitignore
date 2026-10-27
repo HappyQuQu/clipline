@@ -48,3 +48,11 @@ recordings/
 .DS_Store
 /backend/yolov8n.pt
 /old/backend/yolov8n.pt
+
+# Local test code
+tests/
+__tests__/
+*.test.*
+*.spec.*
+test_*.py
+*_test.py

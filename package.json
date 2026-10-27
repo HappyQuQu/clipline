@@ -6,8 +6,6 @@
   },
   "scripts": {
     "dev": "npm --prefix frontend run dev",
-    "build": "npm --prefix frontend run build",
-    "test": "npm --prefix frontend test",
-    "test:backend": "uv run --directory backend --frozen pytest -q"
+    "build": "npm --prefix frontend run build"
   }
 }

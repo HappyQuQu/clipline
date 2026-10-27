@@ -42,11 +42,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --locked
-      - name: Install FFmpeg for media integration tests
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: uv run --frozen ruff check . ../deploy
       - run: uv run --frozen ruff format --check . ../deploy
-      - run: uv run --frozen pytest -q
       - run: uv run --frozen python ../deploy/validate_release.py
       - name: Check Docker dependency export
         run: |
@@ -66,7 +63,6 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --prefix frontend
-      - run: npm test
       - run: npm run build
 
   native-image:

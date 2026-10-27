@@ -33,10 +33,9 @@ uv run --frozen python -m app.runtime
 ```bash
 uv run --frozen ruff check . ../deploy
 uv run --frozen ruff format --check . ../deploy
-uv run --frozen pytest -q
 ```
 
-后端测试覆盖迁移/升级保护、目录边界、幂等与领取竞争、租约隔离、资源限额、取消/重试/恢复、真实合成媒体探测、文件稳定性、离线/部分扫描保护、跨日搜索/时间轴、Range/HEAD/ETag、代理发布/校验/取消及容量限制。新增导出计划、快速/精准媒体、时间戳/音轨、发布崩溃、过期下载及取消/恢复测试。媒体测试需本机安装 ffmpeg/ffprobe。CI 使用 Python 3.11/3.12；Docker 运行层锁定 Python 3.11，依赖由 `uv.lock` 和带 hash 的 `requirements.lock` 锁定。
+CI 使用 Python 3.11/3.12 执行静态检查；Docker 运行层锁定 Python 3.11，依赖由 `uv.lock` 和带 hash 的 `requirements.lock` 锁定。
 
 镜像验收和真实目录 smoke 命令见 [部署说明](../docs/DEPLOYMENT.md#可重复验收)。真实目录 smoke 脚本仅用于独立测试容器，可能执行 CPU 转码、取消任务和 Worker 故障恢复。
 
