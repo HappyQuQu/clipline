@@ -81,8 +81,9 @@
           "path": "backend/pyproject.toml"
         },
         {
-          "type": "generic",
-          "path": "backend/uv.lock"
+          "type": "toml",
+          "path": "backend/uv.lock",
+          "jsonpath": "$.package[?(@.name.value == 'clipline-backend')].version"
         },
         {
           "type": "generic",
