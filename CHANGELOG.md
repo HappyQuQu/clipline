@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/HappyQuQu/clipline/compare/v0.13.0...v0.13.1) (2026-10-28)
+
+
+### 修复
+
+* improve interface typography and log readability ([9ea31e8](https://github.com/HappyQuQu/clipline/commit/9ea31e87774be3acd80029a94b7077819aa30832))
+
 ## [0.13.0](https://github.com/HappyQuQu/clipline/compare/v0.12.0...v0.13.0) (2026-10-16)
 
 
