@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/HappyQuQu/clipline/compare/v0.13.1...v0.13.2) (2026-11-03)
+
+
+### 修复
+
+* include file paths and system errors in scan failure logs ([f1aa18c](https://github.com/HappyQuQu/clipline/commit/f1aa18c28728997779ff3fc2f4b81e32d184e7b7))
+
 ## [0.13.1](https://github.com/HappyQuQu/clipline/compare/v0.13.0...v0.13.1) (2026-10-28)
 
 
