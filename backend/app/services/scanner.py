@@ -33,7 +33,13 @@ def collect(root, context, stats):
     paths = []
 
     def failed(error):
-        raise AppError("SCAN_INCOMPLETE", "录像目录未能完整读取，原有索引已保留。") from error
+        raise scan_failure(
+            error,
+            Path(error.filename) if error.filename else root,
+            root,
+            "walk",
+            "录像目录未能完整读取，原有索引已保留。",
+        ) from error
 
     try:
         for directory, children, files in os.walk(root, onerror=failed, followlinks=False):
@@ -168,8 +174,8 @@ def scan_file(path, root, context, stats):
         info = after
         fingerprint = file_fingerprint(context.claim.source_id, relative, info)
     except (FileNotFoundError, PermissionError, OSError) as error:
-        raise AppError(
-            "SCAN_INCOMPLETE", "扫描中有文件无法访问，未清理旧索引，请稍后重试。"
+        raise scan_failure(
+            error, path, root, "scan_file", "扫描中有文件无法访问，未清理旧索引，请稍后重试。"
         ) from error
     except AppError as error:
         file_error = error.code
@@ -177,7 +183,9 @@ def scan_file(path, root, context, stats):
             info = path.stat()
             fingerprint = file_fingerprint(context.claim.source_id, relative, info)
         except OSError as stat_error:
-            raise AppError("SCAN_INCOMPLETE", "无法确认文件状态，旧索引已保留。") from stat_error
+            raise scan_failure(
+                stat_error, path, root, "stat_file", "无法确认文件状态，旧索引已保留。"
+            ) from stat_error
     try:
         with write_session(context.queue.engine) as session:
             context.queue.owned(session, context.claim)
@@ -318,7 +326,13 @@ def scan(context):
         except FileNotFoundError:
             missing.append(segment_id)
         except OSError as error:
-            raise AppError("SCAN_INCOMPLETE", "无法确认旧文件状态，原有索引已保留。") from error
+            raise scan_failure(
+                error,
+                root / relative,
+                root,
+                "stat_old_file",
+                "无法确认旧文件状态，原有索引已保留。",
+            ) from error
 
     def finalize(session):
         if not root.is_dir() or identity(root.stat())[:2] != root_identity:
@@ -336,3 +350,19 @@ def scan(context):
 
     context.update("finalize", 99, stats)
     return {**stats, "missing": len(missing)}, finalize
+
+
+def scan_failure(error, path, root, operation, message):
+    return AppError(
+        "SCAN_INCOMPLETE",
+        message,
+        details={
+            "sourcePath": str(root),
+            "path": str(path),
+            "relativePath": path.relative_to(root).as_posix(),
+            "operation": operation,
+            "errorType": type(error).__name__,
+            "errno": error.errno,
+            "systemError": str(error),
+        },
+    )

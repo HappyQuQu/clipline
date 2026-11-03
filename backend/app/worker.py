@@ -57,6 +57,14 @@ def execute(queue, claim, stopped):
     except LeaseLost:
         raise
     except AppError as error:
+        if claim.kind in ("scan", "reindex"):
+            logger.exception(
+                "Scan failed: taskId=%s sourceId=%s errorCode=%s details=%s",
+                claim.task_id,
+                claim.source_id,
+                error.code,
+                error.details,
+            )
         queue.settle(claim, error=error)
     except Exception:
         logger.exception("Task failed unexpectedly: %s", claim.task_id)

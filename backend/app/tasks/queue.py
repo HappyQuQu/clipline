@@ -306,7 +306,7 @@ def release(session, task):
     task.lease_owner = task.lease_token = task.lease_until = None
 
 
-def finish(session, task, status, *, result=None, code=None, message=None):
+def finish(session, task, status, *, result=None, code=None, message=None, error_details=None):
     token = task.lease_token
     task.status, task.result_json = status, result
     task.error_code, task.error_message = code, message
@@ -334,7 +334,13 @@ def finish(session, task, status, *, result=None, code=None, message=None):
         }[status],
         source_id=task.source_id,
         task_id=task.id,
-        detail={"status": status, "result": result, "errorCode": code, "message": message},
+        detail={
+            "status": status,
+            "result": result,
+            "errorCode": code,
+            "message": message,
+            **({"errorDetails": error_details} if error_details else {}),
+        },
         level="error" if status == "failed" else "info",
     )
 
@@ -611,7 +617,14 @@ class Queue:
             elif shutdown:
                 self._requeue(session, task, "shutdown", "TASK_REQUEUED_ON_SHUTDOWN")
             elif error:
-                finish(session, task, "failed", code=error.code, message=error.message)
+                finish(
+                    session,
+                    task,
+                    "failed",
+                    code=error.code,
+                    message=error.message,
+                    error_details=error.details,
+                )
             else:
                 if finalize is not None:
                     finalize(session)

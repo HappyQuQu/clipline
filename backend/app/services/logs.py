@@ -17,7 +17,8 @@ DETAIL_FIELDS = set(
     "sha256 downloadUrl expiresAt processed added updated unchanged missing invalid "
     "protected pending removedBytes removedFiles expiredExports evictedPlayback "
     "temporaryFiles logsPruned eventsPruned profile durationMs skippedFiles "
-    "discovered failed thumbnails thumbnailFailed ".split()
+    "discovered failed thumbnails thumbnailFailed "
+    "errorDetails sourcePath path operation errorType errno systemError ".split()
 )
 
 
