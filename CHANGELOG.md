@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.13.3](https://github.com/HappyQuQu/clipline/compare/v0.13.2...v0.13.3) (2026-11-11)
+
+
+### 修复
+
+* continue scanning when a recording is renamed ([44daa83](https://github.com/HappyQuQu/clipline/commit/44daa83ba55cbf63f07b28f54fcf859a6c8547e6))
+* keep scans running across recording renames and improve typography ([c518774](https://github.com/HappyQuQu/clipline/commit/c518774af178dd5b0cb919aa89375f3894d036dd))
+* use Noto Sans SC for interface typography ([aa983d6](https://github.com/HappyQuQu/clipline/commit/aa983d6fcf46e597a2016ec97f07cd46d237748b))
+
 ## [0.13.2](https://github.com/HappyQuQu/clipline/compare/v0.13.1...v0.13.2) (2026-11-03)
 
 
