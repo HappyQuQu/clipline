@@ -55,14 +55,14 @@ def collect(root, context, stats):
     return paths
 
 
-def warning(session, context, stats, code, path):
+def warning(session, context, stats, code, path, *, title="扫描发现文件异常"):
     stats["warnings"] += 1
     if stats["warnings"] <= 10:
         emit(
             session,
             kind=context.claim.kind,
             code=code,
-            title="扫描发现文件异常",
+            title=title,
             source_id=context.claim.source_id,
             task_id=context.claim.task_id,
             detail={"relativePath": str(path), "errorCode": code},
@@ -103,6 +103,7 @@ def scan_file(path, root, context, stats):
     temporary = None
     metadata, thumb_error, file_error = None, None, None
     pending = False
+    canonical = path
     try:
         canonical = path.resolve(strict=True)
         if not canonical.is_relative_to(root):
@@ -173,7 +174,10 @@ def scan_file(path, root, context, stats):
             pending, metadata = True, None
         info = after
         fingerprint = file_fingerprint(context.claim.source_id, relative, info)
-    except (FileNotFoundError, PermissionError, OSError) as error:
+    except OSError as error:
+        if isinstance(error, FileNotFoundError) and error.filename in (str(path), str(canonical)):
+            skip_disappeared_file(context, stats, relative)
+            return
         raise scan_failure(
             error, path, root, "scan_file", "扫描中有文件无法访问，未清理旧索引，请稍后重试。"
         ) from error
@@ -182,6 +186,9 @@ def scan_file(path, root, context, stats):
         try:
             info = path.stat()
             fingerprint = file_fingerprint(context.claim.source_id, relative, info)
+        except FileNotFoundError:
+            skip_disappeared_file(context, stats, relative)
+            return
         except OSError as stat_error:
             raise scan_failure(
                 stat_error, path, root, "stat_file", "无法确认文件状态，旧索引已保留。"
@@ -279,6 +286,20 @@ def scan_file(path, root, context, stats):
             temporary.unlink(missing_ok=True)
 
 
+def skip_disappeared_file(context, stats, relative):
+    stats["skippedFiles"] += 1
+    with write_session(context.queue.engine) as session:
+        context.queue.owned(session, context.claim)
+        warning(
+            session,
+            context,
+            stats,
+            "FILE_DISAPPEARED",
+            relative,
+            title="录像在扫描期间消失，已跳过",
+        )
+
+
 def scan(context):
     directories = RecordingDirectories(context.config.recordings_root)
     root = directories.resolve(context.claim.payload["sourcePath"])
@@ -291,6 +312,7 @@ def scan(context):
             "updated",
             "unchanged",
             "pending",
+            "skippedFiles",
             "failed",
             "thumbnails",
             "thumbnailFailed",
@@ -307,6 +329,28 @@ def scan(context):
     context.update("index", 95, stats)
     if not root.is_dir() or identity(root.stat())[:2] != root_identity:
         raise AppError("SCAN_ROOT_CHANGED", "扫描过程中录像目录发生变化，旧索引已保留。")
+    # A vanished path may have been renamed after enumeration; reconcile missing entries next time.
+    missing = [] if stats["skippedFiles"] else find_missing_segments(root, context)
+
+    def finalize(session):
+        if not root.is_dir() or identity(root.stat())[:2] != root_identity:
+            raise AppError("SCAN_ROOT_CHANGED", "完成扫描前录像目录发生变化，旧索引已保留。")
+        for start in range(0, len(missing), 250):
+            ids = missing[start : start + 250]
+            session.execute(
+                update(Segment)
+                .where(Segment.id.in_(ids))
+                .values(availability="missing", error_code="FILE_MISSING")
+            )
+            session.execute(
+                update(Artifact).where(Artifact.segment_id.in_(ids)).values(status="stale")
+            )
+
+    context.update("finalize", 99, stats)
+    return {**stats, "missing": len(missing)}, finalize
+
+
+def find_missing_segments(root, context):
     with Session(context.queue.engine) as session:
         unseen = list(
             session.execute(
@@ -334,22 +378,7 @@ def scan(context):
                 "无法确认旧文件状态，原有索引已保留。",
             ) from error
 
-    def finalize(session):
-        if not root.is_dir() or identity(root.stat())[:2] != root_identity:
-            raise AppError("SCAN_ROOT_CHANGED", "完成扫描前录像目录发生变化，旧索引已保留。")
-        for start in range(0, len(missing), 250):
-            ids = missing[start : start + 250]
-            session.execute(
-                update(Segment)
-                .where(Segment.id.in_(ids))
-                .values(availability="missing", error_code="FILE_MISSING")
-            )
-            session.execute(
-                update(Artifact).where(Artifact.segment_id.in_(ids)).values(status="stale")
-            )
-
-    context.update("finalize", 99, stats)
-    return {**stats, "missing": len(missing)}, finalize
+    return missing
 
 
 def scan_failure(error, path, root, operation, message):
