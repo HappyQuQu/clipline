@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import '@fontsource-variable/noto-sans-sc';
 
 import './styles.css';
 import './themes.css';

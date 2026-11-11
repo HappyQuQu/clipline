@@ -1,5 +1,5 @@
 :root {
-  font-family:system-ui,-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;
+  font-family:'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
   font-size:14px;
   line-height:1.6;
   color:var(--ink, #343b45);
@@ -24,7 +24,7 @@ body {
   margin:0
 }
 
-button,input,select {
+button,input,select,textarea {
   font:inherit
 }
 
@@ -103,15 +103,13 @@ h1,h2,h3,p {
 
 h1 {
   font-size:28px;
-  letter-spacing:-.9px;
   line-height:1.35;
-  font-weight:650
+  font-weight:600
 }
 
 h2 {
   font-size:15px;
-  font-weight:650;
-  letter-spacing:-.1px
+  font-weight:600
 }
 
 h3 {
